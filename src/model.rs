@@ -118,8 +118,8 @@ impl Mode {
 
     pub fn from_route_type(route_type: Option<i32>) -> Self {
         match route_type {
-            Some(3 | 11 | 700..=799 | 800) => Self::Bus,
-            Some(0..=2 | 5..=7 | 12 | 100..=199 | 300..=499 | 900..=999 | 1400) => Self::Rail,
+            Some(3 | 11 | 200..=299 | 700..=799 | 800) => Self::Bus,
+            Some(0..=2 | 5 | 7 | 12 | 100..=199 | 300..=499 | 900..=999 | 1400) => Self::Rail,
             Some(4 | 1000..=1099 | 1200) => Self::Ferry,
             Some(_) => Self::Other,
             None => Self::Unknown,

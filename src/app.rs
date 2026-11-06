@@ -1,3 +1,4 @@
+use crate::export::csv_cell;
 use crate::model::*;
 use crate::planner::{choose_schedule, enforce_byte_budget, plan_selection, valid_key};
 use crate::queries::{self, METRIC_VERSION};
@@ -290,7 +291,7 @@ pub fn App() -> impl IntoView {
         <main id="dashboard" class="workspace">
             <section class="intro" aria-labelledby="page-title">
                 <div><h1 id="page-title">"Explore the transit archive."</h1><p>"A closer look at your agency’s vehicle activity. Real archive data, queried in your browser."</p></div>
-                <a class="source-link" href="https://github.com/MisterClean/gtfsrt-dashboard" target="_blank" rel="noopener noreferrer">"View source"<span aria-hidden="true">" ↗"</span></a>
+                <a class="source-link" href="https://github.com/MisterClean/gtfsrt-dashboard" target="_blank" rel="noopener noreferrer">"View source"<ExternalLink/></a>
             </section>
             <section class="selection" aria-label="Archive selection">
                 <div class="selection-fields">
@@ -324,13 +325,18 @@ pub fn App() -> impl IntoView {
                 {move || ui.report.get().map(|report| view! { <ReportView ui report/> })}
             </Show>
         </main>
-        <footer class="site-footer"><span>"Transit Notebook · Built by "<a href="https://michaelmclean.me/">"Michael McLean"</a></span><span>"Rust + DuckDB-WASM · "<a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">"Data from gtfsrt.io ↗"</a></span></footer>
+        <footer class="site-footer"><span>"Transit Notebook · Built by "<a href="https://michaelmclean.me/">"Michael McLean"</a></span><span>"Rust + DuckDB-WASM · "<a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">"Data from gtfsrt.io"<ExternalLink/></a></span></footer>
     }
 }
 
 #[component]
 fn Arrow() -> impl IntoView {
     view! { <svg class="icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg> }
+}
+
+#[component]
+fn ExternalLink() -> impl IntoView {
+    view! { <svg class="icon external-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4H4v12h12v-3M9 4h7v7M8 12l8-8"/></svg> }
 }
 
 #[component]
@@ -435,11 +441,11 @@ fn Overview(ui: Ui, report: Arc<Report>) -> impl IntoView {
             <p class="caption">{move || if vehicles.get() { "Distinct vehicle IDs reported in each hour, pooled across selected dates. The same vehicle can appear in multiple hours." } else { "Archive rows in each hour, pooled across selected dates. Counts depend on polling frequency and include repeated fixes." }}</p>
         </section>
         <div class="overview-columns">
-            <section><div class="section-heading"><div><h3>"Routes in the archive"</h3><p>"Most observations. Select a route to look closer."</p></div><button class="text-button" on:click=move |_| ui.view.set(View::Routes)>"All routes →"</button></div><div class="route-bars">{report.with_value(|r| r.analysis.routes.iter().take(8).map(|row| {
+            <section><div class="section-heading"><div><h3>"Routes in the archive"</h3><p>"Most observations. Select a route to look closer."</p></div><button class="text-button" on:click=move |_| ui.view.set(View::Routes)>"All routes"<Arrow/></button></div><div class="route-bars">{report.with_value(|r| r.analysis.routes.iter().take(8).map(|row| {
                 let id = row.route_id.clone(); let mode = r.mode;
                 view! { <button class="route-bar-row" disabled=move || ui.busy.get() on:click=move |_| ui.filter(mode, Some(id.clone()))><span class="route-id">{if row.route_id.is_empty() { "?" } else { &row.route_id }.to_owned()}</span><span class="route-bar-name">{r.route_name(&row.route_id)}</span><svg viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-track" width="200" height="8" y="2"/><rect class="bar-fill" width={row.observations as f64 / max_observations as f64 * 200.0} height="8" y="2"/></svg><span class="bar-number">{number(row.observations)}</span></button> }
             }).collect_view())}</div></section>
-            <section class="coverage-panel"><h3>"What this archive can tell you"</h3><p>"A record is a vehicle report captured by the archive. A gap is an absence of archived reports, not proof that service stopped."</p><dl class="quality-list"><div><dt>"Usable coordinates"</dt><dd>{report.with_value(|r| percent(r.summary().valid_positions, r.summary().observations))}</dd></div><div><dt>"Repeated fixes retained"</dt><dd>{report.with_value(|r| number(r.summary().repeated_fixes))}</dd></div><div><dt>"Missing vehicle timestamp"</dt><dd>{report.with_value(|r| number(r.summary().missing_timestamp))}</dd></div><div><dt>"Missing daily objects"</dt><dd>{report.with_value(|r| r.prepared.files.iter().filter(|f| f.status != "available").count())}</dd></div></dl><button class="text-button" on:click=move |_| ui.view.set(View::Sources)>"Inspect data & method →"</button></section>
+            <section class="coverage-panel"><h3>"What this archive can tell you"</h3><p>"A record is a vehicle report captured by the archive. A gap is an absence of archived reports, not proof that service stopped."</p><dl class="quality-list"><div><dt>"Usable coordinates"</dt><dd>{report.with_value(|r| percent(r.summary().valid_positions, r.summary().observations))}</dd></div><div><dt>"Repeated fixes retained"</dt><dd>{report.with_value(|r| number(r.summary().repeated_fixes))}</dd></div><div><dt>"Missing route ID"</dt><dd>{report.with_value(|r| number(r.summary().missing_route))}</dd></div><div><dt>"Missing vehicle ID"</dt><dd>{report.with_value(|r| number(r.summary().missing_vehicle))}</dd></div><div><dt>"Missing vehicle timestamp"</dt><dd>{report.with_value(|r| number(r.summary().missing_timestamp))}</dd></div><div><dt>"Missing daily objects"</dt><dd>{report.with_value(|r| r.prepared.files.iter().filter(|f| f.status != "available").count())}</dd></div></dl><button class="text-button" on:click=move |_| ui.view.set(View::Sources)>"Inspect data & method"<Arrow/></button></section>
         </div>
         <Coverage report=report.get_value()/>
     }
@@ -468,7 +474,7 @@ fn HourChart(rows: Vec<HourRow>, vehicles: bool) -> impl IntoView {
         "observations"
     };
     view! {
-        <figure class="hour-chart"><svg viewBox="0 0 1120 240" role="img" aria-label=format!("{measure} by UTC hour. A table of exact hourly values follows this chart.")>
+        <p class="chart-scroll-hint">"Scroll horizontally to see all UTC hours, or open the hourly table."</p><figure class="hour-chart" tabindex="0" role="region" aria-label="Scrollable hourly activity chart"><svg viewBox="0 0 1120 240" role="img" aria-label=format!("{measure} by UTC hour. A table of exact hourly values follows this chart.")>
             {[0.0, 0.5, 1.0].into_iter().map(|fraction| view! { <g><line class="grid-line" x1="46" x2="1105" y1={200.0 - fraction * 175.0} y2={200.0 - fraction * 175.0}/><text class="axis-label" x="36" y={204.0 - fraction * 175.0} text-anchor="end">{compact((fraction * max as f64).round() as u64)}</text></g> }).collect_view()}
             {(0..24).map(|hour| {
                 let value = rows.iter().find(|r| r.hour == hour).map_or(0, |r| if vehicles { r.vehicles } else { r.observations });
@@ -548,7 +554,7 @@ fn Routes(ui: Ui, report: Arc<Report>) -> impl IntoView {
     view! {
         <section><div class="section-heading"><div><h3>"Every route, a closer look"</h3><p>"Sort a column or select a route. Counts describe archive activity."</p></div><label class="search-label"><span class="sr-only">"Find a route"</span><input type="search" aria-label="Find a route" placeholder="Find a route…" on:input=move |ev| { search.set(event_target_value(&ev)); limit.set(20); }/></label></div>
             <div class="table-scroll" tabindex="0" role="region" aria-label="Route activity table"><table class="routes-table"><thead><tr>{[("route", "Route"), ("observations", "Observations"), ("vehicles", "Vehicles"), ("trips", "Trip IDs"), ("hours", "Hours")].into_iter().map(|(key, label)| view! {
-                <th aria-sort=move || if sort.get() == key { if ascending.get() { "ascending" } else { "descending" } } else { "none" }><button on:click=move |_| { if sort.get() == key { ascending.update(|v| *v = !*v); } else { sort.set(key); ascending.set(key == "route"); } }>{label}<span class="sort-arrow" aria-hidden="true">{move || if sort.get() == key { if ascending.get() { " ↑" } else { " ↓" } } else { " ↕" }}</span></button></th>
+                <th aria-sort=move || if sort.get() == key { if ascending.get() { "ascending" } else { "descending" } } else { "none" }><button on:click=move |_| { if sort.get() == key { ascending.update(|v| *v = !*v); } else { sort.set(key); ascending.set(key == "route"); } }>{label}<svg class="icon sort-icon" viewBox="0 0 20 20" aria-hidden="true"><path d=move || if sort.get() != key { "M7 15V5m-3 3 3-3 3 3M13 5v10m-3-3 3 3 3-3" } else if ascending.get() { "M10 16V4m-5 5 5-5 5 5" } else { "M10 4v12m-5-5 5 5 5-5" }/></svg></button></th>
             }).collect_view()}<th>"Coordinates"</th></tr></thead><tbody>{move || filtered().into_iter().take(limit.get()).map(|row| {
                 let id = row.route_id.clone(); let name = report.with_value(|r| r.route_name(&id)); let mode = report.with_value(|r| r.mode);
                 view! { <tr><td><button class="route-table-link" disabled=move || ui.busy.get() on:click=move |_| ui.filter(mode, Some(id.clone()))><span class=format!("route-swatch {}", route_color(&row.route_id))></span><strong>{if row.route_id.is_empty() { "?" } else { &row.route_id }.to_owned()}</strong><span>{name}</span></button></td><td>{number(row.observations)}</td><td>{number(row.vehicles)}</td><td>{number(row.trip_ids)}</td><td>{row.hours}</td><td>{percent(row.valid_positions, row.observations)}</td></tr> }
@@ -573,7 +579,7 @@ fn RouteHeatmap(report: Arc<Report>) -> impl IntoView {
         .max()
         .unwrap_or(1)
         .max(1);
-    view! { <section class="heatmap-section"><div class="section-heading"><div><h3>"Route activity, hour by hour"</h3><p>"Up to 15 routes with the most observations. Darker cells contain more archive rows."</p></div></div><div class="heatmap-scroll" tabindex="0" role="region" aria-label="Route hourly activity heatmap"><svg class="heatmap" viewBox=format!("0 0 1120 {}", heatmap_height) role="img" aria-label="Archived observation counts by route and UTC hour. Exact values are available in each cell’s title.">
+    view! { <section class="heatmap-section"><div class="section-heading"><div><h3>"Route activity, hour by hour"</h3><p>"Up to 15 routes with the most observations. Darker cells contain more archive rows."</p></div></div><p class="chart-scroll-hint">"Scroll horizontally to see all 24 UTC hours."</p><div class="heatmap-scroll" tabindex="0" role="region" aria-label="Route hourly activity heatmap"><svg class="heatmap" viewBox=format!("0 0 1120 {}", heatmap_height) role="img" aria-label="Archived observation counts by route and UTC hour. Exact values are available in each cell’s title.">
     {(0..24).map(|h| view! { <text class="axis-label" x={90 + h * 42} y="17" text-anchor="middle">{format!("{h:02}")}</text> }).collect_view()}
     {top.into_iter().enumerate().map(|(i, row)| view! { <g><text class="heatmap-route" x="52" y={46 + i * 32} text-anchor="end">{if row.route_id.is_empty() { "?" } else { &row.route_id }.to_owned()}</text>{(0..24).map(|hour| {
         let count = report.analysis.route_hours.iter().find(|r| r.route_id == row.route_id && r.hour == hour).map_or(0, |r| r.observations);
@@ -616,14 +622,14 @@ fn Positions(report: Arc<Report>) -> impl IntoView {
     view! {
         <section><div class="section-heading"><div><h3>"Where vehicles last reported"</h3><p>"Latest archived report per vehicle in the current selection. These positions are not simultaneous."</p></div><span class="position-count">{format!("{} positions", number(positions.len() as u64))}</span></div>
             <div class="inline-empty" hidden=has_positions>{if summary.differential > 0 { "Position reconstruction is disabled because this selection includes differential feeds. The archive does not retain all deletion tombstones." } else { "No usable latest vehicle positions are available for these filters. Clear a filter or try another archive day." }}</div><div hidden=!has_positions>
-                <div class="position-plot"><svg viewBox="0 0 1120 490" role="img" aria-label="Geographic plot of latest archived vehicle positions, with longitude and latitude axes; no basemap is used.">
+                <p class="chart-scroll-hint">"Scroll horizontally to explore the position plot. Select a point for its details."</p><div class="position-plot" tabindex="0" role="region" aria-label="Scrollable geographic position plot"><svg viewBox="0 0 1120 490" role="group" aria-label="Geographic plot of latest archived vehicle positions, with longitude and latitude axes; no basemap is used.">
                     {(0..=4).map(|i| {
                         let fraction = i as f64 / 4.0; let lon = minx + (maxx - minx) * fraction; let lat = miny + (maxy - miny) * fraction;
                         view! { <g><line class="map-grid" x1=x(lon) x2=x(lon) y1="35" y2="445"/><line class="map-grid" x1="75" x2="1070" y1=y(lat) y2=y(lat)/><text class="axis-label" x=x(lon) y="470" text-anchor="middle">{format!("{lon:.3}°")}</text><text class="axis-label" x="65" y=y(lat) text-anchor="end">{format!("{lat:.3}°")}</text></g> }
                     }).collect_view()}
-                    {positions.iter().map(|p| { let click = p.clone(); let focus = p.clone(); let title = format!("Vehicle {} · route {} · {}", p.vehicle_id, p.route_id, p.observed_at.as_deref().unwrap_or(&p.fetch_at)); view! { <circle class=format!("vehicle-point {}", route_color(&p.route_id)) cx=x(p.longitude) cy=y(p.latitude) r="4.5" role="button" tabindex="0" aria-label=title.clone() on:click=move |_| selected.set(Some(click.clone())) on:focus=move |_| selected.set(Some(focus.clone()))><title>{title.clone()}</title></circle> } }).collect_view()}
+                    {positions.iter().map(|p| { let click = p.clone(); let focus = p.clone(); let title = format!("Vehicle {} · route {} · {}", p.vehicle_id, if p.route_id.is_empty() { "unreported" } else { &p.route_id }, p.observed_at.as_deref().unwrap_or(&p.fetch_at)); view! { <circle class=format!("vehicle-point {}", route_color(&p.route_id)) cx=x(p.longitude) cy=y(p.latitude) r="4.5" role="button" tabindex="0" aria-label=title.clone() on:click=move |_| selected.set(Some(click.clone())) on:focus=move |_| selected.set(Some(focus.clone()))><title>{title.clone()}</title></circle> } }).collect_view()}
                 </svg></div>
-                <div class="position-detail" role="status">{move || selected.get().map(|p| format!("Vehicle {} · Route {} · {:.5}°, {:.5}° · {} ({})", p.vehicle_id, p.route_id, p.latitude, p.longitude, p.observed_at.as_deref().unwrap_or(&p.fetch_at), p.time_source)).unwrap_or_else(|| "Select a point to inspect its vehicle, route, coordinates, and timestamp.".into())}</div>
+                <div class="position-detail" role="status">{move || selected.get().map(|p| format!("Vehicle {} · Route {} · {:.5}°, {:.5}° · {} ({})", p.vehicle_id, if p.route_id.is_empty() { "unreported" } else { &p.route_id }, p.latitude, p.longitude, p.observed_at.as_deref().unwrap_or(&p.fetch_at), p.time_source)).unwrap_or_else(|| "Select a point to inspect its vehicle, route, coordinates, and timestamp.".into())}</div>
             </div>
             <p class="caption">"Coordinate plot with a local equirectangular projection; no basemap or external map requests. Colors distinguish route IDs. Latest is selected by fetch time, then vehicle time and source identity. Invalid coordinates and vehicles without IDs are excluded."</p>
             <p class="caption">"At most 5,000 vehicles, ordered by ID, are drawn. The last report can be old; this view is an archive explorer, not a live tracker."</p>
@@ -637,7 +643,7 @@ fn Sources(report: Arc<Report>) -> impl IntoView {
     view! {
         <section><div class="section-heading"><div><h3>"Follow the data"</h3><p>"Exact inputs, calculation rules, and SQL for this result."</p></div><button class="secondary" on:click=move |_| export_evidence(&report.get_value())>"Download provenance"</button></div>
             <dl class="provenance-grid"><div><dt>"Source"</dt><dd>"Public gtfsrt.io Parquet archive"</dd></div><div><dt>"Object check"</dt><dd>{report.with_value(|r| r.prepared.checked_at.clone())}</dd></div><div><dt>"Metric contract"</dt><dd>{METRIC_VERSION}</dd></div><div><dt>"Execution"</dt><dd>"Rust application + DuckDB v2.0.0 · this browser"</dd></div></dl>
-            <div class="table-scroll" tabindex="0" role="region" aria-label="Queried daily archive files"><table><thead><tr><th>"UTC day"</th><th>"Object status"</th><th>"Compressed size"</th><th>"Source"</th></tr></thead><tbody>{report.with_value(|r| r.prepared.files.iter().map(|file| view! { <tr><td>{file.date.clone()}</td><td>{file.status.clone()}</td><td>{format!("{:.2} MiB", file.bytes as f64 / 1_048_576.0)}</td><td><a href=file.url.clone() target="_blank" rel="noopener noreferrer">"Parquet object ↗"</a></td></tr> }).collect_view())}</tbody></table></div>
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Queried daily archive files"><table><thead><tr><th>"UTC day"</th><th>"Object status"</th><th>"Compressed size"</th><th>"Source"</th></tr></thead><tbody>{report.with_value(|r| r.prepared.files.iter().map(|file| view! { <tr><td>{file.date.clone()}</td><td>{file.status.clone()}</td><td>{format!("{:.2} MiB", file.bytes as f64 / 1_048_576.0)}</td><td><a href=file.url.clone() target="_blank" rel="noopener noreferrer">"Parquet object"<ExternalLink/></a></td></tr> }).collect_view())}</tbody></table></div>
             <div class="method-copy"><h4>"What is counted"</h4><p>"Observations are raw archived vehicle-position rows, including repeated polls. Vehicles, routes, and trip IDs count distinct nonempty source IDs within this single feed. No arrival events, completed journeys, cancellations, ridership, speeds, or on-time performance are inferred."</p><h4>"Coverage and time"</h4><p>"Dates and charts use UTC fetch time. Local days and GTFS service dates differ. Hours with records need only one record; this is not a completeness score. Missing files remain visible and are excluded from the calculation."</p><h4>"Coordinates and repeated fixes"</h4><p>"Usable coordinates fall within geographic bounds and exclude (0, 0). Repeated fixes share vehicle, route, trip, vehicle timestamp, and coordinates; they are counted for quality inspection and retained in observation totals. Missing or zero vehicle times are reported separately."</p><h4>"Historical route metadata"</h4><p>{report.with_value(|r| r.schedule.as_ref().map_or_else(|| "No unambiguous historical schedule was matched. Mode filtering is disabled.".into(), |s| format!("Names and GTFS route types use {} (retrieved {}). This version advertises coverage of the full selection and was retrieved before it. Route IDs are matched within this single schedule source; unmatched IDs remain visible. This does not validate trip or stop-event joins.", s.digest, s.retrieved)))}</p>
                 <h4>"Browser resource limits"</h4><p>"At most six daily objects and 128 MiB of compressed raw objects, checked before SQL. Auxiliary metadata files are limited to 2 MiB each. DuckDB’s memory target is 512 MB; total tab memory can be higher. Queries request cancellation at 15 seconds and reset the worker at 30 seconds. Cancel immediately terminates the worker and clears the local database."</p><h4>"Privacy and storage"</h4><p>"The website serves application files. Transit data is requested directly from Google’s public archive hosting and processed on your device. Google receives your network address and object requests. There is no analytics, data upload, persistent database, or external map provider. Your browser may keep ordinary HTTP cache entries. Reloading clears the working database."</p>
             </div>
@@ -645,15 +651,6 @@ fn Sources(report: Arc<Report>) -> impl IntoView {
         </section>
         <section class="sql-section"><h3>"The SQL behind this view"</h3><p>"Read-only inspection. Source text and filter values cannot change these fixed query templates."</p>{report.with_value(|r| r.sql.iter().map(|(name, sql)| view! { <details class="sql-query"><summary>{name.clone()}</summary><pre><code>{sql.clone()}</code></pre></details> }).collect_view())}</section>
     }
-}
-
-fn csv_cell(value: &str) -> String {
-    let safe = if value.starts_with(['=', '+', '-', '@', '\t', '\r']) {
-        format!("'{value}")
-    } else {
-        value.to_owned()
-    };
-    format!("\"{}\"", safe.replace('"', "\"\""))
 }
 
 fn export_routes(report: &Report) {

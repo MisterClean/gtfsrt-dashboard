@@ -1,5 +1,6 @@
 //! Bounded archive planning and analytical contracts, shared by native tests and the WASM UI.
 
+pub mod export;
 pub mod model;
 pub mod planner;
 pub mod queries;

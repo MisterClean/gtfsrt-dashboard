@@ -190,4 +190,47 @@ mod tests {
         assert!(enforce_byte_budget([MAX_BYTES, 1]).is_err());
         assert!(enforce_byte_budget([u64::MAX, 1]).is_err());
     }
+
+    #[test]
+    fn historical_modes_require_one_source_and_a_prior_applicable_version() {
+        use crate::model::ScheduleVersion;
+        let selection = plan_selection(&feed(), "2026-11-01", "2026-11-05").unwrap();
+        let metadata = FeedMetadata {
+            schedule_urls: Some("[\"https://example.test/schedule.zip\"]".into()),
+            schedule_url: None,
+            interval_seconds: Some(20.0),
+        };
+        let version = |retrieved: &str, start: &str| ScheduleVersion {
+            digest: format!("v1:{}", "a".repeat(64)),
+            date_retrieved: retrieved.into(),
+            feed_start_date: Some(start.into()),
+            feed_end_date: Some("20261231".into()),
+        };
+        let catalog = ScheduleCatalog {
+            base64url: "cHVibGlj".into(),
+            schedule_url: "https://example.test/schedule.zip".into(),
+            versions: vec![
+                version("2026-09-01T00:00:00Z", "20260101"),
+                version("2026-11-03T00:00:00Z", "20260101"),
+                version("2026-10-31T00:00:00Z", "20261103"),
+            ],
+        };
+        let choice = choose_schedule(
+            std::slice::from_ref(&metadata),
+            std::slice::from_ref(&catalog),
+            &selection,
+        )
+        .unwrap();
+        assert_eq!(
+            choice.retrieved, "2026-09-01T00:00:00Z",
+            "future and partially applicable schedules must be excluded"
+        );
+        let ambiguous = FeedMetadata {
+            schedule_urls: Some(
+                "[\"https://example.test/schedule.zip\",\"https://example.test/other.zip\"]".into(),
+            ),
+            ..metadata
+        };
+        assert!(choose_schedule(&[ambiguous], &[catalog], &selection).is_none());
+    }
 }
