@@ -25,6 +25,8 @@ const MAX_EVENT_GAP_S: f32 = 300.0;
 /// A new run of the same trip and vehicle starts after a silence this long,
 /// which separates the same trip ID on consecutive days.
 const RUN_BREAK_S: u32 = 3 * 3600;
+/// A run hours away from a date's scheduled window isn't that date's service.
+const MAX_RUN_FROM_WINDOW_S: i64 = 4 * 3600;
 /// A run must move at least this share of the line to count as observed.
 const OBSERVED_COVERAGE: f32 = 0.5;
 
@@ -260,9 +262,10 @@ fn runs(fixes: &[Fix]) -> impl Iterator<Item = &[Fix]> {
     })
 }
 
-/// Which service date a run belongs to. The feed's own start date wins. Without
-/// one, it is the active service date whose scheduled window best contains the
-/// run, which is how the many feeds that leave `start_date` blank are handled.
+/// Which service date a run belongs to. The feed's own start date wins when the run
+/// is near that date's scheduled window. Some feeds report the calendar date on
+/// after-midnight trips, which would put them a full day off, and many leave it blank.
+/// Either way it is then the active service date whose window best contains the run.
 fn run_service_date(
     schedule: &Schedule,
     trip: &Trip,
@@ -270,12 +273,24 @@ fn run_service_date(
     run: &[Fix],
     clock: &Clock,
 ) -> Option<ServiceDate> {
-    if descriptor.start_date != NO_START_DATE {
-        return Some(ServiceDate(descriptor.start_date));
-    }
     let (arrivals, departures) = schedule.trip_times(trip);
     let (first, last) = (*departures.first()?, *arrivals.last()?);
     let middle = i64::from(run[run.len() / 2].time);
+    let from_window = |candidate: ServiceDate| {
+        let origin = clock.service_origin(candidate)?;
+        let (start, end) = (origin + i64::from(first), origin + i64::from(last));
+        Some(if middle < start {
+            start - middle
+        } else {
+            (middle - end).max(0)
+        })
+    };
+    if descriptor.start_date != NO_START_DATE {
+        let reported = ServiceDate(descriptor.start_date);
+        if from_window(reported).is_some_and(|distance| distance <= MAX_RUN_FROM_WINDOW_S) {
+            return Some(reported);
+        }
+    }
     let today = clock.local_date(middle)?;
     let mut best: Option<(i64, ServiceDate)> = None;
     for offset in [-1_i64, 0, 1] {
@@ -285,24 +300,14 @@ fn run_service_date(
         if !schedule.service_active(trip, candidate) {
             continue;
         }
-        let Some(origin) = clock.service_origin(candidate) else {
+        let Some(distance) = from_window(candidate) else {
             continue;
-        };
-        let start = origin + i64::from(first);
-        let end = origin + i64::from(last);
-        let distance = if middle < start {
-            start - middle
-        } else if middle > end {
-            middle - end
-        } else {
-            0
         };
         if best.is_none_or(|(d, _)| distance < d) {
             best = Some((distance, candidate));
         }
     }
-    // A run hours away from any scheduled window isn't this trip's service.
-    best.filter(|(distance, _)| *distance <= 4 * 3600)
+    best.filter(|(distance, _)| *distance <= MAX_RUN_FROM_WINDOW_S)
         .map(|(_, date)| date)
 }
 
@@ -1116,14 +1121,53 @@ mod tests {
     }
 
     #[test]
-    fn a_reported_start_date_overrides_inference() {
+    fn a_reported_start_date_is_believed_on_a_day_the_calendar_has_no_service() {
+        let schedule = line_route();
+        let mut buffer = RtBuffer::default();
+        // The fixture only runs on weekdays, but the feed says this trip ran on Saturday,
+        // at its usual time of day. Holiday and special service often look like this.
+        let saturday = ServiceDate(20261107);
+        let origin = clock().service_origin(saturday).unwrap();
+        for i in 0..40_i64 {
+            let epoch = origin + 7 * 3600 + i * 20;
+            buffer.push(RawFix {
+                fetch: epoch as f64,
+                timestamp: epoch as f64,
+                lat: (43.0 + 0.001 * i as f64) as f32,
+                lon: -89.0,
+                trip_id: Some(b"T0"),
+                vehicle_id: Some(b"V1"),
+                route_id: Some(b"R1"),
+                start_date: Some(b"20261107"),
+                start_time: None,
+                occupancy: -1,
+                differential: false,
+            });
+        }
+        let result = process_day(
+            &schedule,
+            &mut buffer,
+            saturday,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(result.cube.quality.fixes_no_service_date, 0);
+        assert_eq!(result.cube.trips.len(), 1);
+    }
+
+    #[test]
+    fn a_reported_start_date_a_full_day_off_is_ignored() {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "T0", "V1", 7 * 3600, 0, 1.0);
+        // The vehicle ran today, but the feed says the trip belongs to tomorrow.
+        let tomorrow = DATE.offset(1).unwrap().0;
         for descriptor in &mut buffer.descriptors {
-            descriptor.start_date = 20261104;
+            descriptor.start_date = tomorrow;
         }
         let result = run_day(&mut buffer);
-        assert!(result.cube.trips.is_empty());
+        assert_eq!(result.cube.trips.len(), 1);
     }
 
     #[test]

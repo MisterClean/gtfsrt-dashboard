@@ -29,7 +29,7 @@ Reports calculate in meters and seconds. The interface converts to mph or km/h.
 
 A run is one vehicle on one reported trip descriptor. A new run starts after three hours without a report.
 
-1. If the feed reports `start_date`, that is the service date.
+1. If the feed reports `start_date` and the run falls within four hours of the trip's scheduled window on that date, that is the service date. Some feeds report the calendar date on after-midnight trips, which would put them a full day off.
 2. Otherwise the app considers the local date and the days either side, keeps those on which the trip's service is active, and picks the one whose scheduled window is nearest the middle of the run.
 3. A run more than four hours from every such window is not counted for that trip.
 
@@ -60,13 +60,13 @@ Each position report is projected onto the pattern's line.
 | Step | Rule |
 | --- | --- |
 | First report | Any point on the line within 120 m. When the line passes there more than once, each pass is followed through the whole run. The one with the fewest off-route reports wins, then the most progress, and only a real tie goes to where the schedule expects the vehicle. Choosing by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. |
-| Later reports | The best fit between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). The earliest pass within 25 m of the best fit wins, so GPS noise can't jump a vehicle to a return leg. Once a vehicle has moved 30 m, legs running against its direction of travel are ruled out, if any leg runs with it. |
+| Later reports | The best fit between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). The earliest pass within 25 m of the best fit wins, so GPS noise can't jump a vehicle to a return leg. The best fit within the next 150 m is then used, so a hook at the end of a line is reached rather than stopped short of. |
 | Off route | A report more than 120 m from the line is skipped and counted. |
 | Forward only | Progress never decreases. A report landing behind the furthest point is held there, and one landing more than 30 m behind is counted. |
 
 Distances use a local flat projection for each line, which is accurate well within one percent over the length of a route.
 
-Line length is measured after removing **stop spikes**. Some agencies draw each shape out to the stop's curb position and back, and a vehicle doesn't drive those detours. A spike is a turn of 75° or more between two segments of up to 45 m, where the road carries on within 45° of the same direction beyond it. That last test keeps real corners and U-turns. In Madison, leaving spikes in read 1.8% fast overall and over 5% on routes with many stops. An independent check against straight-line GPS distance on straight roads confirmed the cleaned line in the validation.
+Line length is measured after removing **stop spikes**. Some agencies draw each shape out to the stop's curb position and back, and a vehicle doesn't drive those detours. A spike is a turn of 75° or more between two segments of up to 30 m, where the road carries on within 45° of the same direction beyond it. That last test keeps real corners and U-turns. In Madison, leaving spikes in read 1.3% fast overall and nearly 5% on routes with many stops. An independent check against straight-line GPS distance on straight roads confirmed the cleaned line in the validation.
 
 ### Stop positions
 

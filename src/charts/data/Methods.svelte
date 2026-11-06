@@ -77,7 +77,7 @@
     <summary>Service days and time</summary>
     <div class="body">
       <p>Days here are local GTFS service days, not UTC archive days. Scheduled times count from noon minus twelve hours on the service date, so a trip can run past 24:00:00 and daylight-saving days still line up. One service day overlaps two UTC archive files, and each file is read only once.</p>
-      <p>A trip’s service date is the feed’s reported start date when there is one. Otherwise it is the active service date, among the local date and the days either side, whose scheduled window is nearest the run. A run more than four hours from any scheduled window isn’t counted as that trip.</p>
+      <p>A trip’s service date is the feed’s reported start date when the run falls within four hours of the trip’s scheduled window on that date. Otherwise it is the active service date, among the local date and the days either side, whose scheduled window is nearest the run. A run more than four hours from any scheduled window isn’t counted as that trip.</p>
       <p>The schedule for each day is the most recently retrieved version covering that date and already published by then. If the archive only captured a covering version later, that one is used and flagged above.</p>
     </div>
   </details>
@@ -86,8 +86,8 @@
     <summary>Placing vehicles on the route</summary>
     <div class="body">
       <p>A trip ID leads to a route line and stop list in that day’s schedule. Each report is projected onto the line inside a window that moves with the vehicle: from 60 m behind its last position to as far ahead as the speed backstop allows, plus 200 m. This keeps a match on the correct pass of a loop or an out-and-back line. Reports more than 120 m from the line count as off route and are skipped.</p>
-      <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used, and once a vehicle has moved 30 m, legs running against its direction are ruled out.</p>
-      <p>Some agencies draw their lines out to each stop's curb and back. A vehicle doesn't drive those detours, so they are removed before measuring distance: a turn of 75° or more between two segments of up to 45 m, where the road carries on in about the same direction beyond it.</p>
+      <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used, then the best fit within the next 150 m, so a hook at the end of a line is reached rather than stopped short of.</p>
+      <p>Some agencies draw their lines out to each stop's curb and back. A vehicle doesn't drive those detours, so they are removed before measuring distance: a turn of 75° or more between two segments of up to 30 m, where the road carries on in about the same direction beyond it.</p>
       <p>Stops are placed along the line so that their order is preserved, choosing the combination that keeps stops closest to the line.</p>
     </div>
   </details>

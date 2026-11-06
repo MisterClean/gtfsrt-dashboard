@@ -9,7 +9,7 @@ use crate::time::{SERVICE_HOURS, ServiceDate};
 use serde::{Deserialize, Serialize};
 
 /// Bumped whenever a calculation changes, which invalidates cached days.
-pub const METRIC_VERSION: u32 = 3;
+pub const METRIC_VERSION: u32 = 4;
 
 /// Upper edges in seconds of the schedule-deviation bins. Reports can apply any
 /// on-time window whose edges fall on these boundaries.

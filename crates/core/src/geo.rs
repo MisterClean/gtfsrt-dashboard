@@ -54,7 +54,7 @@ pub fn valid_coordinate(lat: f64, lon: f64) -> bool {
 }
 
 /// Longest segment on either side of a vertex that can be a stop spike.
-const SPIKE_MAX_SEGMENT_M: f64 = 45.0;
+const SPIKE_MAX_SEGMENT_M: f64 = 30.0;
 /// How sharply the line must turn at a spike's tip.
 const SPIKE_MIN_TURN_DEG: f64 = 75.0;
 /// How far the road may change direction across a spike and still count as one road.
@@ -62,8 +62,8 @@ const SPIKE_MAX_ROAD_TURN_DEG: f64 = 45.0;
 
 /// Removes the short detours some agencies draw from the road to each stop's curb.
 ///
-/// A vehicle doesn't drive these, but their length adds up: in Madison they make the
-/// line about 2% longer than the road, and over 5% on routes with many stops. A spike
+/// A vehicle doesn't drive these, but their length adds up: in Madison they make speeds
+/// read about 1.3% fast overall, and nearly 5% on routes with many stops. A spike
 /// is a sharp turn between two short segments where the road carries on in the same
 /// direction beyond it. That last test is what keeps real corners and U-turns, where
 /// the road comes out heading somewhere else.
@@ -127,6 +127,16 @@ fn is_spike(
         && turn(into_tip, out_of_tip) >= SPIKE_MIN_TURN_DEG
         && turn(road_in, road_out) <= SPIKE_MAX_ROAD_TURN_DEG
 }
+
+/// How far past the earliest fitting point still counts as the same pass of the line.
+const SAME_PASS_SPAN_M: f32 = 150.0;
+/// How much better a fit further along the line must be, in meters of fit per meter
+/// along. Legs drawn exactly on top of each other differ only by rounding, and that
+/// mustn't carry a vehicle hundreds of meters ahead, where it couldn't come back.
+const LATER_FIT_COST: f32 = 0.01;
+/// Cost per meter along the line when placing a stop, in meters of fit. Two passes can
+/// fit a stop equally well, and the earlier one is then the likelier: about 2 m per km.
+const LATER_PASS_COST: f32 = 0.002;
 
 /// A point projected onto a polyline.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -213,16 +223,13 @@ impl Polyline {
     ///
     /// A window can span the return leg of a loop, and GPS noise can make that leg
     /// look a little closer. Taking it would be permanent, since progress only goes
-    /// forward, so the earlier pass wins unless it's clearly worse. When the vehicle
-    /// has moved far enough for `heading` to mean something, legs running the other
-    /// way are ruled out as long as any leg runs the right way.
+    /// forward, so the earlier pass wins unless it's clearly worse.
     pub fn earliest_pass_in_window(
         &self,
         point: [f32; 2],
         s_lo: f32,
         s_hi: f32,
         slack: f32,
-        heading: Option<[f32; 2]>,
     ) -> Option<Projection> {
         let fit = |segment: usize| {
             let candidate = self.project_on_segment(point, segment);
@@ -236,44 +243,32 @@ impl Polyline {
                 }
             }
         };
-        let agrees = |segment: usize| {
-            heading.is_none_or(|h| {
-                let (a, b) = (self.xy[segment], self.xy[segment + 1]);
-                (b[0] - a[0]) * h[0] + (b[1] - a[1]) * h[1] >= 0.0
-            })
-        };
         let range = self.segments_between(s_lo, s_hi);
-        let best_with = |only_agreeing: bool| {
-            range
-                .clone()
-                .filter(|segment| !only_agreeing || agrees(*segment))
-                .map(|segment| fit(segment).offset)
-                .min_by(f32::total_cmp)
-        };
-        // Fall back to any direction, so a vehicle turning around isn't lost.
-        let (best, only_agreeing) = match best_with(true) {
-            Some(best) => (best, true),
-            None => (best_with(false)?, false),
-        };
+        let best = range
+            .clone()
+            .map(|segment| fit(segment).offset)
+            .min_by(f32::total_cmp)?;
         let limit = best + slack;
         let mut chosen: Option<Projection> = None;
         for segment in range {
-            if only_agreeing && !agrees(segment) {
-                if chosen.is_some() {
-                    break;
-                }
-                continue;
-            }
             let candidate = fit(segment);
             if candidate.offset <= limit {
-                if chosen.is_none_or(|c| candidate.offset < c.offset) {
+                if chosen.is_none_or(|c| fits_better_further_on(candidate, c)) {
                     chosen = Some(candidate);
                 }
             } else if chosen.is_some() {
                 break;
             }
         }
-        chosen
+        let earliest = chosen?;
+        // The hook at the end of a line can double back within a few meters. Without
+        // this, progress stops short of the last stop and a later fix records the arrival.
+        let ahead =
+            self.nearest_in_window(point, earliest.s, (earliest.s + SAME_PASS_SPAN_M).min(s_hi));
+        Some(match ahead {
+            Some(better) if fits_better_further_on(better, earliest) => better,
+            _ => earliest,
+        })
     }
 
     /// Every local minimum of distance within `max_offset`, in along-line order.
@@ -361,6 +356,10 @@ impl Polyline {
     }
 }
 
+fn fits_better_further_on(candidate: Projection, current: Projection) -> bool {
+    candidate.offset + LATER_FIT_COST * (candidate.s - current.s) < current.offset
+}
+
 pub fn distance(a: [f32; 2], b: [f32; 2]) -> f32 {
     let (dx, dy) = (a[0] - b[0], a[1] - b[1]);
     (dx * dx + dy * dy).sqrt()
@@ -369,6 +368,7 @@ pub fn distance(a: [f32; 2], b: [f32; 2]) -> f32 {
 /// Places each stop along the line so positions never go backward, minimising
 /// the total distance from stop to line. Dynamic programming over candidate
 /// passes handles loops and out-and-back shapes that defeat a greedy search.
+/// Near-ties go to the earlier pass.
 pub fn assign_stop_positions(line: &Polyline, stops: &[[f32; 2]]) -> Vec<f32> {
     const MAX_OFFSET: f32 = 120.0;
     if stops.is_empty() {
@@ -379,10 +379,11 @@ pub fn assign_stop_positions(line: &Polyline, stops: &[[f32; 2]]) -> Vec<f32> {
         .map(|stop| line.candidates(*stop, MAX_OFFSET))
         .collect();
 
-    // best[i][j] = lowest total offset ending with stop i on candidate j.
+    // best[i][j] = lowest total cost ending with stop i on candidate j.
     let mut best: Vec<Vec<f32>> = Vec::with_capacity(stops.len());
     let mut from: Vec<Vec<usize>> = Vec::with_capacity(stops.len());
-    best.push(candidates[0].iter().map(|c| c.offset).collect());
+    let cost = |c: &Projection| c.offset + LATER_PASS_COST * c.s;
+    best.push(candidates[0].iter().map(cost).collect());
     from.push(vec![0; candidates[0].len()]);
     for i in 1..stops.len() {
         let mut row = Vec::with_capacity(candidates[i].len());
@@ -397,7 +398,7 @@ pub fn assign_stop_positions(line: &Polyline, stops: &[[f32; 2]]) -> Vec<f32> {
                 } else {
                     1e6
                 };
-                let total = best[i - 1][j] + candidate.offset + penalty;
+                let total = best[i - 1][j] + cost(candidate) + penalty;
                 if total < lowest {
                     lowest = total;
                     origin = j;
@@ -556,18 +557,37 @@ mod tests {
             "the nearest point is on the way back"
         );
         let earliest = line
-            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, None)
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0)
             .unwrap();
         assert!(earliest.s < line.length() / 2.0, "{}", earliest.s);
         // Clearly nearer the return leg, so that is where the vehicle is.
         let earliest = line
-            .earliest_pass_in_window(point, 0.0, line.length(), 10.0, None)
+            .earliest_pass_in_window(point, 0.0, line.length(), 10.0)
             .unwrap();
         assert!(earliest.s > line.length() / 2.0, "{}", earliest.s);
     }
 
     #[test]
-    fn a_vehicle_heading_south_cant_match_a_northbound_leg() {
+    fn a_hook_at_the_end_of_a_line_is_reached_rather_than_stopped_short_of() {
+        // North along the road, then a short hook out to the terminal and back.
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.0009, -89.0),
+            (43.0009, -88.9995),
+            (43.00092, -88.9995),
+            (43.00092, -89.0),
+        ])
+        .unwrap();
+        // At the tip of the hook, about 40 m from the road.
+        let point = line.frame.to_xy(43.00091, -88.9995);
+        let found = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0)
+            .unwrap();
+        assert!(found.offset < 3.0, "{found:?}");
+    }
+
+    #[test]
+    fn a_second_pass_far_along_the_line_is_not_taken_for_the_same_pass() {
         let line = Polyline::from_lat_lon(&[
             (43.0, -89.0),
             (43.02, -89.0),
@@ -575,15 +595,41 @@ mod tests {
             (43.0, -88.99975),
         ])
         .unwrap();
-        let point = line.frame.to_xy(43.01, -89.0);
-        let south = line
-            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, Some([0.0, -100.0]))
+        // Right on the return leg, more than the span away from the outbound one.
+        let point = line.frame.to_xy(43.01, -88.99975);
+        let found = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0)
             .unwrap();
-        assert!(south.s > line.length() / 2.0, "{}", south.s);
-        let north = line
-            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, Some([0.0, 100.0]))
-            .unwrap();
-        assert!(north.s < line.length() / 2.0, "{}", north.s);
+        assert!(found.s < line.length() / 2.0, "{}", found.s);
+    }
+
+    #[test]
+    fn a_stop_that_fits_two_passes_equally_goes_on_the_earlier_one() {
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.02, -89.0),
+            (43.02, -88.99975),
+            (43.0, -88.99975),
+        ])
+        .unwrap();
+        // Halfway between the two legs of the street.
+        let stop = line.frame.to_xy(43.01, -88.999875);
+        let positions = assign_stop_positions(&line, &[stop]);
+        assert!(positions[0] < line.length() / 2.0, "{}", positions[0]);
+    }
+
+    #[test]
+    fn a_stop_clearly_on_the_later_pass_stays_there() {
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.002, -89.0),
+            (43.002, -88.9985),
+            (43.0, -88.9985),
+        ])
+        .unwrap();
+        let stop = line.frame.to_xy(43.001, -88.9985);
+        let positions = assign_stop_positions(&line, &[stop]);
+        assert!(positions[0] > line.length() / 2.0, "{}", positions[0]);
     }
 
     #[test]

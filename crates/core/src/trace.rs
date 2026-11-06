@@ -70,8 +70,6 @@ pub struct Trace {
 
 /// How much worse an earlier pass of a loop can fit a fix and still be preferred.
 const EARLIER_PASS_SLACK_M: f32 = 25.0;
-/// A vehicle must move at least this far before its direction of travel counts.
-const MIN_HEADING_MOVE_M: f32 = 30.0;
 /// Two traces progressing within this distance are equally good explanations.
 const PROGRESS_TIE_M: f32 = 50.0;
 
@@ -156,11 +154,7 @@ fn follow_from(
         lat: lat0,
         lon: lon0,
     });
-    let mut previous = (
-        t0,
-        start.s,
-        line.frame.to_xy(f64::from(lat0), f64::from(lon0)),
-    );
+    let mut previous = (t0, start.s);
     for &(t, lat, lon) in &fixes[1..] {
         // A frozen GPS unit can repeat an old fix. Time must also move forward.
         if t < previous.0 {
@@ -169,15 +163,12 @@ fn follow_from(
         let point = line.frame.to_xy(f64::from(lat), f64::from(lon));
         let elapsed = (t - previous.0) as f32;
         let reach = rules.max_speed_mps * elapsed + 200.0;
-        let moved = [point[0] - previous.2[0], point[1] - previous.2[1]];
-        let heading = (moved[0].hypot(moved[1]) >= MIN_HEADING_MOVE_M).then_some(moved);
         let found = line
             .earliest_pass_in_window(
                 point,
                 previous.1 - 60.0,
                 previous.1 + reach,
                 EARLIER_PASS_SLACK_M,
-                heading,
             )
             .filter(|fit| fit.offset <= rules.max_offset_m);
         let Some(found) = found else {
@@ -189,7 +180,7 @@ fn follow_from(
         }
         let s = found.s.max(previous.1);
         trace.points.push(TracePoint { t, s, lat, lon });
-        previous = (t, s, point);
+        previous = (t, s);
     }
     trace
 }
