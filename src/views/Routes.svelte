@@ -6,12 +6,15 @@
   import RouteBadge from '../components/RouteBadge.svelte';
   import SpeedLegend from '../components/SpeedLegend.svelte';
   import type {RouteScore} from '../engine/types';
-  import {DASH, int, minutes, pct, ratioOf, routeName, signedPct, speed, speedUnit} from '../lib/format';
+  import {DASH, int, minutes, pct, ratioOf, routeName, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
   import {app} from '../lib/state.svelte';
 
   let peak = $state<'peak' | 'am' | 'pm'>('peak');
 
   const unit = $derived(speedUnit(app.units));
+  /** Exports use the units in the column heading, not the engine's meters per second. */
+  const speedCsv = (value: number | null | undefined) => (value === null || value === undefined ? null : Number(toDisplaySpeed(value, app.units).toFixed(2)));
+  const minutesCsv = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? null : Number((seconds / 60).toFixed(1)));
   const days = $derived(Math.max(1, app.loadedDates.length));
   const onTime = (r: RouteScore) => ratioOf(r.on_time.on_time, r.on_time.total);
   const late = (r: RouteScore) => ratioOf(r.on_time.late, r.on_time.total);
@@ -33,22 +36,22 @@
     {key: 'long', label: 'Name', left: true, wrap: true, value: r => routeName(r.label, r.long_name) || null, format: r => routeName(r.label, r.long_name)},
     {key: 'trips', label: 'Trips a day', descending: true, value: r => r.trips_observed / days, format: r => int(r.trips_observed / days)},
     {key: 'observed', label: 'Observed', title: 'Share of scheduled trips seen in the realtime feed', descending: true, value: r => ratioOf(r.trips_observed, r.trips_scheduled), format: r => pct(ratioOf(r.trips_observed, r.trips_scheduled))},
-    {key: 'speed', label: `All day, ${unit}`, descending: true, value: r => r.speed, format: r => speed(r.speed, app.units)},
-    {key: 'mid', label: 'Midday', title: '10 AM to 2 PM', value: r => r.speed_mid, format: r => speed(r.speed_mid, app.units)},
-    {key: 'peak', label: 'Peak', title: '7 to 9 AM and 4 to 6 PM', value: r => r.speed_peak, format: r => speed(r.speed_peak, app.units)},
+    {key: 'speed', label: `All day, ${unit}`, descending: true, value: r => r.speed, format: r => speed(r.speed, app.units), csv: r => speedCsv(r.speed)},
+    {key: 'mid', label: 'Midday', title: '10 AM to 2 PM', value: r => r.speed_mid, format: r => speed(r.speed_mid, app.units), csv: r => speedCsv(r.speed_mid)},
+    {key: 'peak', label: 'Peak', title: '7 to 9 AM and 4 to 6 PM', value: r => r.speed_peak, format: r => speed(r.speed_peak, app.units), csv: r => speedCsv(r.speed_peak)},
     {key: 'change', label: 'Change', title: 'Peak speed against midday, with a 95% interval from resampling days', value: r => r.peak_change, cell: changeCell, csv: r => r.peak_change},
-    {key: 'am', label: 'AM', value: r => r.speed_am, format: r => speed(r.speed_am, app.units)},
-    {key: 'pm', label: 'PM', value: r => r.speed_pm, format: r => speed(r.speed_pm, app.units)},
-    {key: 'sched', label: 'Scheduled', title: 'Speed implied by the schedule', value: r => r.scheduled_speed, format: r => speed(r.scheduled_speed, app.units)},
+    {key: 'am', label: 'AM', value: r => r.speed_am, format: r => speed(r.speed_am, app.units), csv: r => speedCsv(r.speed_am)},
+    {key: 'pm', label: 'PM', value: r => r.speed_pm, format: r => speed(r.speed_pm, app.units), csv: r => speedCsv(r.speed_pm)},
+    {key: 'sched', label: 'Scheduled', title: 'Speed implied by the schedule', value: r => r.scheduled_speed, format: r => speed(r.scheduled_speed, app.units), csv: r => speedCsv(r.scheduled_speed)},
     {key: 'otp', label: 'On time', title: 'Departures at timepoints within the on-time window', value: onTime, format: r => pct(onTime(r))},
     {key: 'late', label: 'Late', descending: true, value: late, format: r => pct(late(r))},
     {key: 'bunched', label: 'Bunched', title: 'Share of vehicles under a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => r.headways?.bunched ?? null, format: r => pct(r.headways?.bunched)},
-    {key: 'ewt', label: 'Excess wait', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true, value: r => r.headways?.excess_wait_s ?? null, format: r => (r.headways ? minutes(r.headways.excess_wait_s, 1) : DASH)},
-    {key: 'run', label: 'Run time', title: 'Median time to run the main pattern end to end', descending: true, value: r => r.run_p50_s, format: r => minutes(r.run_p50_s)},
-    {key: 'p90', label: '90th pct', title: 'One run in ten takes longer than this', descending: true, value: r => r.run_p90_s, format: r => minutes(r.run_p90_s)},
+    {key: 'ewt', label: 'Excess wait', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true, value: r => r.headways?.excess_wait_s ?? null, format: r => (r.headways ? minutes(r.headways.excess_wait_s, 1) : DASH), csv: r => minutesCsv(r.headways?.excess_wait_s)},
+    {key: 'run', label: 'Run time', title: 'Median time to run the main pattern end to end', descending: true, value: r => r.run_p50_s, format: r => minutes(r.run_p50_s), csv: r => minutesCsv(r.run_p50_s)},
+    {key: 'p90', label: '90th pct', title: 'One run in ten takes longer than this', descending: true, value: r => r.run_p90_s, format: r => minutes(r.run_p90_s), csv: r => minutesCsv(r.run_p90_s)},
     {key: 'stopped', label: 'Stopped', title: 'Share of measured time moving under 2 mph', descending: true, value: r => r.stopped_share, format: r => pct(r.stopped_share)},
     {key: 'veh', label: 'Vehicles', title: 'Peak vehicles in an hour', descending: true, value: r => r.peak_vehicles, format: r => r.peak_vehicles.toFixed(1)},
-    {key: 'slowest', label: 'Slowest half mile at peak', left: true, wrap: true, value: r => r.slowest?.speed ?? null, cell: slowestCell, csv: r => (r.slowest ? `${r.slowest.from} to ${r.slowest.to}` : '')},
+    {key: 'slowest', label: 'Slowest half mile at peak', left: true, wrap: true, value: r => r.slowest?.speed ?? null, cell: slowestCell, csv: r => (r.slowest ? `${speedCsv(r.slowest.speed)} ${unit}, ${r.slowest.from} to ${r.slowest.to}` : '')},
     {key: 'hourly', label: '5 AM to 11 PM', noSort: true, value: () => null, cell: sparkCell, csv: () => ''},
   ]);
 </script>

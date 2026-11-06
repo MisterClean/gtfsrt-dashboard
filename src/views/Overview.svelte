@@ -41,8 +41,8 @@
 
   const dayColumns = $derived<Column<DayRow>[]>([
     {key: 'date', label: 'Service day', left: true, value: d => d.date, format: d => dateLabel(d.date)},
-    {key: 'speed', label: `Speed, ${unit}`, value: d => d.speed, format: d => speed(d.speed, app.units), descending: true},
-    {key: 'peak', label: `Peak, ${unit}`, value: d => d.peak_speed, format: d => speed(d.peak_speed, app.units), descending: true},
+    {key: 'speed', label: `Speed, ${unit}`, value: d => d.speed, format: d => speed(d.speed, app.units), csv: d => (d.speed === null ? null : Number(toDisplaySpeed(d.speed, app.units).toFixed(2))), descending: true},
+    {key: 'peak', label: `Peak, ${unit}`, value: d => d.peak_speed, format: d => speed(d.peak_speed, app.units), csv: d => (d.peak_speed === null ? null : Number(toDisplaySpeed(d.peak_speed, app.units).toFixed(2))), descending: true},
     {key: 'ontime', label: 'On time', value: d => share(d.on_time.on_time, d.on_time.total), format: d => pct(share(d.on_time.on_time, d.on_time.total)), descending: true},
     {key: 'observed', label: 'Trips observed', value: d => d.trips_observed, format: d => int(d.trips_observed), descending: true},
     {key: 'scheduled', label: 'Scheduled', value: d => d.trips_scheduled, format: d => int(d.trips_scheduled), descending: true},

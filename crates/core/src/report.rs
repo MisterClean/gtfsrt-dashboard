@@ -27,6 +27,9 @@ const CLOSE_STOP_M: f32 = 244.0;
 const BOOTSTRAP_ROUNDS: usize = 1000;
 const MAX_HOTSPOTS: usize = 40;
 const MAX_HOTSPOT_LENGTH_M: f32 = 1500.0;
+/// Service hours searched for a hotspot's worst hour: 5 AM to midnight.
+const WORST_HOUR_FROM: usize = 5;
+const WORST_HOUR_TO: usize = 24;
 
 /// What the visitor has chosen. Applies to everything on screen.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -1426,9 +1429,11 @@ fn build_hotspot(
     }
     routes.sort_by_key(|label| natural_key(label));
     routes.dedup();
+    // Daytime and evening only: a few fast or slow overnight trips say little.
     let (worst_hour, worst_speed) = hours
         .iter()
         .enumerate()
+        .filter(|(hour, _)| (WORST_HOUR_FROM..WORST_HOUR_TO).contains(hour))
         .filter_map(|(hour, cell)| cell.speed(min_pairs).map(|speed| (hour, speed)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .unwrap_or((0, 0.0));
@@ -1800,12 +1805,11 @@ pub fn string_line(
     let main = &library.patterns[pattern_index as usize];
     let day = library.days.get(&date)?;
     let events = library.events.get(&date)?;
-    let position: FxHashMap<u32, f32> = main
-        .stops
-        .iter()
-        .zip(&main.stop_s)
-        .map(|(stop, s)| (*stop, *s))
-        .collect();
+    // A stop can sit on the main line more than once, on a loop or an out-and-back.
+    let mut positions: FxHashMap<u32, Vec<f32>> = FxHashMap::default();
+    for (stop, s) in main.stops.iter().zip(&main.stop_s) {
+        positions.entry(*stop).or_default().push(*s);
+    }
 
     /// `(seconds from origin, meters along the line)` points.
     type Points = Vec<(i32, f32)>;
@@ -1817,16 +1821,26 @@ pub fn string_line(
         if trip.route != route || trip.dir != dir {
             continue;
         }
-        let pattern = &library.patterns[trip.pattern as usize];
-        let Some(stop) = pattern.stops.get(usize::from(event.stop_index)) else {
-            continue;
-        };
-        let Some(s) = position.get(stop) else {
-            continue;
-        };
+        let index = usize::from(event.stop_index);
         let entry = by_trip.entry(event.trip).or_default();
-        entry.0.push((event.observed, *s));
-        entry.1.push((event.scheduled, *s));
+        let s = if trip.pattern == pattern_index {
+            main.stop_s.get(index).copied()
+        } else {
+            // Other patterns join through shared stops, taking the first place
+            // on the main line that doesn't move the trip backward.
+            let pattern = &library.patterns[trip.pattern as usize];
+            let previous = entry.0.last().map_or(f32::MIN, |point| point.1);
+            pattern
+                .stops
+                .get(index)
+                .and_then(|stop| positions.get(stop))
+                .and_then(|places| places.iter().copied().find(|s| *s >= previous))
+        };
+        let Some(s) = s else {
+            continue;
+        };
+        entry.0.push((event.observed, s));
+        entry.1.push((event.scheduled, s));
     }
     let mut trips: Vec<StringLineTrip> = by_trip
         .into_iter()
@@ -2369,6 +2383,98 @@ mod tests {
         );
         let lateness = first.observed[0].0 - first.scheduled[0].0;
         assert!((lateness - 120).abs() < 30, "{lateness}");
+    }
+
+    #[test]
+    fn a_stop_visited_twice_keeps_both_places_on_the_string_line() {
+        // An out-and-back line serving the same stop in each direction.
+        let mut builder = crate::schedule::ScheduleBuilder::new("loop");
+        builder.add_route(RouteMeta {
+            id: "R".into(),
+            short_name: "1".into(),
+            long_name: String::new(),
+            route_type: Some(3),
+            color: String::new(),
+            text_color: String::new(),
+        });
+        for (id, lat) in [("A", 43.0), ("B", 43.02), ("C", 43.04)] {
+            builder.add_stop(crate::schedule::StopMeta {
+                id: id.into(),
+                code: String::new(),
+                name: id.into(),
+                lat,
+                lon: -89.0,
+            });
+        }
+        for (i, lat) in [43.0, 43.02, 43.04, 43.02, 43.0].iter().enumerate() {
+            builder.add_shape_point("S", i as i32, *lat, -89.0);
+        }
+        builder.add_calendar("D", [true; 7], 20260101, 20261231);
+        builder.add_trip("T", "R", "D", Some(0), Some("S"), "");
+        for (seq, stop, minute) in [
+            (1, "A", 0),
+            (2, "B", 5),
+            (3, "C", 10),
+            (4, "B", 15),
+            (5, "A", 20),
+        ] {
+            let time = 7 * 3600 + minute * 60;
+            builder.add_stop_time("T", stop, seq, Some(time), Some(time), None);
+        }
+        let schedule = builder.build().unwrap();
+
+        let clock = Clock::fixed(OFFSET);
+        let origin = clock.service_origin(ServiceDate(THURSDAY)).unwrap();
+        let mut buffer = RtBuffer::default();
+        for step in 0..=62 {
+            let fraction = f64::from(step) / 60.0;
+            let lat = if fraction <= 0.5 {
+                43.0 + 0.08 * fraction
+            } else {
+                43.08 - 0.08 * fraction
+            };
+            let epoch = origin + 7 * 3600 + i64::from(step) * 20;
+            buffer.push(RawFix {
+                fetch: epoch as f64,
+                timestamp: epoch as f64,
+                lat: lat.max(43.0) as f32,
+                lon: -89.0,
+                trip_id: Some(b"T"),
+                vehicle_id: Some(b"V"),
+                route_id: Some(b"R"),
+                start_date: None,
+                start_time: None,
+                occupancy: -1,
+                differential: false,
+            });
+        }
+        let result = process_day(
+            &schedule,
+            &mut buffer,
+            ServiceDate(THURSDAY),
+            &clock,
+            i64::MAX,
+        )
+        .unwrap();
+        let mut library = Library::default();
+        library.add_schedule(&schedule.meta());
+        library.add_day(result.cube, Some(result.events)).unwrap();
+        let merged = Merged::compute(&library, selection(&[THURSDAY]));
+        let chart = string_line(&library, &merged, "R", 0, THURSDAY).unwrap();
+        let places: Vec<f32> = chart.trips[0]
+            .observed
+            .iter()
+            .map(|point| point.1)
+            .collect();
+        assert!(places.windows(2).all(|w| w[0] <= w[1]), "{places:?}");
+        assert!(places.len() >= 3, "{places:?}");
+        // The second pass of stop B sits three quarters of the way along.
+        let last = *places.last().unwrap();
+        assert!(
+            last > chart.length_m * 0.7,
+            "{places:?} of {}",
+            chart.length_m
+        );
     }
 
     #[test]

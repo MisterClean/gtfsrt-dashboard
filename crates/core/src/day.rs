@@ -15,6 +15,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// Half-width of the zone around a stop. Time between its edges approximates
 /// dwell plus queuing; with 20 s polling that only means anything in aggregate.
 const STOP_ZONE_M: f32 = 25.0;
+/// Observed headways beyond the larger of these are treated as gaps in the evidence.
+const MAX_HEADWAY_S: f64 = 3600.0;
+const MAX_HEADWAY_FACTOR: f64 = 4.0;
+/// Longer than this in a stop zone is a hold, matching the standstill rule.
+const MAX_STOP_ZONE_S: f64 = 600.0;
 /// How far stop times may be interpolated across a reporting gap.
 const MAX_EVENT_GAP_S: f32 = 300.0;
 /// A new run of the same trip and vehicle starts after a silence this long,
@@ -680,8 +685,12 @@ fn stop_passes(
             period.passes += 1;
             period.deviation[cube::deviation_bin(deviation)] += 1;
             period.deviation_sum += f64::from(deviation);
-            if let (Some(a), Some(b)) = (enter, leave)
+            // A vehicle waits at each end of the line by design, and a very long
+            // wait mid-route is a hold rather than boarding or queuing.
+            let terminal = i == 0 || is_last;
+            if let (false, Some(a), Some(b)) = (terminal, enter, leave)
                 && b >= a
+                && b - a <= MAX_STOP_ZONE_S
             {
                 period.zone_seconds += (b - a) as f32;
                 period.zone_count += 1;
@@ -755,6 +764,12 @@ fn add_headways(passes: &mut [Pass], scheduled_at_stops: &ScheduledAtStops, acc:
                 continue;
             };
             if scheduled > cube::FREQUENT_HEADWAY_S {
+                continue;
+            }
+            // A wait this far beyond the schedule isn't a headway. Several passes went
+            // unobserved, or the feed lost the route for a while, and one such value
+            // would dominate the average wait, which grows with the square of a gap.
+            if observed > MAX_HEADWAY_S.max(MAX_HEADWAY_FACTOR * scheduled) {
                 continue;
             }
             let hour = service_hour(pair[1].time as i64);
@@ -1077,6 +1092,61 @@ mod tests {
             });
         assert!(headways.count >= 4, "{headways:?}");
         assert_eq!(headways.gapped, headways.count, "{headways:?}");
+    }
+
+    #[test]
+    fn an_hours_long_silence_is_not_counted_as_a_headway() {
+        // The fixture runs every ten minutes, 7:00 to 8:50.
+        let mut passes = vec![
+            Pass {
+                route: 0,
+                dir: 0,
+                stop: 0,
+                time: 7.0 * 3600.0,
+                scheduled: 7 * 3600,
+            },
+            Pass {
+                route: 0,
+                dir: 0,
+                stop: 0,
+                time: 8.5 * 3600.0,
+                scheduled: 8 * 3600 + 1800,
+            },
+        ];
+        let mut scheduled = FxHashMap::default();
+        scheduled.insert(
+            (0, 0, 0),
+            (0..12).map(|i| 7 * 3600 + i * 600).collect::<Vec<i32>>(),
+        );
+        let mut acc = Accumulator::default();
+        add_headways(&mut passes, &scheduled, &mut acc);
+        let total: u32 = acc.route_hours.values().map(|r| r.headways.count).sum();
+        assert_eq!(
+            total, 0,
+            "90 minutes against a 10 minute schedule is missing evidence"
+        );
+
+        // Twenty minutes against a ten minute schedule is a real gap.
+        let mut passes = vec![
+            Pass {
+                route: 0,
+                dir: 0,
+                stop: 0,
+                time: 7.0 * 3600.0,
+                scheduled: 7 * 3600,
+            },
+            Pass {
+                route: 0,
+                dir: 0,
+                stop: 0,
+                time: 7.0 * 3600.0 + 1200.0,
+                scheduled: 7 * 3600 + 1200,
+            },
+        ];
+        let mut acc = Accumulator::default();
+        add_headways(&mut passes, &scheduled, &mut acc);
+        let gapped: u32 = acc.route_hours.values().map(|r| r.headways.gapped).sum();
+        assert_eq!(gapped, 1);
     }
 
     #[test]
