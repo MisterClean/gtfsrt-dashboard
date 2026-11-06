@@ -23,7 +23,11 @@ const outdir = resolve(root, '.build/release');
 await rm(outdir, {recursive: true, force: true});
 await mkdir(resolve(outdir, 'assets'), {recursive: true});
 const duck = resolve(root, 'node_modules/@duckdb/duckdb-wasm/dist');
-const engineHash = hash(await readFile(resolve(duck, 'duckdb-base.wasm')));
+const engineAssets = await Promise.all([
+  resolve(duck, 'duckdb-base.wasm'), resolve(duck, 'duckdb-browser-base.worker.js'),
+  ...extensions.map(({name}) => resolve(extensionDirectory, `${name}.duckdb_extension.wasm`)),
+].map(path => readFile(path)));
+const engineHash = hash(Buffer.concat(engineAssets));
 const duckDirectory = `duckdb-${engineHash}`;
 await mkdir(resolve(outdir, 'assets', duckDirectory));
 for (const name of ['duckdb-base.wasm', 'duckdb-browser-base.worker.js']) await cp(resolve(duck, name), resolve(outdir, 'assets', duckDirectory, name));

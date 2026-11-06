@@ -1,8 +1,8 @@
 # Browser GTFS-RT dashboard architecture
 
-Status: proposed architecture; direct browser feasibility passed. Research date: 2026-11-06. See [the feasibility decision](feasibility.md) for measurements and reproduction.
+Status: bounded Rust/WASM explorer implemented and tested in Chromium on 2026-11-06. This document retains the broader architecture and future gates. See [MVP validation](mvp-validation.md) for implemented scope and remaining checks, and [the feasibility decision](feasibility.md) for the original experiment.
 
-The proposed Rust implementation, self-contained release packaging and user-security requirements are detailed in [Rust packaging and browser security](packaging-security.md). They extend this design and are not yet implemented.
+The Rust implementation, self-contained release packaging and user-security requirements are detailed in [Rust packaging and browser security](packaging-security.md). The MVP implements the browser interface, bounded worker queries, self-hosted signed extensions and an enforced local preview policy; production HTTPS and broader browser validation remain open.
 
 The initial product is a static web application that queries a bounded selection of archived transit data on the user's device. A successful direct-read experiment permits a city explorer; it does not establish that arbitrary national comparisons will fit a browser. Broad benchmarking should use small, reproducible aggregate Parquet datasets when raw scans exceed the measured limits.
 

@@ -1,0 +1,88 @@
+{
+  "validated_on": "2026-11-06",
+  "environment": "Visible in-app Chromium browser; localhost subpath; enforced page and worker CSP",
+  "engine": {
+    "wrapper": "1.33.1-dev114.0",
+    "browser_sql_version": "v2.0.0",
+    "native_reference_version": "v2.0.0-dev88614",
+    "native_source_id": "d54cbbe3df"
+  },
+  "selections": [
+    {
+      "agency": "metro-transit-madison",
+      "date": "2026-11-05",
+      "observations": 296588,
+      "vehicle_ids": 151,
+      "nonempty_route_ids": 29,
+      "trip_ids": 1664,
+      "utc_hours_with_records": 23,
+      "missing_route_rows": 40990,
+      "object_bytes": 34180170,
+      "object_sha256": "99a3463bf0736bce65a05efa4c671b7a4e9023652bde033b3fe9cca1fce670b8",
+      "native_reference_matches": true
+    },
+    {
+      "agency": "septa",
+      "system": "Regional Rail",
+      "date": "2026-11-05",
+      "observations": 180258,
+      "vehicle_ids": 248,
+      "nonempty_route_ids": 13,
+      "utc_hours_with_records": 23
+    }
+  ],
+  "local_route_filter": {
+    "route": "A",
+    "mode": "Bus",
+    "observations": 34408,
+    "vehicle_ids": 31,
+    "trip_ids": 134,
+    "observed_recalculation_seconds": 0.2
+  },
+  "resource_guard": {
+    "dates": [
+      "2026-11-01",
+      "2026-11-05"
+    ],
+    "object_mib_rounded": 158.4,
+    "limit_mib": 128,
+    "rejected_before_engine_start": true
+  },
+  "cancellation": {
+    "immediate_worker_reset": true,
+    "subsequent_load_recovered": true
+  },
+  "checks": {
+    "rust_unit_tests": 8,
+    "independent_native_sql_tests": 2,
+    "node_contract_tests": 4,
+    "native_clippy": true,
+    "wasm_clippy": true,
+    "rustfmt": true,
+    "release_build": true,
+    "release_integrity": true,
+    "csv_download_inspected": true,
+    "provenance_download_inspected": true,
+    "selection_link_copy": true,
+    "sort_and_empty_search": true
+  },
+  "visual_review": {
+    "disposition": "ship",
+    "fixed": [
+      "Readable contained SVG scrolling at1120px intrinsic width with11px axes",
+      "Mobile source digest wraps without document overflow",
+      "Drawn SVG navigation/sort/link icons"
+    ],
+    "viewports_css_px": [
+      1440,
+      390,
+      772
+    ]
+  },
+  "limitations": [
+    "No production HTTPS deployment validation",
+    "Firefox/Safari/Edge and constrained-device/peak-memory tests remain",
+    "No deliberately stalled browser query or forced live404 fixture",
+    "No service-performance or speed metrics"
+  ]
+}

@@ -1,6 +1,6 @@
 # Rust packaging and browser security
 
-Design recommendation, November 6, 2026. The DuckDB browser experiment has passed. Rust integration, production packaging and the security controls below have not yet been implemented or verified.
+Design and implementation notes, November 6, 2026. Rust integration and self-contained static packaging are implemented. The visible Chromium MVP passed real archive queries and local page/worker CSP checks; [MVP validation](mvp-validation.md) records the evidence and remaining production/browser gates. The requirements below remain the design contract, not a claim that every compatibility or security gate has passed.
 
 ## Recommended packaging
 
