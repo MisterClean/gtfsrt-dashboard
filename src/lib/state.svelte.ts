@@ -5,11 +5,13 @@ import type {
   AnalyzeResult, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
 } from '../engine/types';
 import {decodeDates, encodeDates, lastDays} from './dates';
-import type {Units} from './format';
+import {dateNumber, plural, type Units} from './format.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
 
 const STORAGE_KEY = 'transit-notebook-preferences';
+/** With streaming reads, this long without a sign of progress means something is stuck. */
+const STALL_MS = 120_000;
 
 interface Preferences { units: Units; theme: 'auto' | 'light' | 'dark'; basemap: boolean }
 
@@ -31,6 +33,8 @@ class AppState {
   cachedDates = $state<number[]>([]);
   cachedBytes = $state(0);
   analyzedDates = $state<number[]>([]);
+  /** Days the archive has nothing for. They aren't results, and aren't pending either. */
+  unavailableDates = $state<Record<number, string>>({});
 
   mode = $state<Mode>('All');
   earlyS = $state(-60);
@@ -49,6 +53,9 @@ class AppState {
   running = $state(false);
   stage = $state<{message: string; fraction: number; dayIndex: number; dayCount: number} | null>(null);
   error = $state<string | null>(null);
+  reportError = $state<string | null>(null);
+  /** No sign of progress for a while, usually a stalled connection. */
+  stalled = $state(false);
   warnings = $state<string[]>([]);
   reads = $state<ReadRecord[]>([]);
   schedules = $state<ScheduleRecord[]>([]);
@@ -61,6 +68,11 @@ class AppState {
   quality = $state<QualityReport | null>(null);
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Results from a run or a refresh that has been superseded are ignored. */
+  private currentRun = 0;
+  private refreshToken = 0;
+  private lastProgress = 0;
+  private watchdog: ReturnType<typeof setInterval> | undefined;
 
   feed = $derived(this.feeds.find(f => f.base64url === this.feedKey) ?? null);
   /** Which speed scale to color with. A commuter rail network on the bus scale is one solid color. */
@@ -69,7 +81,7 @@ class AppState {
     return (this.overview?.speed ?? 0) > 9 ? 'Rail' : 'Bus';
   });
   loadedDates = $derived(this.dates.filter(d => this.analyzedDates.includes(d)));
-  pendingDates = $derived(this.dates.filter(d => !this.analyzedDates.includes(d)));
+  pendingDates = $derived(this.dates.filter(d => !this.analyzedDates.includes(d) && !(d in this.unavailableDates)));
   hasResults = $derived(this.loadedDates.length > 0);
   uncachedDates = $derived(this.dates.filter(d => !this.cachedDates.includes(d)));
 
@@ -80,8 +92,9 @@ class AppState {
     this.basemap = preferences.basemap;
     this.applyTheme();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
-    engine.onEvent(event => this.handleEvent(event));
-    addEventListener('popstate', () => this.readUrl());
+    engine.onEvent(event => {
+      if (event.run === this.currentRun) this.handleEvent(event);
+    });
   }
 
   // ---- Preferences ----------------------------------------------------------
@@ -163,11 +176,17 @@ class AppState {
   // ---- Choosing what to analyse --------------------------------------------
 
   async selectFeed(feedKey: string, dates: number[] | null, fromUrl = false) {
-    if (this.running) await this.stop();
     const changed = feedKey !== this.feedKey;
     this.feedKey = feedKey;
     if (changed) {
+      // Nothing from the previous agency may land here from now on.
+      this.currentRun += 1;
+      this.refreshToken += 1;
+      clearTimeout(this.refreshTimer);
+      this.running = false;
+      this.stage = null;
       this.analyzedDates = [];
+      this.unavailableDates = {};
       this.overview = null;
       this.routes = [];
       this.quality = null;
@@ -176,19 +195,35 @@ class AppState {
       this.warnings = [];
       this.result = null;
       this.error = null;
+      this.reportError = null;
       this.mode = fromUrl ? this.mode : 'All';
       if (!fromUrl) this.routeId = null;
       await engine.openFeed(feedKey);
+      if (feedKey !== this.feedKey) return;
+      this.version += 1;
     }
     await this.refreshCached();
+    if (feedKey !== this.feedKey) return;
     const feed = this.feed;
-    if (dates) this.dates = dates;
+    if (dates && feed) this.dates = this.cleanDates(dates, feed);
     else if (feed) this.dates = lastDays(feed.date_min, feed.date_max, 'weekday', 5);
     this.writeUrl();
     // Days already on this device load without asking. New downloads wait for a click.
     if (this.dates.some(d => this.cachedDates.includes(d))) {
       await this.analyze(this.dates.filter(d => this.cachedDates.includes(d)));
     }
+  }
+
+  /** A shared link can name anything, so keep only real days this feed has. */
+  private cleanDates(dates: number[], feed: Feed) {
+    const first = dateNumber(feed.date_min);
+    const last = dateNumber(feed.date_max);
+    const unique = [...new Set(dates)].sort((a, b) => a - b);
+    const inRange = unique.filter(d => d >= first && d <= last);
+    if (inRange.length < unique.length) {
+      this.addWarning(`${plural(unique.length - inRange.length, 'day')} in this link ${unique.length - inRange.length === 1 ? 'is' : 'are'} outside this feed's archive, from ${feed.date_min} to ${feed.date_max}, and ${unique.length - inRange.length === 1 ? 'was' : 'were'} left out.`);
+    }
+    return inRange;
   }
 
   async refreshCached() {
@@ -210,32 +245,45 @@ class AppState {
 
   async analyze(dates = this.pendingDates) {
     if (!this.feedKey || !this.feed || this.running || !dates.length) return;
+    const run = ++this.currentRun;
     this.running = true;
     this.error = null;
+    this.stalled = false;
+    this.lastProgress = Date.now();
     this.stage = {message: 'Starting', fraction: 0, dayIndex: 0, dayCount: dates.length};
+    clearInterval(this.watchdog);
+    this.watchdog = setInterval(() => {
+      if (this.running) this.stalled = Date.now() - this.lastProgress > STALL_MS;
+    }, 5000);
     try {
-      const result = await engine.analyze({feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
-      this.result = result;
-      for (const skipped of result.skipped) this.addWarning(`${skipped.date}: ${skipped.reason}`);
+      const result = await engine.analyze({run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
+      if (run === this.currentRun) this.result = result;
     } catch (error) {
-      this.error = errorText(error);
+      if (run === this.currentRun) this.error = errorText(error);
     } finally {
-      this.running = false;
-      this.stage = null;
-      await this.refreshCached();
-      await this.refresh();
+      if (run === this.currentRun) {
+        clearInterval(this.watchdog);
+        this.running = false;
+        this.stalled = false;
+        this.stage = null;
+        await this.refreshCached();
+        await this.refresh();
+      }
     }
   }
 
+  /** Stops the analysis. Days already finished stay. */
   async stop() {
     await engine.stop();
-    this.running = false;
-    this.stage = null;
   }
 
   async clearCache(all = false) {
     await engine.clearCache(all ? undefined : this.feedKey ?? undefined);
+    this.currentRun += 1;
+    this.running = false;
+    this.stage = null;
     this.analyzedDates = [];
+    this.unavailableDates = {};
     this.overview = null;
     this.routes = [];
     this.quality = null;
@@ -249,6 +297,8 @@ class AppState {
   }
 
   private handleEvent(event: EngineEvent) {
+    this.lastProgress = Date.now();
+    this.stalled = false;
     switch (event.event) {
       case 'stage':
         this.stage = {message: event.message, fraction: event.fraction, dayIndex: event.dayIndex, dayCount: event.dayCount};
@@ -257,12 +307,14 @@ class AppState {
         if (!this.analyzedDates.includes(event.date)) this.analyzedDates = [...this.analyzedDates, event.date];
         this.scheduleRefresh();
         break;
+      case 'unavailable':
+        this.unavailableDates = {...this.unavailableDates, [event.date]: event.reason};
+        break;
       case 'read':
         this.reads = [...this.reads, event.record];
         break;
       case 'schedule':
         this.schedules = [...this.schedules.filter(s => s.key !== event.record.key), event.record];
-        for (const warning of event.record.warnings) this.addWarning(warning);
         break;
       case 'warning':
         this.addWarning(event.message);
@@ -291,22 +343,26 @@ class AppState {
   async refresh() {
     clearTimeout(this.refreshTimer);
     if (!this.feedKey) return;
+    const token = ++this.refreshToken;
     if (!this.loadedDates.length) {
       this.overview = null;
       this.routes = [];
       this.quality = null;
+      this.reportError = null;
       this.version += 1;
       return;
     }
     try {
       await engine.select(this.selection());
       const [overview, routes, quality] = await Promise.all([engine.overview(), engine.routes(), engine.quality()]);
+      if (token !== this.refreshToken) return;
       this.overview = overview;
       this.routes = routes;
       this.quality = quality;
+      this.reportError = null;
       this.version += 1;
     } catch (error) {
-      this.error = errorText(error);
+      if (token === this.refreshToken) this.reportError = errorText(error);
     }
   }
 

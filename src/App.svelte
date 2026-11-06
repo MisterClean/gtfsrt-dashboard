@@ -4,7 +4,7 @@
   import Tooltip from './components/Tooltip.svelte';
   import TopBar from './components/TopBar.svelte';
   import {app, feedLabel} from './lib/state.svelte';
-  import {plural} from './lib/format';
+  import {dateLabel, plural} from './lib/format';
   import Overview from './views/Overview.svelte';
   import MapView from './views/MapView.svelte';
   import Routes from './views/Routes.svelte';
@@ -16,12 +16,23 @@
 
   onMount(() => {
     app.start();
-    (window as any).__transit = app;
+    // Automated browser tests read results here. Regular visits don't get the hook.
+    if (navigator.webdriver) (window as any).__transit = app;
   });
 
   const label = $derived(app.feed ? feedLabel(app.feed) : '');
-  // One note per distinct message, however many days it applies to.
-  const notes = $derived([...new Set([...app.warnings, ...(app.overview?.days.flatMap(day => day.warnings) ?? [])])]);
+  // One note per distinct message, naming the days when it doesn't apply to all of them.
+  const notes = $derived.by(() => {
+    const byMessage = new Map<string, string[]>();
+    for (const day of app.overview?.days ?? []) {
+      for (const warning of day.warnings) byMessage.set(warning, [...(byMessage.get(warning) ?? []), day.date]);
+    }
+    const total = app.overview?.days.length ?? 0;
+    const fromDays = [...byMessage].map(([warning, dates]) =>
+      dates.length === total || /^\d{4}-\d{2}-\d{2}:/.test(warning) ? warning : `${dates.map(date => dateLabel(date, {month: 'short', day: 'numeric'})).join(', ')}: ${warning}`,
+    );
+    return [...new Set([...app.warnings, ...Object.values(app.unavailableDates).filter(() => app.dates.length > 0), ...fromDays])];
+  });
 </script>
 
 <svelte:head>
@@ -36,7 +47,10 @@
       <div class="page"><div class="banner error" role="alert"><strong>The archive catalog could not be loaded.</strong> {app.catalogError} <button class="btn small" onclick={() => { app.catalogError = null; app.start(); }}>Try again</button></div></div>
     {/if}
     {#if app.error}
-      <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error}</div></div>
+      <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error} Days already finished are still here.</div></div>
+    {/if}
+    {#if app.reportError}
+      <div class="notice"><div class="banner error" role="alert"><strong>This report could not be updated, so what's on screen may be out of date.</strong> {app.reportError}</div></div>
     {/if}
     {#each notes as warning}
       <div class="notice"><div class="banner caution" role="status">{warning}</div></div>

@@ -1,5 +1,6 @@
 // What the Rust reports return. Mirrors crates/core/src/report.rs.
 export type Mode = 'All' | 'Bus' | 'Rail' | 'Ferry' | 'Other' | 'Unknown';
+export type DayStatus = 'Complete' | 'Partial' | 'NoData';
 
 export interface OnTime { total: number; early: number; on_time: number; late: number }
 
@@ -37,6 +38,7 @@ export interface DayRow {
   trips_observed: number;
   empty_buckets: number;
   service_buckets: number;
+  status: DayStatus;
   warnings: string[];
 }
 
@@ -226,6 +228,12 @@ export interface StringLineTrip {
   scheduled: [number, number][];
 }
 
+export interface StringLineResult {
+  /** Stop events exist on this device for the day. Without them there is no chart. */
+  available: boolean;
+  line: StringLine | null;
+}
+
 export interface StringLine {
   date: string;
   route: string;
@@ -282,6 +290,7 @@ export interface Quality {
   fixes_unique: number;
   fixes_trip_unmatched: number;
   fixes_on_day: number;
+  fixes_no_service_date: number;
   off_route: number;
   backward: number;
   trips_scheduled: number;
@@ -293,6 +302,7 @@ export interface Quality {
   pairs_geometry: number;
   pairs_too_fast: number;
   pairs_standstill: number;
+  pairs_no_route: number;
   pairs_kept: number;
   seconds_layover: number;
   seconds_standstill: number;
@@ -305,7 +315,7 @@ export interface Quality {
   empty_buckets: number;
 }
 
-export interface QualityDay { date: string; digest: string; quality: Quality; warnings: string[] }
+export interface QualityDay { date: string; digest: string; status: DayStatus; quality: Quality; warnings: string[] }
 export interface QualityReport { days: QualityDay[]; metric_version: number }
 
 // ---- Catalog and engine messages -------------------------------------------
@@ -332,10 +342,11 @@ export interface Selection {
 }
 
 export interface AnalyzeRequest {
+  /** Tags this run's events, so nothing from an earlier run can be mistaken for it. */
+  run: number;
   feedKey: string;
   dates: number[];
   dateMax: string;
-  intervalSeconds?: number;
 }
 
 export interface ReadRecord {
@@ -354,13 +365,13 @@ export interface ScheduleRecord {
   retrieved: string[];
   published_before: boolean;
   timezone: string | null;
-  match_rate: number | null;
   warnings: string[];
 }
 
 export type EngineEvent =
   | { event: 'stage'; message: string; fraction: number; dayIndex: number; dayCount: number }
   | { event: 'day'; date: number; cached: boolean }
+  | { event: 'unavailable'; date: number; reason: string }
   | { event: 'read'; record: ReadRecord }
   | { event: 'schedule'; record: ScheduleRecord }
   | { event: 'warning'; message: string };
@@ -370,7 +381,7 @@ export interface CachedDays { dates: number[]; bytes: number }
 export interface AnalyzeResult {
   analyzed: number[];
   cached: number[];
-  skipped: { date: number; reason: string }[];
+  unavailable: { date: number; reason: string }[];
   stopped: boolean;
   engineVersion: string | null;
 }

@@ -67,6 +67,7 @@
       <span class="stage">
         <strong>{app.stage.message}</strong>
         {#if app.stage.dayCount > 1 && app.stage.dayIndex > 0}<span class="fine"> · day {Math.min(app.stage.dayIndex, app.stage.dayCount)} of {app.stage.dayCount}</span>{/if}
+        {#if app.stalled}<span class="stalled">No progress for a while. The connection may have stalled. Stop keeps every finished day.</span>{/if}
       </span>
       <button class="btn small" onclick={() => app.stop()}>Stop</button>
     {:else if app.pendingDates.length}
@@ -102,6 +103,7 @@
   .status { display: flex; align-items: center; gap: 12px; min-height: 36px; margin-left: auto; }
   .stage { font-size: 13px; }
   .stage strong { font-weight: 600; }
+  .stalled { display: block; font-size: 12px; color: var(--danger); }
   .local { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
   .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }

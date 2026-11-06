@@ -1,23 +1,25 @@
 // The main thread's handle on the worker: every call returns a promise.
 import type {
   AnalyzeRequest, AnalyzeResult, CachedDays, EngineEvent, Feed, HotspotReport, NetworkMap, Overview,
-  QualityReport, RouteDetail, RouteScore, Selection, StopsReport, StringLine,
+  QualityReport, RouteDetail, RouteScore, Selection, StopsReport, StringLineResult,
 } from './types';
 
+type RunEvent = EngineEvent & {run: number};
 type Pending = {resolve: (value: any) => void; reject: (reason: Error) => void};
 
 class EngineClient {
   private worker: Worker;
   private pending = new Map<number, Pending>();
   private nextId = 1;
-  private listeners = new Set<(event: EngineEvent) => void>();
+  private listeners = new Set<(event: RunEvent) => void>();
+  private failure: Error | null = null;
 
   constructor() {
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module', name: 'transit-engine'});
     this.worker.addEventListener('message', (event: MessageEvent) => {
       const data = event.data;
       if (data.event) {
-        for (const listener of this.listeners) listener(data as EngineEvent);
+        for (const listener of this.listeners) listener(data as RunEvent);
         return;
       }
       const pending = this.pending.get(data.id);
@@ -27,13 +29,15 @@ class EngineClient {
       else pending.resolve(data.result);
     });
     this.worker.addEventListener('error', event => {
-      const error = new Error(event.message || 'The analysis engine stopped unexpectedly. Reload the page to continue.');
-      for (const pending of this.pending.values()) pending.reject(error);
+      this.failure = new Error('The analysis engine stopped unexpectedly. Reload the page to continue.');
+      void event;
+      for (const pending of this.pending.values()) pending.reject(this.failure);
       this.pending.clear();
     });
   }
 
   private call<T>(method: string, ...args: unknown[]): Promise<T> {
+    if (this.failure) return Promise.reject(this.failure);
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, {resolve, reject});
@@ -41,7 +45,7 @@ class EngineClient {
     });
   }
 
-  onEvent(listener: (event: EngineEvent) => void) {
+  onEvent(listener: (event: RunEvent) => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -59,10 +63,9 @@ class EngineClient {
   networkMap = (route?: string) => this.call<NetworkMap>('networkMap', route);
   hotspots = () => this.call<HotspotReport>('hotspots');
   routeDetail = (route: string) => this.call<RouteDetail | null>('routeDetail', route);
-  stringLine = (route: string, dir: number, date: number) => this.call<StringLine | null>('stringLine', route, dir, date);
+  stringLine = (route: string, dir: number, date: number) => this.call<StringLineResult>('stringLine', route, dir, date);
   stops = () => this.call<StopsReport>('stops');
   quality = () => this.call<QualityReport>('quality');
-  sql = (text: string) => this.call<{columns: string[]; rows: unknown[][]}>('sql', text);
 }
 
 export const engine = new EngineClient();
