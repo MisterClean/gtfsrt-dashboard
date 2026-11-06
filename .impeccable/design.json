@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T19:55:15.258102Z",
+  "generatedAt": "2026-11-06T23:31:40Z",
   "title": "Design System: Transit Notebook",
   "extensions": {
     "colorMeta": {
@@ -46,32 +46,214 @@
           "oklch(95% 0.0062 57.7)"
         ]
       },
+      "on-copper": {
+        "role": "primary",
+        "displayName": "On Copper",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.9)",
+          "oklch(26% 0.0000 89.9)",
+          "oklch(37% 0.0000 89.9)",
+          "oklch(49% 0.0000 89.9)",
+          "oklch(61% 0.0000 89.9)",
+          "oklch(73% 0.0000 89.9)",
+          "oklch(84% 0.0000 89.9)",
+          "oklch(95% 0.0000 89.9)"
+        ]
+      },
+      "copper-dark": {
+        "role": "primary",
+        "displayName": "Copper, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0433 43.1)",
+          "oklch(26% 0.0681 43.1)",
+          "oklch(37% 0.0990 43.1)",
+          "oklch(49% 0.1238 43.1)",
+          "oklch(61% 0.1238 43.1)",
+          "oklch(73% 0.1052 43.1)",
+          "oklch(84% 0.0743 43.1)",
+          "oklch(95% 0.0309 43.1)"
+        ]
+      },
+      "copper-hover-dark": {
+        "role": "primary",
+        "displayName": "Deep Copper, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0365 43.7)",
+          "oklch(26% 0.0574 43.7)",
+          "oklch(37% 0.0834 43.7)",
+          "oklch(49% 0.1043 43.7)",
+          "oklch(61% 0.1043 43.7)",
+          "oklch(73% 0.0886 43.7)",
+          "oklch(84% 0.0626 43.7)",
+          "oklch(95% 0.0261 43.7)"
+        ]
+      },
+      "copper-pale-dark": {
+        "role": "primary",
+        "displayName": "Pale Copper, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0174 44.0)",
+          "oklch(26% 0.0274 44.0)",
+          "oklch(37% 0.0398 44.0)",
+          "oklch(49% 0.0498 44.0)",
+          "oklch(61% 0.0498 44.0)",
+          "oklch(73% 0.0423 44.0)",
+          "oklch(84% 0.0299 44.0)",
+          "oklch(95% 0.0125 44.0)"
+        ]
+      },
+      "on-copper-dark": {
+        "role": "primary",
+        "displayName": "On Copper, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0054 47.9)",
+          "oklch(26% 0.0086 47.9)",
+          "oklch(37% 0.0124 47.9)",
+          "oklch(49% 0.0156 47.9)",
+          "oklch(61% 0.0156 47.9)",
+          "oklch(73% 0.0132 47.9)",
+          "oklch(84% 0.0093 47.9)",
+          "oklch(95% 0.0039 47.9)"
+        ]
+      },
       "blue": {
         "role": "secondary",
-        "displayName": "Data Blue",
+        "displayName": "Midday Blue",
         "tonalRamp": [
-          "oklch(15% 0.0264 231.8)",
-          "oklch(26% 0.0416 231.8)",
-          "oklch(37% 0.0604 231.8)",
-          "oklch(49% 0.0755 231.8)",
-          "oklch(61% 0.0755 231.8)",
-          "oklch(73% 0.0642 231.8)",
-          "oklch(84% 0.0453 231.8)",
-          "oklch(95% 0.0189 231.8)"
+          "oklch(15% 0.0409 244.7)",
+          "oklch(26% 0.0643 244.7)",
+          "oklch(37% 0.0936 244.7)",
+          "oklch(49% 0.1169 244.7)",
+          "oklch(61% 0.1169 244.7)",
+          "oklch(73% 0.0994 244.7)",
+          "oklch(84% 0.0702 244.7)",
+          "oklch(95% 0.0292 244.7)"
+        ]
+      },
+      "orange": {
+        "role": "secondary",
+        "displayName": "Rush Orange",
+        "tonalRamp": [
+          "oklch(15% 0.0567 42.9)",
+          "oklch(26% 0.0891 42.9)",
+          "oklch(37% 0.1295 42.9)",
+          "oklch(49% 0.1619 42.9)",
+          "oklch(61% 0.1619 42.9)",
+          "oklch(73% 0.1376 42.9)",
+          "oklch(84% 0.0971 42.9)",
+          "oklch(95% 0.0405 42.9)"
+        ]
+      },
+      "purple": {
+        "role": "secondary",
+        "displayName": "Purple",
+        "tonalRamp": [
+          "oklch(15% 0.0517 307.4)",
+          "oklch(26% 0.0812 307.4)",
+          "oklch(37% 0.1181 307.4)",
+          "oklch(49% 0.1476 307.4)",
+          "oklch(61% 0.1476 307.4)",
+          "oklch(73% 0.1255 307.4)",
+          "oklch(84% 0.0886 307.4)",
+          "oklch(95% 0.0369 307.4)"
         ]
       },
       "green": {
         "role": "secondary",
-        "displayName": "Archive Green",
+        "displayName": "Green",
         "tonalRamp": [
-          "oklch(15% 0.0238 162.0)",
-          "oklch(26% 0.0374 162.0)",
-          "oklch(37% 0.0545 162.0)",
-          "oklch(49% 0.0681 162.0)",
-          "oklch(61% 0.0681 162.0)",
-          "oklch(73% 0.0579 162.0)",
-          "oklch(84% 0.0408 162.0)",
-          "oklch(95% 0.0170 162.0)"
+          "oklch(15% 0.0386 160.0)",
+          "oklch(26% 0.0607 160.0)",
+          "oklch(37% 0.0883 160.0)",
+          "oklch(49% 0.1104 160.0)",
+          "oklch(61% 0.1104 160.0)",
+          "oklch(73% 0.0938 160.0)",
+          "oklch(84% 0.0662 160.0)",
+          "oklch(95% 0.0276 160.0)"
+        ]
+      },
+      "gray-series": {
+        "role": "secondary",
+        "displayName": "Series Gray",
+        "tonalRamp": [
+          "oklch(15% 0.0051 111.4)",
+          "oklch(26% 0.0081 111.4)",
+          "oklch(37% 0.0117 111.4)",
+          "oklch(49% 0.0147 111.4)",
+          "oklch(61% 0.0147 111.4)",
+          "oklch(73% 0.0125 111.4)",
+          "oklch(84% 0.0088 111.4)",
+          "oklch(95% 0.0037 111.4)"
+        ]
+      },
+      "blue-dark": {
+        "role": "secondary",
+        "displayName": "Midday Blue, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0441 245.8)",
+          "oklch(26% 0.0694 245.8)",
+          "oklch(37% 0.1009 245.8)",
+          "oklch(49% 0.1261 245.8)",
+          "oklch(61% 0.1261 245.8)",
+          "oklch(73% 0.1072 245.8)",
+          "oklch(84% 0.0757 245.8)",
+          "oklch(95% 0.0315 245.8)"
+        ]
+      },
+      "orange-dark": {
+        "role": "secondary",
+        "displayName": "Rush Orange, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0559 48.0)",
+          "oklch(26% 0.0879 48.0)",
+          "oklch(37% 0.1279 48.0)",
+          "oklch(49% 0.1598 48.0)",
+          "oklch(61% 0.1598 48.0)",
+          "oklch(73% 0.1359 48.0)",
+          "oklch(84% 0.0959 48.0)",
+          "oklch(95% 0.0400 48.0)"
+        ]
+      },
+      "purple-dark": {
+        "role": "secondary",
+        "displayName": "Purple, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0519 305.9)",
+          "oklch(26% 0.0816 305.9)",
+          "oklch(37% 0.1187 305.9)",
+          "oklch(49% 0.1484 305.9)",
+          "oklch(61% 0.1484 305.9)",
+          "oklch(73% 0.1261 305.9)",
+          "oklch(84% 0.0890 305.9)",
+          "oklch(95% 0.0371 305.9)"
+        ]
+      },
+      "green-dark": {
+        "role": "secondary",
+        "displayName": "Green, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0436 161.8)",
+          "oklch(26% 0.0686 161.8)",
+          "oklch(37% 0.0998 161.8)",
+          "oklch(49% 0.1247 161.8)",
+          "oklch(61% 0.1247 161.8)",
+          "oklch(73% 0.1060 161.8)",
+          "oklch(84% 0.0748 161.8)",
+          "oklch(95% 0.0312 161.8)"
+        ]
+      },
+      "gray-series-dark": {
+        "role": "secondary",
+        "displayName": "Series Gray, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0041 100.9)",
+          "oklch(26% 0.0065 100.9)",
+          "oklch(37% 0.0094 100.9)",
+          "oklch(49% 0.0117 100.9)",
+          "oklch(61% 0.0117 100.9)",
+          "oklch(73% 0.0100 100.9)",
+          "oklch(84% 0.0070 100.9)",
+          "oklch(95% 0.0029 100.9)"
         ]
       },
       "focus": {
@@ -90,7 +272,7 @@
       },
       "danger": {
         "role": "secondary",
-        "displayName": "Danger Red",
+        "displayName": "Danger",
         "tonalRamp": [
           "oklch(15% 0.0517 27.5)",
           "oklch(26% 0.0812 27.5)",
@@ -102,9 +284,317 @@
           "oklch(95% 0.0369 27.5)"
         ]
       },
+      "danger-pale": {
+        "role": "secondary",
+        "displayName": "Pale Danger",
+        "tonalRamp": [
+          "oklch(15% 0.0076 31.8)",
+          "oklch(26% 0.0119 31.8)",
+          "oklch(37% 0.0173 31.8)",
+          "oklch(49% 0.0216 31.8)",
+          "oklch(61% 0.0216 31.8)",
+          "oklch(73% 0.0184 31.8)",
+          "oklch(84% 0.0130 31.8)",
+          "oklch(95% 0.0054 31.8)"
+        ]
+      },
+      "caution-pale": {
+        "role": "secondary",
+        "displayName": "Pale Caution",
+        "tonalRamp": [
+          "oklch(15% 0.0093 87.9)",
+          "oklch(26% 0.0146 87.9)",
+          "oklch(37% 0.0212 87.9)",
+          "oklch(49% 0.0265 87.9)",
+          "oklch(61% 0.0265 87.9)",
+          "oklch(73% 0.0226 87.9)",
+          "oklch(84% 0.0159 87.9)",
+          "oklch(95% 0.0066 87.9)"
+        ]
+      },
+      "caution-ink": {
+        "role": "secondary",
+        "displayName": "Caution Ink",
+        "tonalRamp": [
+          "oklch(15% 0.0299 82.1)",
+          "oklch(26% 0.0470 82.1)",
+          "oklch(37% 0.0684 82.1)",
+          "oklch(49% 0.0855 82.1)",
+          "oklch(61% 0.0855 82.1)",
+          "oklch(73% 0.0727 82.1)",
+          "oklch(84% 0.0513 82.1)",
+          "oklch(95% 0.0214 82.1)"
+        ]
+      },
+      "focus-dark": {
+        "role": "secondary",
+        "displayName": "Focus Blue, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0433 253.1)",
+          "oklch(26% 0.0681 253.1)",
+          "oklch(37% 0.0990 253.1)",
+          "oklch(49% 0.1238 253.1)",
+          "oklch(61% 0.1238 253.1)",
+          "oklch(73% 0.1052 253.1)",
+          "oklch(84% 0.0743 253.1)",
+          "oklch(95% 0.0309 253.1)"
+        ]
+      },
+      "danger-dark": {
+        "role": "secondary",
+        "displayName": "Danger, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0497 27.0)",
+          "oklch(26% 0.0780 27.0)",
+          "oklch(37% 0.1135 27.0)",
+          "oklch(49% 0.1419 27.0)",
+          "oklch(61% 0.1419 27.0)",
+          "oklch(73% 0.1206 27.0)",
+          "oklch(84% 0.0851 27.0)",
+          "oklch(95% 0.0355 27.0)"
+        ]
+      },
+      "danger-pale-dark": {
+        "role": "secondary",
+        "displayName": "Pale Danger, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0142 27.0)",
+          "oklch(26% 0.0223 27.0)",
+          "oklch(37% 0.0325 27.0)",
+          "oklch(49% 0.0406 27.0)",
+          "oklch(61% 0.0406 27.0)",
+          "oklch(73% 0.0345 27.0)",
+          "oklch(84% 0.0244 27.0)",
+          "oklch(95% 0.0102 27.0)"
+        ]
+      },
+      "caution-pale-dark": {
+        "role": "secondary",
+        "displayName": "Pale Caution, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0121 88.5)",
+          "oklch(26% 0.0190 88.5)",
+          "oklch(37% 0.0276 88.5)",
+          "oklch(49% 0.0345 88.5)",
+          "oklch(61% 0.0345 88.5)",
+          "oklch(73% 0.0294 88.5)",
+          "oklch(84% 0.0207 88.5)",
+          "oklch(95% 0.0086 88.5)"
+        ]
+      },
+      "caution-ink-dark": {
+        "role": "secondary",
+        "displayName": "Caution Ink, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0298 87.0)",
+          "oklch(26% 0.0469 87.0)",
+          "oklch(37% 0.0682 87.0)",
+          "oklch(49% 0.0852 87.0)",
+          "oklch(61% 0.0852 87.0)",
+          "oklch(73% 0.0724 87.0)",
+          "oklch(84% 0.0511 87.0)",
+          "oklch(95% 0.0213 87.0)"
+        ]
+      },
+      "c0": {
+        "role": "tertiary",
+        "displayName": "Speed class 0",
+        "tonalRamp": [
+          "oklch(15% 0.0541 28.5)",
+          "oklch(26% 0.0850 28.5)",
+          "oklch(37% 0.1237 28.5)",
+          "oklch(49% 0.1546 28.5)",
+          "oklch(61% 0.1546 28.5)",
+          "oklch(73% 0.1314 28.5)",
+          "oklch(84% 0.0927 28.5)",
+          "oklch(95% 0.0386 28.5)"
+        ]
+      },
+      "c1": {
+        "role": "tertiary",
+        "displayName": "Speed class 1",
+        "tonalRamp": [
+          "oklch(15% 0.0655 28.1)",
+          "oklch(26% 0.1029 28.1)",
+          "oklch(37% 0.1497 28.1)",
+          "oklch(49% 0.1872 28.1)",
+          "oklch(61% 0.1872 28.1)",
+          "oklch(73% 0.1591 28.1)",
+          "oklch(84% 0.1123 28.1)",
+          "oklch(95% 0.0468 28.1)"
+        ]
+      },
+      "c2": {
+        "role": "tertiary",
+        "displayName": "Speed class 2",
+        "tonalRamp": [
+          "oklch(15% 0.0381 37.8)",
+          "oklch(26% 0.0599 37.8)",
+          "oklch(37% 0.0871 37.8)",
+          "oklch(49% 0.1089 37.8)",
+          "oklch(61% 0.1089 37.8)",
+          "oklch(73% 0.0925 37.8)",
+          "oklch(84% 0.0653 37.8)",
+          "oklch(95% 0.0272 37.8)"
+        ]
+      },
+      "c3": {
+        "role": "tertiary",
+        "displayName": "Speed class 3",
+        "tonalRamp": [
+          "oklch(15% 0.0046 91.6)",
+          "oklch(26% 0.0073 91.6)",
+          "oklch(37% 0.0106 91.6)",
+          "oklch(49% 0.0132 91.6)",
+          "oklch(61% 0.0132 91.6)",
+          "oklch(73% 0.0113 91.6)",
+          "oklch(84% 0.0079 91.6)",
+          "oklch(95% 0.0033 91.6)"
+        ]
+      },
+      "c4": {
+        "role": "tertiary",
+        "displayName": "Speed class 4",
+        "tonalRamp": [
+          "oklch(15% 0.0317 254.5)",
+          "oklch(26% 0.0498 254.5)",
+          "oklch(37% 0.0724 254.5)",
+          "oklch(49% 0.0906 254.5)",
+          "oklch(61% 0.0906 254.5)",
+          "oklch(73% 0.0770 254.5)",
+          "oklch(84% 0.0543 254.5)",
+          "oklch(95% 0.0226 254.5)"
+        ]
+      },
+      "c5": {
+        "role": "tertiary",
+        "displayName": "Speed class 5",
+        "tonalRamp": [
+          "oklch(15% 0.0545 254.6)",
+          "oklch(26% 0.0856 254.6)",
+          "oklch(37% 0.1245 254.6)",
+          "oklch(49% 0.1556 254.6)",
+          "oklch(61% 0.1556 254.6)",
+          "oklch(73% 0.1322 254.6)",
+          "oklch(84% 0.0934 254.6)",
+          "oklch(95% 0.0389 254.6)"
+        ]
+      },
+      "c6": {
+        "role": "tertiary",
+        "displayName": "Speed class 6",
+        "tonalRamp": [
+          "oklch(15% 0.0465 256.8)",
+          "oklch(26% 0.0731 256.8)",
+          "oklch(37% 0.1063 256.8)",
+          "oklch(49% 0.1328 256.8)",
+          "oklch(61% 0.1328 256.8)",
+          "oklch(73% 0.1129 256.8)",
+          "oklch(84% 0.0797 256.8)",
+          "oklch(95% 0.0332 256.8)"
+        ]
+      },
+      "c0-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 0, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0511 31.4)",
+          "oklch(26% 0.0803 31.4)",
+          "oklch(37% 0.1169 31.4)",
+          "oklch(49% 0.1461 31.4)",
+          "oklch(61% 0.1461 31.4)",
+          "oklch(73% 0.1242 31.4)",
+          "oklch(84% 0.0876 31.4)",
+          "oklch(95% 0.0365 31.4)"
+        ]
+      },
+      "c1-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 1, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0603 29.6)",
+          "oklch(26% 0.0948 29.6)",
+          "oklch(37% 0.1378 29.6)",
+          "oklch(49% 0.1723 29.6)",
+          "oklch(61% 0.1723 29.6)",
+          "oklch(73% 0.1465 29.6)",
+          "oklch(84% 0.1034 29.6)",
+          "oklch(95% 0.0431 29.6)"
+        ]
+      },
+      "c2-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 2, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0401 36.6)",
+          "oklch(26% 0.0630 36.6)",
+          "oklch(37% 0.0917 36.6)",
+          "oklch(49% 0.1146 36.6)",
+          "oklch(61% 0.1146 36.6)",
+          "oklch(73% 0.0974 36.6)",
+          "oklch(84% 0.0688 36.6)",
+          "oklch(95% 0.0287 36.6)"
+        ]
+      },
+      "c3-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 3, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0033 91.6)",
+          "oklch(26% 0.0053 91.6)",
+          "oklch(37% 0.0077 91.6)",
+          "oklch(49% 0.0096 91.6)",
+          "oklch(61% 0.0096 91.6)",
+          "oklch(73% 0.0081 91.6)",
+          "oklch(84% 0.0057 91.6)",
+          "oklch(95% 0.0024 91.6)"
+        ]
+      },
+      "c4-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 4, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0373 253.5)",
+          "oklch(26% 0.0587 253.5)",
+          "oklch(37% 0.0853 253.5)",
+          "oklch(49% 0.1067 253.5)",
+          "oklch(61% 0.1067 253.5)",
+          "oklch(73% 0.0907 253.5)",
+          "oklch(84% 0.0640 253.5)",
+          "oklch(95% 0.0267 253.5)"
+        ]
+      },
+      "c5-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 5, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0506 254.4)",
+          "oklch(26% 0.0795 254.4)",
+          "oklch(37% 0.1157 254.4)",
+          "oklch(49% 0.1446 254.4)",
+          "oklch(61% 0.1446 254.4)",
+          "oklch(73% 0.1229 254.4)",
+          "oklch(84% 0.0868 254.4)",
+          "oklch(95% 0.0362 254.4)"
+        ]
+      },
+      "c6-dark": {
+        "role": "tertiary",
+        "displayName": "Speed class 6, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0314 249.5)",
+          "oklch(26% 0.0493 249.5)",
+          "oklch(37% 0.0718 249.5)",
+          "oklch(49% 0.0897 249.5)",
+          "oklch(61% 0.0897 249.5)",
+          "oklch(73% 0.0762 249.5)",
+          "oklch(84% 0.0538 249.5)",
+          "oklch(95% 0.0224 249.5)"
+        ]
+      },
       "paper": {
         "role": "neutral",
-        "displayName": "Warm Paper",
+        "displayName": "Paper",
         "tonalRamp": [
           "oklch(15% 0.0014 91.4)",
           "oklch(26% 0.0023 91.4)",
@@ -118,7 +608,7 @@
       },
       "surface": {
         "role": "neutral",
-        "displayName": "Soft Surface",
+        "displayName": "Surface",
         "tonalRamp": [
           "oklch(15% 0.0029 91.5)",
           "oklch(26% 0.0045 91.5)",
@@ -130,9 +620,23 @@
           "oklch(95% 0.0021 91.5)"
         ]
       },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Surface 2",
+        "tonalRamp": [
+          "oklch(15% 0.0038 95.2)",
+          "oklch(26% 0.0060 95.2)",
+          "oklch(37% 0.0087 95.2)",
+          "oklch(49% 0.0109 95.2)",
+          "oklch(61% 0.0109 95.2)",
+          "oklch(73% 0.0093 95.2)",
+          "oklch(84% 0.0066 95.2)",
+          "oklch(95% 0.0027 95.2)"
+        ]
+      },
       "ink": {
         "role": "neutral",
-        "displayName": "Charcoal Ink",
+        "displayName": "Ink",
         "tonalRamp": [
           "oklch(15% 0.0039 167.8)",
           "oklch(26% 0.0062 167.8)",
@@ -146,21 +650,35 @@
       },
       "muted": {
         "role": "neutral",
-        "displayName": "Muted Ink",
+        "displayName": "Muted",
         "tonalRamp": [
           "oklch(15% 0.0050 117.1)",
-          "oklch(26% 0.0078 117.1)",
-          "oklch(37% 0.0113 117.1)",
-          "oklch(49% 0.0142 117.1)",
-          "oklch(61% 0.0142 117.1)",
-          "oklch(73% 0.0121 117.1)",
-          "oklch(84% 0.0085 117.1)",
-          "oklch(95% 0.0035 117.1)"
+          "oklch(26% 0.0079 117.1)",
+          "oklch(37% 0.0114 117.1)",
+          "oklch(49% 0.0143 117.1)",
+          "oklch(61% 0.0143 117.1)",
+          "oklch(73% 0.0122 117.1)",
+          "oklch(84% 0.0086 117.1)",
+          "oklch(95% 0.0036 117.1)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "tonalRamp": [
+          "oklch(15% 0.0052 111.5)",
+          "oklch(26% 0.0082 111.5)",
+          "oklch(37% 0.0120 111.5)",
+          "oklch(49% 0.0150 111.5)",
+          "oklch(61% 0.0150 111.5)",
+          "oklch(73% 0.0127 111.5)",
+          "oklch(84% 0.0090 111.5)",
+          "oklch(95% 0.0037 111.5)"
         ]
       },
       "rule": {
         "role": "neutral",
-        "displayName": "Fine Rule",
+        "displayName": "Rule",
         "tonalRamp": [
           "oklch(15% 0.0043 116.8)",
           "oklch(26% 0.0068 116.8)",
@@ -172,23 +690,9 @@
           "oklch(95% 0.0031 116.8)"
         ]
       },
-      "white": {
+      "rule-strong": {
         "role": "neutral",
-        "displayName": "White",
-        "tonalRamp": [
-          "oklch(15% 0.0000 0.0)",
-          "oklch(26% 0.0000 0.0)",
-          "oklch(37% 0.0000 0.0)",
-          "oklch(49% 0.0000 0.0)",
-          "oklch(61% 0.0000 0.0)",
-          "oklch(73% 0.0000 0.0)",
-          "oklch(84% 0.0000 0.0)",
-          "oklch(95% 0.0000 0.0)"
-        ]
-      },
-      "control-border": {
-        "role": "neutral",
-        "displayName": "Control Border",
+        "displayName": "Strong Rule",
         "tonalRamp": [
           "oklch(15% 0.0061 125.3)",
           "oklch(26% 0.0096 125.3)",
@@ -200,353 +704,357 @@
           "oklch(95% 0.0044 125.3)"
         ]
       },
-      "control-border-hover": {
+      "paper-dark": {
         "role": "neutral",
-        "displayName": "Control Border Hover",
+        "displayName": "Paper, dark",
         "tonalRamp": [
-          "oklch(15% 0.0077 128.8)",
-          "oklch(26% 0.0121 128.8)",
-          "oklch(37% 0.0176 128.8)",
-          "oklch(49% 0.0220 128.8)",
-          "oklch(61% 0.0220 128.8)",
-          "oklch(73% 0.0187 128.8)",
-          "oklch(84% 0.0132 128.8)",
-          "oklch(95% 0.0055 128.8)"
+          "oklch(15% 0.0014 106.7)",
+          "oklch(26% 0.0021 106.7)",
+          "oklch(37% 0.0031 106.7)",
+          "oklch(49% 0.0039 106.7)",
+          "oklch(61% 0.0039 106.7)",
+          "oklch(73% 0.0033 106.7)",
+          "oklch(84% 0.0023 106.7)",
+          "oklch(95% 0.0010 106.7)"
         ]
       },
-      "route-green": {
-        "role": "secondary",
-        "displayName": "Route Green",
-        "tonalRamp": [
-          "oklch(15% 0.0232 152.0)",
-          "oklch(26% 0.0365 152.0)",
-          "oklch(37% 0.0531 152.0)",
-          "oklch(49% 0.0664 152.0)",
-          "oklch(61% 0.0664 152.0)",
-          "oklch(73% 0.0564 152.0)",
-          "oklch(84% 0.0398 152.0)",
-          "oklch(95% 0.0166 152.0)"
-        ]
-      },
-      "route-plum": {
-        "role": "secondary",
-        "displayName": "Route Plum",
-        "tonalRamp": [
-          "oklch(15% 0.0202 349.1)",
-          "oklch(26% 0.0318 349.1)",
-          "oklch(37% 0.0462 349.1)",
-          "oklch(49% 0.0577 349.1)",
-          "oklch(61% 0.0577 349.1)",
-          "oklch(73% 0.0491 349.1)",
-          "oklch(84% 0.0346 349.1)",
-          "oklch(95% 0.0144 349.1)"
-        ]
-      },
-      "route-ochre": {
-        "role": "secondary",
-        "displayName": "Route Ochre",
-        "tonalRamp": [
-          "oklch(15% 0.0346 82.3)",
-          "oklch(26% 0.0543 82.3)",
-          "oklch(37% 0.0790 82.3)",
-          "oklch(49% 0.0987 82.3)",
-          "oklch(61% 0.0987 82.3)",
-          "oklch(73% 0.0839 82.3)",
-          "oklch(84% 0.0592 82.3)",
-          "oklch(95% 0.0247 82.3)"
-        ]
-      },
-      "route-violet": {
-        "role": "secondary",
-        "displayName": "Route Violet",
-        "tonalRamp": [
-          "oklch(15% 0.0263 286.5)",
-          "oklch(26% 0.0413 286.5)",
-          "oklch(37% 0.0601 286.5)",
-          "oklch(49% 0.0751 286.5)",
-          "oklch(61% 0.0751 286.5)",
-          "oklch(73% 0.0639 286.5)",
-          "oklch(84% 0.0451 286.5)",
-          "oklch(95% 0.0188 286.5)"
-        ]
-      },
-      "route-grey-green": {
-        "role": "secondary",
-        "displayName": "Route Grey Green",
-        "tonalRamp": [
-          "oklch(15% 0.0104 145.1)",
-          "oklch(26% 0.0164 145.1)",
-          "oklch(37% 0.0238 145.1)",
-          "oklch(49% 0.0297 145.1)",
-          "oklch(61% 0.0297 145.1)",
-          "oklch(73% 0.0253 145.1)",
-          "oklch(84% 0.0178 145.1)",
-          "oklch(95% 0.0074 145.1)"
-        ]
-      },
-      "heat-empty": {
+      "surface-dark": {
         "role": "neutral",
-        "displayName": "Heat Empty",
+        "displayName": "Surface, dark",
         "tonalRamp": [
-          "oklch(15% 0.0038 118.0)",
-          "oklch(26% 0.0060 118.0)",
-          "oklch(37% 0.0087 118.0)",
-          "oklch(49% 0.0109 118.0)",
-          "oklch(61% 0.0109 118.0)",
-          "oklch(73% 0.0092 118.0)",
-          "oklch(84% 0.0065 118.0)",
-          "oklch(95% 0.0027 118.0)"
+          "oklch(15% 0.0020 106.8)",
+          "oklch(26% 0.0031 106.8)",
+          "oklch(37% 0.0045 106.8)",
+          "oklch(49% 0.0056 106.8)",
+          "oklch(61% 0.0056 106.8)",
+          "oklch(73% 0.0047 106.8)",
+          "oklch(84% 0.0033 106.8)",
+          "oklch(95% 0.0014 106.8)"
         ]
       },
-      "heat-low": {
-        "role": "secondary",
-        "displayName": "Heat Low",
+      "surface-2-dark": {
+        "role": "neutral",
+        "displayName": "Surface 2, dark",
         "tonalRamp": [
-          "oklch(15% 0.0121 58.8)",
-          "oklch(26% 0.0190 58.8)",
-          "oklch(37% 0.0276 58.8)",
-          "oklch(49% 0.0345 58.8)",
-          "oklch(61% 0.0345 58.8)",
-          "oklch(73% 0.0293 58.8)",
-          "oklch(84% 0.0207 58.8)",
-          "oklch(95% 0.0086 58.8)"
+          "oklch(15% 0.0025 106.8)",
+          "oklch(26% 0.0039 106.8)",
+          "oklch(37% 0.0057 106.8)",
+          "oklch(49% 0.0071 106.8)",
+          "oklch(61% 0.0071 106.8)",
+          "oklch(73% 0.0061 106.8)",
+          "oklch(84% 0.0043 106.8)",
+          "oklch(95% 0.0018 106.8)"
         ]
       },
-      "heat-mid": {
-        "role": "secondary",
-        "displayName": "Heat Mid",
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink, dark",
         "tonalRamp": [
-          "oklch(15% 0.0298 51.7)",
-          "oklch(26% 0.0468 51.7)",
-          "oklch(37% 0.0681 51.7)",
-          "oklch(49% 0.0851 51.7)",
-          "oklch(61% 0.0851 51.7)",
-          "oklch(73% 0.0724 51.7)",
-          "oklch(84% 0.0511 51.7)",
-          "oklch(95% 0.0213 51.7)"
+          "oklch(15% 0.0014 91.4)",
+          "oklch(26% 0.0023 91.4)",
+          "oklch(37% 0.0033 91.4)",
+          "oklch(49% 0.0041 91.4)",
+          "oklch(61% 0.0041 91.4)",
+          "oklch(73% 0.0035 91.4)",
+          "oklch(84% 0.0025 91.4)",
+          "oklch(95% 0.0010 91.4)"
         ]
       },
-      "heat-high": {
-        "role": "secondary",
-        "displayName": "Heat High",
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted, dark",
         "tonalRamp": [
-          "oklch(15% 0.0397 45.7)",
-          "oklch(26% 0.0624 45.7)",
-          "oklch(37% 0.0907 45.7)",
-          "oklch(49% 0.1134 45.7)",
-          "oklch(61% 0.1134 45.7)",
-          "oklch(73% 0.0964 45.7)",
-          "oklch(84% 0.0681 45.7)",
-          "oklch(95% 0.0284 45.7)"
+          "oklch(15% 0.0053 102.5)",
+          "oklch(26% 0.0084 102.5)",
+          "oklch(37% 0.0122 102.5)",
+          "oklch(49% 0.0153 102.5)",
+          "oklch(61% 0.0153 102.5)",
+          "oklch(73% 0.0130 102.5)",
+          "oklch(84% 0.0092 102.5)",
+          "oklch(95% 0.0038 102.5)"
         ]
       },
-      "heat-peak": {
-        "role": "secondary",
-        "displayName": "Heat Peak",
+      "faint-dark": {
+        "role": "neutral",
+        "displayName": "Faint, dark",
         "tonalRamp": [
-          "oklch(15% 0.0413 42.0)",
-          "oklch(26% 0.0649 42.0)",
-          "oklch(37% 0.0944 42.0)",
-          "oklch(49% 0.1180 42.0)",
-          "oklch(61% 0.1180 42.0)",
-          "oklch(73% 0.1003 42.0)",
-          "oklch(84% 0.0708 42.0)",
-          "oklch(95% 0.0295 42.0)"
+          "oklch(15% 0.0041 95.2)",
+          "oklch(26% 0.0065 95.2)",
+          "oklch(37% 0.0095 95.2)",
+          "oklch(49% 0.0119 95.2)",
+          "oklch(61% 0.0119 95.2)",
+          "oklch(73% 0.0101 95.2)",
+          "oklch(84% 0.0071 95.2)",
+          "oklch(95% 0.0030 95.2)"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Rule, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0024 106.8)",
+          "oklch(26% 0.0038 106.8)",
+          "oklch(37% 0.0056 106.8)",
+          "oklch(49% 0.0069 106.8)",
+          "oklch(61% 0.0069 106.8)",
+          "oklch(73% 0.0059 106.8)",
+          "oklch(84% 0.0042 106.8)",
+          "oklch(95% 0.0017 106.8)"
+        ]
+      },
+      "rule-strong-dark": {
+        "role": "neutral",
+        "displayName": "Strong Rule, dark",
+        "tonalRamp": [
+          "oklch(15% 0.0029 97.5)",
+          "oklch(26% 0.0045 97.5)",
+          "oklch(37% 0.0066 97.5)",
+          "oklch(49% 0.0083 97.5)",
+          "oklch(61% 0.0083 97.5)",
+          "oklch(73% 0.0070 97.5)",
+          "oklch(84% 0.0050 97.5)",
+          "oklch(95% 0.0021 97.5)"
         ]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Uppercase page heading; the self-hosted 800 face."
+        "purpose": "Uppercase page headings. 28px at 860px and below."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Condensed report and empty-state headings."
+        "purpose": "Uppercase section headings."
       },
       "title": {
-        "displayName": "Section Title",
-        "purpose": "System-text section headings."
+        "displayName": "Title",
+        "purpose": "h3 subheadings in the system face."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Base reading texture for working content."
+        "purpose": "The page base and computed findings."
+      },
+      "note": {
+        "displayName": "Note",
+        "purpose": "Methods caveats and explanatory notes, capped at 86ch."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Visible native-control labels."
+        "purpose": "Figure names and field labels, muted, in sentence case."
       },
-      "control": {
-        "displayName": "Control",
-        "purpose": "Primary, cancel, and secondary action labels."
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Values in the ruled figure strip. 22px at 860px and below."
       },
-      "metric": {
-        "displayName": "Metric",
-        "purpose": "Tabular summary values."
+      "table": {
+        "displayName": "Table",
+        "purpose": "Table cells, with tabular figures."
       },
       "axis": {
         "displayName": "Axis",
-        "purpose": "Chart labels retain 11px type inside scrollable plots."
+        "purpose": "All chart text. It keeps its size at every width."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "Inspectable, independently scrollable SQL."
+        "purpose": "SQL and code on the methods page."
       }
     },
-    "shadows": [],
-    "motion": [
+    "shadows": [
       {
-        "name": "button-state",
-        "value": "background-color .15s ease-out, color .15s ease-out",
-        "purpose": "Button state feedback; disabled by reduced-motion preferences."
+        "name": "pop",
+        "value": "0 2px 4px rgb(36 43 40 / 8%), 0 12px 32px rgb(36 43 40 / 14%)",
+        "purpose": "Tooltip and date picker panel, light theme."
       },
       {
-        "name": "working-pulse",
-        "value": "working 1.2s ease-in-out infinite",
-        "purpose": "The loading dot reaches opacity .3 at the midpoint; disabled by reduced-motion preferences."
+        "name": "pop-dark",
+        "value": "0 2px 4px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 45%)",
+        "purpose": "Tooltip and date picker panel, dark theme."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-quick",
+        "value": "120ms ease-out",
+        "purpose": "Hover and selection on segments, rail items, list rows, and Term."
+      },
+      {
+        "name": "state",
+        "value": "150ms ease-out",
+        "purpose": "Button state feedback."
+      },
+      {
+        "name": "progress",
+        "value": "width 300ms ease-out",
+        "purpose": "The analysis progress line under the top bar."
+      },
+      {
+        "name": "hour-step",
+        "value": "650ms per hour",
+        "purpose": "The time control's Play interval."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition: none; animation: none",
+        "purpose": "CSS transitions and animations are removed under prefers-reduced-motion."
       }
     ],
     "breakpoints": [
       {
-        "name": "chart-scroll-hint-max",
-        "value": "1183px"
+        "name": "report-columns",
+        "value": "1100px"
       },
       {
-        "name": "selection-reflow-max",
-        "value": "1050px"
+        "name": "map-and-pairs",
+        "value": "1000px"
       },
       {
-        "name": "compact-max",
-        "value": "760px"
+        "name": "shell",
+        "value": "860px"
       },
       {
-        "name": "narrow-max",
-        "value": "540px"
+        "name": "data-facts",
+        "value": "620px"
+      },
+      {
+        "name": "date-picker",
+        "value": "560px"
+      },
+      {
+        "name": "map-attribution",
+        "value": "480px"
       }
     ]
   },
   "components": [
     {
-      "name": "Primary Action",
+      "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Copper action for loading the selected archive.",
-      "html": "<button class=\"ds-primary\">Load archive<svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M4 10h12m-5-5 5 5-5 5\"/></svg></button>",
-      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;background:var(--copper,#ac4d2b);color:#fff}.ds-primary:hover:not(:disabled){background:var(--copper-hover,#8b391b)}.ds-primary:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-primary:active:not(:disabled){filter:brightness(.93)}.ds-primary:disabled{opacity:.55;cursor:default}.ds-primary svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}}"
+      "description": "Copper action, used to start an analysis.",
+      "html": "<button class=\"ds-btn-primary\">Analyze 3 days</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:6px 14px;border-radius:4px;background:var(--copper);border:1px solid var(--copper);color:#fff;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease-out,border-color 150ms ease-out}:root[data-theme=dark] .ds-btn-primary{color:#1a120e}.ds-btn-primary:hover:not(:disabled){background:var(--copper-hover);border-color:var(--copper-hover)}.ds-btn-primary:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}.ds-btn-primary:active:not(:disabled){filter:brightness(.95)}.ds-btn-primary:disabled{opacity:.55;cursor:not-allowed}"
     },
     {
-      "name": "Cancel Action",
+      "name": "Default Button",
       "kind": "button",
-      "refersTo": "button-cancel",
-      "description": "Visible while an archive load can be canceled.",
-      "html": "<button class=\"ds-cancel\">Cancel load</button>",
-      "css": ".ds-cancel{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;background:var(--danger,#a3342d);color:#fff}.ds-cancel:hover{background:#832620}.ds-cancel:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-cancel:active:not(:disabled){filter:brightness(.93)}.ds-cancel:disabled{opacity:.55;cursor:default}@media(prefers-reduced-motion:reduce){.ds-cancel{transition:none}}"
+      "refersTo": "button",
+      "description": "Secondary actions such as Stop and Download.",
+      "html": "<button class=\"ds-btn\">Download GeoJSON</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:6px 14px;border-radius:4px;background:var(--paper);border:1px solid var(--rule-strong);color:var(--ink);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease-out,border-color 150ms ease-out}.ds-btn:hover:not(:disabled){background:var(--surface);border-color:var(--faint)}.ds-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}.ds-btn:active:not(:disabled){filter:brightness(.95)}.ds-btn:disabled{opacity:.55;cursor:not-allowed}"
     },
     {
-      "name": "Secondary Action",
-      "kind": "button",
-      "refersTo": "button-secondary",
-      "description": "Paper-filled recovery action with a thin border.",
-      "html": "<button class=\"ds-secondary\">Retry catalog</button>",
-      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;border:1px solid #acb3a5;background:var(--paper,#fbfaf7);color:var(--ink,#242b28)}.ds-secondary:hover:not(:disabled){background:var(--surface,#f2f0ea)}.ds-secondary:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-secondary:active:not(:disabled){filter:brightness(.93)}.ds-secondary:disabled{opacity:.55;cursor:default}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}}"
-    },
-    {
-      "name": "Text Action",
-      "kind": "button",
-      "refersTo": "button-text",
-      "description": "Quiet copper action for moving to methods or exporting evidence.",
-      "html": "<button class=\"ds-text-button\">Inspect data &amp; method<svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M4 10h12m-5-5 5 5-5 5\"/></svg></button>",
-      "css": ".ds-text-button{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:7px 0;color:var(--copper,#ac4d2b);font:600 12px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px;transition:background-color .15s ease-out,color .15s ease-out}.ds-text-button:hover:not(:disabled){color:var(--copper-hover,#8b391b);text-decoration-color:currentColor}.ds-text-button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-text-button:active:not(:disabled){filter:brightness(.93)}.ds-text-button:disabled{opacity:.55;cursor:default}.ds-text-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;width:16px;height:16px}@media(prefers-reduced-motion:reduce){.ds-text-button{transition:none}}"
-    },
-    {
-      "name": "Native Date Field",
+      "name": "Field",
       "kind": "input",
       "refersTo": "field",
-      "description": "A visible label and a native UTC date control.",
-      "html": "<label class=\"ds-field\">From · UTC<input aria-label=\"From date UTC\" type=\"date\" value=\"2026-11-05\"></label>",
-      "css": ".ds-field{display:flex;flex-direction:column;gap:7px;color:var(--muted,#62645b);font:650 12px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);min-width:0}.ds-field input{width:100%;height:44px;min-width:0;border:1px solid #bfc4b8;border-radius:4px;background:var(--paper,#fbfaf7);padding:8px 12px;color:var(--ink,#242b28);font:450 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);caret-color:var(--copper,#ac4d2b)}.ds-field input:hover:not(:disabled){border-color:#888f81}.ds-field input:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-field input:disabled{opacity:.55;cursor:default}@media(max-width:540px){.ds-field input{padding:7px;font-size:12px;height:42px}}"
+      "description": "Native select or input with a paper fill.",
+      "html": "<select class=\"ds-input\" aria-label=\"Route\"><option>All routes</option></select>",
+      "css": ".ds-input{height:36px;padding:0 10px;border-radius:4px;background:var(--paper);border:1px solid var(--rule-strong);font-size:13px;font-weight:450;color:var(--ink)}.ds-input:hover{border-color:var(--faint)}.ds-input:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}"
     },
     {
-      "name": "View Navigation",
-      "kind": "nav",
-      "refersTo": "navigation",
-      "description": "Four working views share one rule and a copper selected indicator.",
-      "html": "<nav class=\"ds-nav\" aria-label=\"Dashboard views\"><button aria-pressed=\"true\">Overview</button><button aria-pressed=\"false\">Routes</button><button aria-pressed=\"false\">Positions</button><button aria-pressed=\"false\">Sources &amp; SQL</button></nav>",
-      "css": ".ds-nav{display:flex;align-items:center;gap:26px;min-height:46px;border-bottom:1px solid var(--rule,#dcded5)}.ds-nav button{align-self:stretch;border:0;border-bottom:2px solid transparent;background:none;padding:12px 0;color:var(--muted,#62645b);font:400 13px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-nav button[aria-pressed=\"true\"]{border-bottom-color:var(--copper,#ac4d2b);color:var(--copper,#ac4d2b);font-weight:650}.ds-nav button:hover{color:var(--ink,#242b28)}.ds-nav button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-nav button:active:not(:disabled){filter:brightness(.93)}@media(max-width:760px){.ds-nav{gap:25px}}@media(max-width:540px){.ds-nav{justify-content:space-between;gap:12px;min-height:50px}.ds-nav button{font-size:12px}}@media(prefers-reduced-motion:reduce){.ds-nav button{transition:none}}"
-    },
-    {
-      "name": "Chart Measure Segments",
-      "kind": "custom",
+      "name": "Segmented Control",
+      "kind": "chip",
       "refersTo": "segment",
-      "description": "Compact measure switch with an ink-filled selected segment.",
-      "html": "<div class=\"ds-segmented\" aria-label=\"Chart measure\"><button aria-pressed=\"true\">Vehicles</button><button aria-pressed=\"false\">Observations</button></div>",
-      "css": ".ds-segmented{display:inline-flex;gap:2px;border:1px solid #bfc4b8;border-radius:5px;padding:3px}.ds-segmented button{border:0;border-radius:3px;background:none;padding:6px 12px;color:var(--muted,#62645b);font:400 11px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-segmented button[aria-pressed=\"true\"]{background:var(--ink,#242b28);color:var(--paper,#fbfaf7)}.ds-segmented button:hover:not([aria-pressed=\"true\"]){background:var(--surface,#f2f0ea)}.ds-segmented button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-segmented button:active:not(:disabled){filter:brightness(.93)}@media(prefers-reduced-motion:reduce){.ds-segmented button{transition:none}}"
+      "description": "One choice from a small set, carried by aria-pressed.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"Measure\"><button aria-pressed=\"true\">Speed</button><button aria-pressed=\"false\">Against midday</button></div>",
+      "css": ".ds-seg{display:inline-flex;flex-wrap:wrap;max-width:100%;padding:2px;gap:2px;border:1px solid var(--rule-strong);border-radius:5px;background:var(--paper)}.ds-seg button{min-height:28px;padding:2px 10px;border:0;border-radius:3px;background:none;color:var(--muted);font-size:12.5px;font-weight:550;white-space:nowrap;cursor:pointer;transition:background-color 120ms ease-out,color 120ms ease-out}.ds-seg button:hover:not([aria-pressed=\"true\"]){background:var(--surface);color:var(--ink)}.ds-seg button[aria-pressed=\"true\"]{background:var(--ink);color:var(--paper)}.ds-seg button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}"
     },
     {
-      "name": "Selection Panel",
-      "kind": "card",
-      "refersTo": "selection-panel",
-      "description": "A soft, flat grouping for archive controls and catalog metadata.",
-      "html": "<section class=\"ds-selection\" aria-label=\"Archive selection\"><label class=\"ds-selection-label\">Agency / feed<select aria-label=\"Agency / feed\"><option>Metro Transit - City of Madison</option></select></label><div class=\"ds-selection-meta\"><span>Catalog range: 2026-01-10 — 2026-11-05</span><span>1–6 UTC days · up to 128 MiB</span></div></section>",
-      "css": ".ds-selection{padding:18px 20px 12px;border-radius:8px;background:var(--surface,#f2f0ea);color:var(--ink,#242b28);font-family:var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-selection-label{display:flex;flex-direction:column;gap:7px;min-width:0;color:var(--muted,#62645b);font-size:12px;font-weight:650}.ds-selection select{height:44px;width:100%;min-width:0;border:1px solid #bfc4b8;border-radius:4px;background:var(--paper,#fbfaf7);padding:8px 28px 8px 12px;color:var(--ink,#242b28);font:450 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-selection select:hover:not(:disabled){border-color:#888f81}.ds-selection select:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-selection select:disabled{opacity:.55;cursor:default}.ds-selection-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:13px;color:var(--muted,#62645b);font-size:11px;line-height:1.5}@media(max-width:760px){.ds-selection{padding:18px}}@media(max-width:540px){.ds-selection{padding:16px}.ds-selection select{font-size:12px}.ds-selection-meta{font-size:10px;gap:5px;margin-top:12px}}"
+      "name": "Report Rail",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Report navigation. Active is a surface fill with a copper icon.",
+      "html": "<nav class=\"ds-rail\" aria-label=\"Reports\"><button class=\"active\" aria-current=\"page\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M3 16.5V10m4.7 6.5V4m4.6 12.5V8m4.7 8.5v-5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Overview</button><button><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M10 18a8 8 0 100-16 8 8 0 000 16zM10 5.5V10l3 2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Reliability</button></nav>",
+      "css": ".ds-rail{display:grid;gap:1px;width:180px}.ds-rail button{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 8px;border:0;border-radius:4px;background:none;color:var(--muted);font-size:13.5px;font-weight:500;text-align:left;cursor:pointer;transition:background-color 120ms ease-out,color 120ms ease-out}.ds-rail button:hover{background:var(--surface);color:var(--ink)}.ds-rail button.active{background:var(--surface);color:var(--ink);font-weight:650}.ds-rail button.active svg{color:var(--copper)}.ds-rail button:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}"
     },
     {
-      "name": "Metric Strip",
+      "name": "Ruled Figure Strip",
       "kind": "custom",
-      "refersTo": "metric-strip",
-      "description": "Tabular values sit between fine rules with compact explanatory labels.",
-      "html": "<dl class=\"ds-metrics\"><div><dt>Archived observations</dt><dd>296,588</dd><small>Includes repeated polls</small></div><div><dt>Reported vehicles</dt><dd>151</dd><small>Distinct nonempty vehicle IDs</small></div><div><dt>Routes observed</dt><dd>29</dd><small>Distinct nonempty route IDs</small></div><div><dt>Hours with records</dt><dd>23<span class=\"ds-denominator\"> / 24</span></dd><small>UTC hours, archive coverage</small></div></dl>",
-      "css": ".ds-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:16px 0;border-top:1px solid var(--rule,#dcded5);border-bottom:1px solid var(--rule,#dcded5);color:var(--ink,#242b28);font-family:var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-metrics>div{min-width:0;padding:0 24px;border-right:1px solid var(--rule,#dcded5)}.ds-metrics>div:first-child{padding-left:0}.ds-metrics>div:last-child{padding-right:0;border-right:0}.ds-metrics dt{color:var(--muted,#62645b);font-size:11px;font-weight:650;letter-spacing:.03em;text-transform:uppercase}.ds-metrics dd{margin:6px 0 0;font-size:34px;font-weight:650;letter-spacing:-.03em;line-height:1.2;font-variant-numeric:tabular-nums}.ds-metrics small{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:var(--muted,#62645b)}.ds-denominator{font-size:20px;font-weight:450;color:var(--muted,#62645b);letter-spacing:0}@media(max-width:1050px){.ds-metrics>div{padding:0 18px}}@media(max-width:760px){.ds-metrics{grid-template-columns:repeat(2,minmax(0,1fr));padding:0}.ds-metrics>div{padding:18px}.ds-metrics>div:nth-child(odd){padding-left:0}.ds-metrics>div:nth-child(even){border-right:0}.ds-metrics>div:nth-child(-n+2){border-bottom:1px solid var(--rule,#dcded5)}.ds-metrics dd{font-size:36px}}@media(max-width:540px){.ds-metrics dt{font-size:10px;letter-spacing:.01em}.ds-metrics dd{font-size:32px}.ds-denominator{font-size:18px}}"
+      "refersTo": "figure",
+      "description": "Key figures between two rules, each name linking to its method.",
+      "html": "<dl class=\"ds-stats\"><div><dt><button class=\"ds-term\" title=\"How this is calculated\">Operating speed</button></dt><dd>15.3 <small>mph</small></dd><span>15.1 scheduled, stops included</span></div><div><dt><button class=\"ds-term\" title=\"How this is calculated\">On-time departures</button></dt><dd>73%</dd><span>15% late, at timepoints</span></div></dl>",
+      "css": ".ds-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:0;border-block:1px solid var(--rule)}.ds-stats>div{padding:12px 16px 13px 0;display:grid;gap:1px;align-content:start;min-width:0}.ds-stats>div+div{padding-left:16px;border-left:1px solid var(--rule)}.ds-stats dt{font-size:12px;font-weight:600;color:var(--muted)}.ds-stats dd{margin:0;font-size:27px;font-weight:650;line-height:1.2;letter-spacing:-.02em;color:var(--ink)}.ds-stats small{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0}.ds-stats span{font-size:12px;color:var(--muted);line-height:1.35}.ds-term{all:unset;cursor:pointer;text-decoration:underline dotted var(--rule-strong) 1px;text-underline-offset:3px;transition:color 120ms ease-out}.ds-term:hover{color:var(--copper);text-decoration-color:currentColor}.ds-term:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px}"
     },
     {
-      "name": "Route Comparison Row",
+      "name": "Data Table",
       "kind": "custom",
-      "refersTo": "route-row",
-      "description": "A locally interactive route identifier, name, observation bar, and aligned count.",
-      "html": "<button class=\"ds-route-row\"><span class=\"ds-route-id\">D</span><span class=\"ds-route-name\">Route D</span><svg viewBox=\"0 0 200 12\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><rect class=\"ds-bar-track\" width=\"200\" height=\"8\" y=\"2\"/><rect class=\"ds-bar-fill\" width=\"169.37\" height=\"8\" y=\"2\"/></svg><span class=\"ds-bar-number\">34,713</span></button>",
-      "css": ".ds-route-row{display:grid;grid-template-columns:35px minmax(20px,1fr) minmax(50px,160px) 65px;align-items:center;gap:12px;width:100%;border:0;border-top:1px solid var(--rule,#dcded5);border-bottom:1px solid var(--rule,#dcded5);background:none;padding:12px 0;text-align:left;color:var(--ink,#242b28);font:400 15px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-route-row:hover{background:var(--surface,#f2f0ea)}.ds-route-row:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-route-row:active:not(:disabled){filter:brightness(.93)}.ds-route-row:disabled{opacity:.55;cursor:default}.ds-route-id{font-size:13px;font-weight:650}.ds-route-name{font-size:11px;color:var(--muted,#62645b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-route-row svg{width:100%;height:12px}.ds-bar-track{fill:var(--surface,#f2f0ea)}.ds-bar-fill{fill:var(--copper,#ac4d2b)}.ds-bar-number{text-align:right;font-size:12px;font-variant-numeric:tabular-nums}@media(max-width:1050px){.ds-route-row{grid-template-columns:28px minmax(10px,1fr) minmax(45px,100px) 60px;gap:8px}}@media(max-width:760px){.ds-route-row{grid-template-columns:32px minmax(25px,1fr) minmax(100px,220px) 65px}.ds-route-name{font-size:12px}}@media(max-width:540px){.ds-route-row{grid-template-columns:28px minmax(25px,1fr) 90px 55px;gap:6px}.ds-route-name,.ds-bar-number{font-size:11px}}@media(prefers-reduced-motion:reduce){.ds-route-row{transition:none}}"
+      "refersTo": "table-cell",
+      "description": "Sticky first column and header, right-edge scroll shadow, and a Show all link.",
+      "html": "<div class=\"ds-wrap\" tabindex=\"0\" role=\"region\" aria-label=\"Routes\"><table class=\"ds-table\"><thead><tr><th class=\"left\">Route</th><th>Peak speed</th><th>Midday speed</th><th>On time</th><th>Excess wait</th><th>Vehicle hours</th><th>Trips a day</th></tr></thead><tbody><tr><td class=\"left\">Route 80</td><td>8.6</td><td>9.9</td><td>68%</td><td>1.2 min</td><td>142</td><td>210</td></tr><tr><td class=\"left\">Route L</td><td>10.4</td><td>12.0</td><td>74%</td><td>—</td><td>96</td><td>118</td></tr></tbody></table></div><button class=\"ds-more\">Show all 29</button>",
+      "css": ".ds-wrap{overflow:auto;max-width:440px;border-block:1px solid var(--rule);background:linear-gradient(to left,var(--paper) 40%,transparent) right center/36px 100% no-repeat local,linear-gradient(to left,color-mix(in srgb,var(--ink) 14%,transparent),transparent) right center/14px 100% no-repeat scroll}.ds-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;color:var(--ink)}.ds-table th,.ds-table td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--rule)}.ds-table td{font-variant-numeric:tabular-nums}.ds-table tr:last-child td{border-bottom:0}.ds-table th{position:sticky;top:0;z-index:2;background:var(--paper);font-size:11.5px;font-weight:600;color:var(--muted);box-shadow:inset 0 -1px 0 var(--rule-strong);border-bottom:0}.ds-table .left{text-align:left}.ds-table th:first-child,.ds-table td:first-child{position:sticky;left:0;background:var(--paper);box-shadow:inset -1px 0 0 var(--rule)}.ds-table th:first-child{z-index:3;box-shadow:inset 0 -1px 0 var(--rule-strong),inset -1px 0 0 var(--rule)}.ds-table tbody tr:hover td{background:var(--surface)}.ds-more{margin-top:8px;background:none;border:0;padding:0;color:var(--copper);font-size:13px;font-weight:600;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;cursor:pointer}.ds-more:hover{color:var(--copper-hover);text-decoration-color:currentColor}.ds-more:focus-visible,.ds-wrap:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:2px}"
+    },
+    {
+      "name": "Numbered Hotspot Marker",
+      "kind": "custom",
+      "refersTo": "rank-marker",
+      "description": "Map marker whose number matches the ranked list beside the map.",
+      "html": "<button class=\"ds-rank\" type=\"button\" aria-label=\"Stretch ranked 1\">1</button>",
+      "css": ".ds-rank{width:20px;height:20px;padding:0;border:1.5px solid var(--paper);border-radius:50%;background:var(--ink);color:var(--paper);font-size:11px;font-weight:650;line-height:1;font-variant-numeric:tabular-nums;cursor:pointer}.ds-rank:hover{background:var(--copper)}.ds-rank:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"
+    },
+    {
+      "name": "Speed Legend",
+      "kind": "custom",
+      "refersTo": "c0",
+      "description": "The seven speed classes, shown beside any map or heatmap that uses them.",
+      "html": "<div class=\"ds-legend\" aria-label=\"Speed colors\"><strong>mph</strong><span><i style=\"background:var(--c0)\"></i>under 5</span><span><i style=\"background:var(--c1)\"></i>5–8</span><span><i style=\"background:var(--c2)\"></i>8–10</span><span><i style=\"background:var(--c3)\"></i>10–13</span><span><i style=\"background:var(--c4)\"></i>13–16</span><span><i style=\"background:var(--c5)\"></i>16–20</span><span><i style=\"background:var(--c6)\"></i>20+</span></div>",
+      "css": ".ds-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}.ds-legend span{display:inline-flex;align-items:center;gap:6px}.ds-legend i{width:12px;height:12px;border-radius:2px;flex:none}"
+    },
+    {
+      "name": "Tooltip",
+      "kind": "custom",
+      "refersTo": "tooltip",
+      "description": "Inverted ink tooltip for exact values on charts and maps.",
+      "html": "<div class=\"ds-tip\"><div class=\"t\">13.7 mph</div><div class=\"n\">4 PM–5 PM</div><div class=\"r\"><span>Measurements</span><span>412</span></div></div>",
+      "css": ".ds-tip{display:inline-block;max-width:300px;padding:8px 10px;background:var(--ink);color:var(--paper);border-radius:5px;font-size:12.5px;line-height:1.4;box-shadow:var(--shadow-pop);font-variant-numeric:tabular-nums}.ds-tip .t{font-weight:650}.ds-tip .n{opacity:.78}.ds-tip .r{display:flex;justify-content:space-between;gap:16px}.ds-tip .r span:first-child{opacity:.78}"
     }
   ],
   "narrative": {
     "northStar": "The Transit Notebook",
-    "overview": "A warm, restrained transit notebook pairs paper surfaces and charcoal ink with compact quantitative views. Copper identifies the main action and selected views; typography and fine rules organize the information. The supplied CTA Bus Speed Scorecard establishes this personal project's visual family.\n\nCondensed display headings give the notebook its identity. Familiar system text, native fields, tabular figures, and direct explanations carry the working interface. Flat surfaces leave charts, route comparisons, raw observations, and provenance easy to inspect. The implementation is code-led and ships no decorative raster imagery.",
+    "overview": "A planner's working notebook: warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.\n\nColor carries meaning. Copper is the one interface accent, the speed classes run warm to cool, and midday blue stands against rush orange. Dark is a chosen theme for working late or presenting, not an inversion: the speed classes are re-tuned so that the slowest streets are the brightest warm marks on dark paper. There is no decorative imagery.",
     "keyCharacteristics": [
-      "Warm paper and charcoal ink, with copper actions and blue secondary data.",
-      "Self-hosted condensed display headings above quiet system text.",
-      "Flat ruled sections, compact native controls, and aligned numerical comparisons.",
-      "Readable chart axes, contained horizontal scrolling, and inspectable source evidence."
+      "Warm paper and charcoal ink in two tuned themes, following the system setting unless the visitor chooses.",
+      "Big Shoulders Display for headings; the system stack for everything read or compared.",
+      "Ruled figure strips and ruled lists instead of cards.",
+      "One absolute speed scale across every map and heatmap.",
+      "Every figure links to the definition behind it."
     ],
     "rules": [
       {
-        "name": "The Functional Accent Rule",
-        "body": "Copper marks actions, selection, and primary observations; green and blue retain their distinct status and data roles.",
+        "name": "The One Accent Rule",
+        "body": "Copper means \"act here\" or \"you are here\". It never encodes data; data color comes from the series and speed tokens.",
+        "section": "colors"
+      },
+      {
+        "name": "The Same Scale Rule",
+        "body": "Speed classes are absolute, so a color means the same speed on every map, heatmap, and agency. Never rescale them to the data on screen.",
         "section": "colors"
       },
       {
         "name": "The Heading Face Rule",
-        "body": "Reserve Big Shoulders Display for headings; controls, metric values, tables, and prose use the system stack.",
+        "body": "Display type is for headings and the brand mark (21px). The map's hour readout (27px) is the one exception: it reads as the title of the map. Figures, tables, controls, and `h3` stay in the system face.",
         "section": "typography"
       },
       {
         "name": "The Ruled Surface Rule",
-        "body": "Keep data sections flat and separate them with fine rules; use a toned panel for grouped controls or contextual information.",
+        "body": "Group with a rule, not a box. If something needs a shadow, it should be floating over the page.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do use the self-hosted display face for headings and the system stack for working text.",
-      "Do preserve copper actions, distinct data and status colors, and tabular numerical alignment.",
-      "Do keep report sections flat, with fine rules and restrained tonal groupings.",
-      "Do retain readable chart axes, contained scrolling, visible narrow-screen instructions, and inspectable values.",
-      "Do let long provenance and schedule identifiers wrap within their text columns.",
-      "Do preserve visible keyboard focus, native field behavior, and reduced-motion support."
+      "Do lead a report with its finding, then figures, then the evidence.",
+      "Do add new colors as CSS variables with values for both themes, and read them with `var()` or from computed style in canvas and map code.",
+      "Do use the shared speed scale for any speed shown as color, with `SpeedLegend` beside it.",
+      "Do wrap every computed figure's name in `Term`.",
+      "Do keep tables in `DataTable`, with `limit={25}` for anything long.",
+      "Do say what isn't known: gray for unmeasured streets, a dash for missing values, a plain sentence when a map can't draw.",
+      "Do check every change at 390px and in both themes."
     ],
     "donts": [
-      "Don't apply Trusted Health branding to this personal transit project.",
-      "Don't shrink whole quantitative plots to fit a narrow viewport and make their axes unreadable.",
-      "Don't replace the inline SVG controls with text glyph icons.",
-      "Don't add decorative imagery or raised card treatments to the confirmed notebook world.",
-      "Don't style archive observation counts as inferred service, speed, ridership, or on-time performance."
+      "Don't put figures in cards or tiles; use the ruled strip.",
+      "Don't set figures, table values, or controls in the display face.",
+      "Don't use copper to encode data, or reassign a series color's meaning in one chart.",
+      "Don't scale whole charts or tables down to fit a narrow screen; contain the scroll and keep the axis text at 11px.",
+      "Don't add shadows to anything resting on the page.",
+      "Don't add decorative imagery, or apply Trusted Health or Hex branding to this personal project."
     ]
   }
 }

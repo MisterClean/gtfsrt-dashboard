@@ -380,6 +380,8 @@
     width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--paper); border-radius: 50%; background: var(--ink); color: var(--paper);
     font: 650 11px/1 var(--font-body, inherit); font-variant-numeric: tabular-nums; cursor: pointer;
   }
+  /* A bigger touch target than the number it carries. */
+  :global(.rank-marker::after) { content: ''; position: absolute; inset: -12px; }
   :global(.rank-marker:hover) { background: var(--copper); }
   :global(.rank-marker:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 </style>

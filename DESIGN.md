@@ -1,287 +1,414 @@
 ---
 name: Transit Notebook
-description: A warm, restrained visual system for inspecting public transit archive observations.
+description: A warm, ruled reporting system that leads with the finding and traces every number back to its method.
 colors:
   copper: "#ac4d2b"
   copper-hover: "#8b391b"
   copper-pale: "#f2e1d5"
-  blue: "#2d6884"
-  green: "#386b53"
+  on-copper: "#fff"
+  copper-dark: "#e0855f"
+  copper-hover-dark: "#eb9d7c"
+  copper-pale-dark: "#4a2c1f"
+  on-copper-dark: "#1a120e"
+  blue: "#1e6fa8"
+  orange: "#c8541a"
+  purple: "#8350ad"
+  green: "#23845a"
+  gray-series: "#8b8c82"
+  blue-dark: "#3d8fd0"
+  orange-dark: "#e0702c"
+  purple-dark: "#a06fd0"
+  green-dark: "#2fa374"
+  gray-series-dark: "#8e8d85"
   focus: "#1f678d"
   danger: "#a3342d"
+  danger-pale: "#f7e4e0"
+  caution-pale: "#f6eedb"
+  caution-ink: "#6f5213"
+  focus-dark: "#6aa8f0"
+  danger-dark: "#e8776c"
+  danger-pale-dark: "#3d2320"
+  caution-pale-dark: "#38301c"
+  caution-ink-dark: "#e5ca8c"
+  c0: "#9f2a22"
+  c1: "#df4a3f"
+  c2: "#f19c82"
+  c3: "#a8a59c"
+  c4: "#8db8ee"
+  c5: "#3a86e0"
+  c6: "#164f98"
+  c0-dark: "#ff8a75"
+  c1-dark: "#e8604f"
+  c2-dark: "#bf6a52"
+  c3-dark: "#6c6a64"
+  c4-dark: "#3c6ea8"
+  c5-dark: "#4c92e6"
+  c6-dark: "#93c5f8"
   paper: "#fbfaf7"
   surface: "#f2f0ea"
+  surface-2: "#e8e6de"
   ink: "#242b28"
-  muted: "#62645b"
+  muted: "#5d5f56"
+  faint: "#6f7068"
   rule: "#dcded5"
-  white: "#fff"
-  control-border: "#bfc4b8"
-  control-border-hover: "#888f81"
-  route-green: "#477052"
-  route-plum: "#8e6679"
-  route-ochre: "#97742c"
-  route-violet: "#726fa0"
-  route-grey-green: "#596859"
-  heat-empty: "#e9ebe3"
-  heat-low: "#ead3c2"
-  heat-mid: "#dca17e"
-  heat-high: "#bd6e48"
-  heat-peak: "#91411f"
+  rule-strong: "#bfc4b8"
+  paper-dark: "#171715"
+  surface-dark: "#20201d"
+  surface-2-dark: "#2b2b27"
+  ink-dark: "#f0efec"
+  muted-dark: "#bdbcb1"
+  faint-dark: "#94928a"
+  rule-dark: "#33332f"
+  rule-strong-dark: "#4c4b46"
 typography:
   display:
     fontFamily: '"Big Shoulders Display", "Arial Narrow", sans-serif'
-    fontSize: "44px"
+    fontSize: "34px"
     fontWeight: 800
-    lineHeight: 1.08
-    letterSpacing: "-0.01em"
+    lineHeight: 1.05
+    letterSpacing: "0.002em"
   headline:
     fontFamily: '"Big Shoulders Display", "Arial Narrow", sans-serif'
-    fontSize: "30px"
-    lineHeight: 1.15
+    fontSize: "25px"
+    fontWeight: 800
+    lineHeight: 1.1
+    letterSpacing: "0.004em"
   title:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-    fontSize: "19px"
+    fontSize: "15px"
     fontWeight: 650
     lineHeight: 1.3
-    letterSpacing: "-0.015em"
+    letterSpacing: "-0.008em"
   body:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-    fontSize: "15px"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.5
+  note:
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    fontSize: "12.5px"
     fontWeight: 400
     lineHeight: 1.5
   label:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     fontSize: "12px"
-    fontWeight: 650
-  control:
+    fontWeight: 600
+  figure:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-    fontSize: "14px"
-    fontWeight: 650
-  metric:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-    fontSize: "34px"
+    fontSize: "27px"
     fontWeight: 650
     lineHeight: 1.2
-    letterSpacing: "-0.03em"
+    letterSpacing: "-0.02em"
+  table:
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    fontSize: "13px"
+    fontWeight: 400
   axis:
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     fontSize: "11px"
   code:
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
     fontSize: "12px"
-    lineHeight: 1.7
+    lineHeight: 1.6
 rounded:
-  control: "4px"
-  panel: "8px"
-  segment-group: "5px"
-  segment: "3px"
   cell: "2px"
+  segment: "3px"
+  control: "4px"
+  segment-group: "5px"
+  tooltip: "5px"
+  popover: "6px"
+  marker: "50%"
 spacing:
   "4": "4px"
   "8": "8px"
   "12": "12px"
   "16": "16px"
-  "18": "18px"
-  "20": "20px"
   "24": "24px"
-  "32": "32px"
+  gutter: "28px"
   "36": "36px"
+  rail: "196px"
 components:
-  button-primary:
-    backgroundColor: "{colors.copper}"
-    textColor: "{colors.white}"
-    typography: "{typography.control}"
-    rounded: "{rounded.control}"
-    padding: "10px 17px"
-  button-primary-hover:
-    backgroundColor: "{colors.copper-hover}"
-  button-cancel:
-    backgroundColor: "{colors.danger}"
-    textColor: "{colors.white}"
-    typography: "{typography.control}"
-    rounded: "{rounded.control}"
-    padding: "10px 17px"
-  button-secondary:
+  button:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
-    typography: "{typography.control}"
     rounded: "{rounded.control}"
-    padding: "10px 17px"
-  button-text:
-    textColor: "{colors.copper}"
-    padding: "7px 0"
+    padding: "6px 14px"
+    height: "36px"
+  button-hover:
+    backgroundColor: "{colors.surface}"
+  button-primary:
+    backgroundColor: "{colors.copper}"
+    textColor: "{colors.on-copper}"
+    rounded: "{rounded.control}"
+    padding: "6px 14px"
+    height: "36px"
+  button-primary-hover:
+    backgroundColor: "{colors.copper-hover}"
+  button-small:
+    rounded: "{rounded.control}"
+    padding: "3px 10px"
+    height: "28px"
   field:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
-    padding: "8px 12px"
-    height: "44px"
-  navigation:
-    textColor: "{colors.muted}"
-    padding: "12px 0"
+    padding: "0 10px"
+    height: "36px"
   segment:
     textColor: "{colors.muted}"
     rounded: "{rounded.segment}"
-    padding: "6px 12px"
+    padding: "2px 10px"
+    height: "28px"
   segment-active:
     backgroundColor: "{colors.ink}"
     textColor: "{colors.paper}"
-  selection-panel:
+  nav-item:
+    textColor: "{colors.muted}"
+    rounded: "{rounded.control}"
+    padding: "4px 8px"
+    height: "36px"
+  nav-item-active:
     backgroundColor: "{colors.surface}"
-    rounded: "{rounded.panel}"
-    padding: "18px 20px 12px"
-  metric-strip:
     textColor: "{colors.ink}"
-    padding: "16px 0"
-  route-row:
+  figure:
     textColor: "{colors.ink}"
-    padding: "12px 0"
+    typography: "{typography.figure}"
+    padding: "12px 16px 13px"
+  table-cell:
+    typography: "{typography.table}"
+    padding: "7px 10px"
+  route-badge:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.segment}"
+    padding: "0 6px"
+    height: "21px"
+  rank-marker:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.marker}"
+    size: "20px"
+  tooltip:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.tooltip}"
+    padding: "8px 10px"
 ---
 
 # Design System: Transit Notebook
+
+Source of truth: `src/styles/app.css` holds the tokens and shared classes; components scope anything local. `-dark` keys in the frontmatter are the values of the same CSS variable under `:root[data-theme="dark"]` (for example `paper-dark` is `--paper` in dark), so components always read the bare variable and never branch on theme.
 
 ## Overview
 
 **Creative North Star: "The Transit Notebook"**
 
-A warm, restrained transit notebook pairs paper surfaces and charcoal ink with compact quantitative views. Copper identifies the main action and selected views; typography and fine rules organize the information. The supplied CTA Bus Speed Scorecard establishes this personal project's visual family.
+A planner's working notebook: warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.
 
-Condensed display headings give the notebook its identity. Familiar system text, native fields, tabular figures, and direct explanations carry the working interface. Flat surfaces leave charts, route comparisons, raw observations, and provenance easy to inspect. The implementation is code-led and ships no decorative raster imagery.
+Color carries meaning. Copper is the one interface accent, the speed classes run warm to cool, and midday blue stands against rush orange. Dark is a chosen theme for working late or presenting, not an inversion: the speed classes are re-tuned so that the slowest streets are the brightest warm marks on dark paper. There is no decorative imagery.
 
 **Key Characteristics:**
 
-- Warm paper and charcoal ink, with copper actions and blue secondary data.
-- Self-hosted condensed display headings above quiet system text.
-- Flat ruled sections, compact native controls, and aligned numerical comparisons.
-- Readable chart axes, contained horizontal scrolling, and inspectable source evidence.
+- Warm paper and charcoal ink in two tuned themes, following the system setting unless the visitor chooses.
+- Big Shoulders Display for headings; the system stack for everything read or compared.
+- Ruled figure strips and ruled lists instead of cards.
+- One absolute speed scale across every map and heatmap.
+- Every figure links to the definition behind it.
 
 ## Colors
 
-The palette is warm and low in saturation; functional accents stand apart from the paper and muted rules.
+A low-saturation warm neutral base, with one interface accent and separate palettes for chart series and speed.
 
 ### Primary
 
-- **Copper** (`copper`): the load action, active navigation, text actions, and activity bars.
-- **Deep Copper** (`copper-hover`): the hover state of primary and text actions.
-- **Pale Copper** (`copper-pale`): browser text selection.
+- **Copper** (`copper`): primary action, text links, the active rail icon, the analysis progress line, and cached-day dots in the date picker.
+- **Deep Copper** (`copper-hover`): hover on those actions.
+- **Pale Copper** (`copper-pale`): text selection only.
+- **On Copper** (`on-copper`): label on a primary button. It turns near-black in dark, where copper is lighter.
 
 ### Secondary
 
-- **Data Blue** (`blue`): secondary data and the interactive hourly-bar highlight.
-- **Archive Green** (`green`): local-processing status and hours with archived records.
-- **Focus Blue** (`focus`): keyboard outlines and chart focus feedback.
-- **Danger Red** (`danger`): the cancel-load action; error surfaces retain their contextual warm red treatment.
-- **Route Green, Plum, Ochre, Violet, and Grey Green** (`route-*`): the additional categorical series used with copper and blue in route swatches and position points.
-- **Heat Empty through Heat Peak** (`heat-*`): the implemented five-step archive-observation heatmap. These are data values, not surface elevations.
+Chart series, validated together in both themes. Hold the meanings so a color reads the same across reports.
+
+- **Midday Blue** (`blue`): midday, on-time, medians and observed counts.
+- **Rush Orange** (`orange`): peak, bunching, close-spaced stops, and the time cursor. Peak hours (7–9 AM, 4–6 PM) are a band of this color at 7% opacity.
+- **Purple** (`purple`): early departures and service after a gap.
+- **Green** (`green`): the 9 AM–4 PM band in delay profiles, and the "Analyzed on this device" dot.
+- **Series Gray** (`gray-series`): scheduled values and reference series.
+
+Status colors:
+
+- **Focus Blue** (`focus`): keyboard focus only.
+- **Danger** (`danger`, `danger-pale`): failed analysis and stall messages, with error banners on the pale fill.
+- **Caution** (`caution-ink`, `caution-pale`): data-quality notes about the selected days.
+
+### Tertiary
+
+**Speed classes** (`c0` to `c6`): the warm-to-gray-to-cool ramp, slow to fast. `c3` is the neutral middle. Read them through `src/lib/speed-scale.ts`, never by hand.
+
+- Bus breaks are 5, 8, 10, 13, 16 and 20 mph. Rail and ferry use 10, 15, 20, 28, 36 and 45 mph. km/h labels round to the nearest 5.
+- The map's "Against midday" measure reuses the same seven colors with ratio breaks (0.7, 0.8, 0.9, 1.1, 1.2, 1.35) and its own legend.
+- Canvas and map layers read the computed variables at draw time, and maps rebuild when the theme changes.
 
 ### Neutral
 
-- **Warm Paper** (`paper`): the page and native field backgrounds.
-- **Soft Surface** (`surface`): selection panels, bar tracks, detail strips, and row hover states.
-- **Charcoal Ink** (`ink`): primary text and the selected chart-measure segment.
-- **Muted Ink** (`muted`): explanatory text, labels, axes, and inactive navigation.
-- **Fine Rule** (`rule`): section, metric, table, and grid separation.
-- **White** (`white`): text on filled action buttons.
-- **Control Border** and **Control Border Hover** (`control-border`, `control-border-hover`): native field boundaries and their hover feedback.
+- **Paper** (`paper`): the page, fields, and the opaque backing of sticky table cells.
+- **Surface** (`surface`, `surface-2`): hover, the active rail item, code blocks, and neutral banners; `surface-2` marks the selected list row and hovered calendar day.
+- **Ink** (`ink`): text, chart lines, and inverted fills such as selected segments, route badges, and tooltips.
+- **Muted** (`muted`): labels, notes, axis text.
+- **Faint** (`faint`): hovered control borders and the chart crosshair.
+- **Rule** (`rule`, `rule-strong`): dividers and grid lines; `rule-strong` draws control borders, axes, and streets with no measurement.
 
-**The Functional Accent Rule.** Copper marks actions, selection, and primary observations; green and blue retain their distinct status and data roles.
+The basemap has its own quiet palette for each theme in `src/map/style.ts`, held below the data on purpose.
+
+**The One Accent Rule.** Copper means "act here" or "you are here". It never encodes data; data color comes from the series and speed tokens.
+
+**The Same Scale Rule.** Speed classes are absolute, so a color means the same speed on every map, heatmap, and agency. Never rescale them to the data on screen.
 
 ## Typography
 
-**Display Font:** Big Shoulders Display, with Arial Narrow and sans-serif fallbacks. The project serves its own normal-style face at weight (800).
+**Display Font:** Big Shoulders Display, self-hosted at weight 800 only (`public/fonts`), with Arial Narrow and sans-serif fallbacks.
 
-**Body Font:** the system stack recorded in the frontmatter, ending in Arial and sans-serif.
+**Body Font:** the system stack in the frontmatter.
 
-**Label/Mono Font:** labels share the system stack. SQL uses the recorded system monospace stack.
+**Mono Font:** the system monospace stack, for SQL and code.
 
-**Character:** Tall, condensed headings provide identity without changing the familiar reading texture of forms, tables, and methods. Numerical comparisons use tabular figures.
+**Character:** Tall condensed headings give the notebook its voice; a familiar system face carries the reading and the comparing.
 
 ### Hierarchy
 
-- **Display:** the uppercase page heading uses the `display` role; its size drops to (38px) at the narrow breakpoint.
-- **Headline:** report headings use the `headline` role and the served display face; the narrow report heading is (28px). The empty-state heading is a contextual larger variant (36px).
-- **Title:** section headings use the `title` role, dropping to (18px) on narrow screens. Method subheadings use system text (14px, weight 650, line-height 1.5).
-- **Body:** the `body` role establishes the page base. Explanatory interface copy commonly uses (12–13px); the introductory and method text measure is capped at (72–75ch).
-- **Label and control:** the `label` and `control` roles keep native fields and actions compact. Field values use (14px, weight 450); compact filters use (12px).
-- **Metric:** the `metric` role uses tabular figures. Values are (36px) at the medium layout and (32px) at the narrow layout; metric labels are contextual uppercase data labels.
-- **Axis:** the `axis` role stays at its recorded readable size while the plot scrolls. It is not reduced with the viewport.
-- **Code:** the `code` role provides scrollable SQL with a narrow-screen size of (11px).
+- **Display** (`display`, uppercase, balanced): page `h1`, 28px at 860px and below. The map page uses 30px; the start screen uses 44px, or 34px when narrow.
+- **Headline** (`headline`, uppercase, balanced): section `h2`.
+- **Title** (`title`): `h3`, in the system face.
+- **Lead** (18px, line-height 1.35, ink): the Overview's one-sentence finding. Other reports use a lede (15px, muted, capped at 72ch).
+- **Body** (`body`): the page base, and computed findings.
+- **Note and fine print** (`note`, capped at 86ch, and 12px): methods caveats, sublabels, scope lines. Both muted.
+- **Figure** (`figure`): values in the figure strip, 22px at 860px and below; the unit sits beside it (13px, muted). Side-panel figures use 26px.
+- **Label** (`label`): figure names and field labels (11.5–12px), muted. Sentence case, no tracking.
+- **Table** (`table`): body cells with tabular figures; headers are 11.5px, weight 600, muted.
+- **Axis** (`axis`): all chart text, with tabular figures. It keeps its size at every width.
 
-**The Heading Face Rule.** Reserve Big Shoulders Display for headings; controls, metric values, tables, and prose use the system stack.
+**The Heading Face Rule.** Display type is for headings and the brand mark (21px). The map's hour readout (27px) is the one exception: it reads as the title of the map. Figures, tables, controls, and `h3` stay in the system face.
 
 ## Layout
 
-The workspace is centered with a maximum width of (1280px), including horizontal padding (32px). The identity bar has its own maximum width (1344px). Fine horizontal rules organize full-width working sections; the default composition is not a grid of elevated cards.
+The shell is a two-column grid: a 196px report rail beside the page, under a sticky 56px top bar with agency, days, mode, and analysis status. Pages cap at 1480px with a 28px gutter.
 
-Selection controls use a four-column grid: a flexible agency field, two bounded date fields, and an action. At (1050px) and below the action moves to a separate row. At (540px) and below the agency spans both columns, dates remain side by side, and the action fills the row. Workspace side padding becomes (24px) at (760px), then (18px) at (540px).
+Sections stack with a 36px gap (22px on Overview) and are separated by a fine rule plus 28px of padding. Report bodies pair a flexible main column with a fixed side column: 300px findings on Overview, 280px on the map, 360px ranked list on hotspots, 320px on route detail. Maps size to the viewport with `calc(100dvh - …)` and a 280px floor, so the map and its time control are both visible without scrolling.
 
-The summary uses four equal columns with internal dividers. At (760px) and below it becomes two columns and two rows. The overview's route and explanation columns use a (1.4fr / 1fr) relationship and collapse into one column at the same breakpoint. Provenance also changes from two columns to one there. Supporting copy wraps, including long historical schedule identifiers.
+### Narrow screens
 
-Hourly charts, route heatmaps, and position plots retain an intrinsic width of (1120px) inside their own scroll regions. Horizontal-scroll instructions appear below (1183px); focusable regions, chart focus feedback, and exact hourly values keep the data inspectable. The coverage grid retains a minimum width of (715px), and the route table retains a minimum width of (660px).
-
-Spacing is compact and contextual, using the repeated frontmatter steps rather than imposing a fixed ratio. Common controls use gaps (8–16px); section content separates by (20–36px). The overview's two-column separation is wider (48px) before responsive reductions.
+- **860px and below:** one column. The rail becomes a horizontally scrolling text row that sticks to the top, without icons or the preferences block; the top bar stops sticking and wraps with selectors on their own line, hiding the download estimate. The gutter drops to 16px, and figure strips become two columns with no divider on the left column.
+- **1100px / 1000px and below:** paired report columns collapse (1100px for Overview, hotspots, and route detail; 1000px for map, reliability, and stops), and sticky side columns become static.
+- **Tables** never reflow. They scroll inside their own region, with cell padding reduced to 6px.
+- **560px and below:** the date picker stacks presets above the calendar.
+- **480px and below:** map attribution starts collapsed so it can't cover the scale bar.
 
 ## Elevation & Depth
 
-The shipped system uses no box shadows. Warm tonal surfaces, fine rules, and selected-state fills establish hierarchy. A keyboard focus ring is a state indicator, not elevation: it uses the focus color, an outline (3px), and an offset (4px).
+The system is flat. Rules and tonal fills establish hierarchy, and only things that float above the page have a shadow.
 
-**The Ruled Surface Rule.** Keep data sections flat and separate them with fine rules; use a toned panel for grouped controls or contextual information.
+### Shadow Vocabulary
+
+- **Pop** (`--shadow-pop`, tuned per theme): the tooltip and the date picker panel only.
+
+The table's right-edge scroll shadow is a scrolling cue, not elevation. Its first layer scrolls with the table and covers the shadow at the far end, so it disappears once no columns remain. Sticky cells use inset hairlines, not drop shadows.
+
+**The Ruled Surface Rule.** Group with a rule, not a box. If something needs a shadow, it should be floating over the page.
 
 ## Shapes
 
-Controls and contextual panels have gently rounded corners. The larger selection panel uses the `panel` radius; fields, filled buttons, position plots, and warning panels use the `control` radius. The chart-measure group and its individual segments use their own small nested radii. Heatmap and coverage marks remain small, rectilinear cells; status dots are circular.
-
-Icons are inline SVG strokes, inheriting the surrounding text color. The standard icon uses a square view box (20 × 20), stroke width (1.5), and round line caps and joins. Text actions use smaller icons (16px), external links (13px), and table sorting (14px).
+Corners are small and consistent: 4px for controls and map frames, nested 5px and 3px for segmented groups, 2px for legend swatches. Circles are reserved for markers and status dots. Icons are inline SVG strokes on a 20-unit view box at 1.5 weight, inheriting text color. Chart marks are square-edged, and grid lines use crisp edges.
 
 ## Components
 
 ### Buttons
 
-Compact and direct. Primary, cancel, and secondary actions share a minimum height (44px), the control radius, and a system-text semibold label. Primary uses copper with white text; cancel uses danger red, with its contextual deeper hover color. Secondary uses paper with a thin muted border and a surface-colored hover.
-
-Text actions have no filled container; copper text gains a visible underline and deeper copper on hover. Buttons transition background and text color over (150ms, ease-out). Pressing an enabled button applies a brightness factor (.93). Disabled native controls use opacity (.55). All interactive controls retain the shared keyboard focus ring. Reduced-motion preferences remove animations and transitions.
-
-### Cards / Containers
-
-The selection panel is a tonal grouping, not a raised card. Its padding follows the frontmatter, becoming (18px) at the medium breakpoint and (16px) at the narrow breakpoint. Warnings, empty inline messages, and position details use contextual surface fills; ordinary report sections remain on paper.
+Plain and compact. Default is paper with a `rule-strong` border and a surface hover; primary is copper; quiet is borderless and muted; small is 28px. The text link is copper with an underline on hover, and it's the action inside findings. Transitions run 120–150ms ease-out; disabled is 55% opacity; every control takes the 3px focus ring, offset 2px.
 
 ### Inputs / Fields
 
-Use native selects, date inputs, and search fields. Fields have a paper fill, the control radius, and a thin control border. Hover strengthens the border; focus uses the shared outline. A visible text label precedes every field. Compact report filters are (34px) high, and route search is (36px) high.
+Native selects, search, and checkboxes in a paper fill with a `rule-strong` border that strengthens on hover. Fields without visible labels carry a screen-reader label.
+
+### Segmented control
+
+An outlined group of plain buttons; the selected one fills with ink and paper text, carried by `aria-pressed`. Used for mode, units, theme, map period, and measure. It wraps rather than overflowing.
 
 ### Navigation
 
-Views use a horizontal row of plain text buttons over one fine rule. The active view has copper text, a copper bottom border (2px), and semibold weight. Hover darkens text. On narrow screens the four view labels remain visible with smaller gaps; the auxiliary archive label is hidden.
+Rail rows with an 18px icon and a 13.5px label. Active is a surface fill, ink text at weight 650, and a copper icon. The foot of the rail holds units, theme, and the on-device statement.
 
-### Chart Measure Segments
+### Date picker
 
-An outlined group encloses compact plain segments. The selected segment uses charcoal ink with paper text; inactive segments use muted text and a soft hover surface. The implementation carries selection through `aria-pressed`.
+A trigger button opening a floating panel of presets beside a calendar. Selected days are ink-filled, weekends are faint, and a small copper dot marks days already analyzed.
 
-### Quantitative Views
+### Ruled figure strip
 
-The summary strip uses definition-list labels, tabular values, and internal dividers. Route comparisons are ruled interactive rows containing an identifier, an abbreviated name, a copper bar on a soft track, and a right-aligned count. Tables right-align quantitative route columns, preserve sortable headers, and use a quiet row-hover surface. Route selection reuses the local loaded report.
+A definition list between two rules, with hairline dividers between auto-fit columns (150px minimum). Each figure is name, value with unit, then one line of context. No card, no fill. Figures belong here rather than in tiles, and a page may stack two strips.
 
-Charts keep axis labels at the `axis` role, preserve their intrinsic dimensions, and expose values through titles, focus feedback, or the hourly table. Position points and route swatches share the categorical colors. Coverage cells distinguish records present from no records; captions explain that archive coverage is not service completeness.
+### Term
 
-### Sources and Methods
+The link from a figure or chart name to its method. It inherits the surrounding text with a dotted `rule-strong` underline, turns copper on hover, and has the tooltip "How this is calculated". Selecting it opens that topic on Data & methods, scrolled into view with focus on its summary. It's a real button, so it works by keyboard and touch. Wrap every computed figure's name in one, and add a topic to `MethodTopic` when a new definition needs its own section.
 
-Provenance uses plain definition lists, wrapping values, and quiet explanatory prose. Long schedule digests wrap within the method text. SQL is disclosed with native details elements and an independently scrollable monospace block; its contextual green-tinted surface does not become a general panel color.
+### Data table
+
+Sortable, with CSV export and optional search, always inside its own scroll region.
+
+- **Sticky first column and header:** the row's name stays put while the rest scrolls, on opaque paper with an inset hairline.
+- **Scroll shadow:** the right-edge cue described under Elevation & Depth.
+- **Row limit:** long tables pass `limit={25}` with a text link reading "Show all N" (then "Show first 25"). Once expanded they scroll inside a capped height, typically 72vh.
+- **Cells:** numbers are right-aligned and tabular, and text columns opt into left alignment. Cells either clip to one line with the full text in a hint, or wrap. Missing values show an em dash and sort last.
+- **Rows:** a surface fill on hover; clickable rows open the route or outline the stretch on the map.
+
+### Speed map
+
+MapLibre lines over the quiet basemap, with labels drawn above the data. Layers from the bottom:
+
+- **Network base:** all streets in a thin `rule-strong` line, so an unmeasured street reads as "no data" rather than a gap.
+- **Hover and ranked casing:** a wider ink line beneath the data.
+- **Speed lines:** colored by class, offset by direction as you zoom in.
+- **Slow-street emphasis:** the same lines redrawn wider and on top wherever speed falls below the third break (10 mph for bus, 20 for rail and ferry; 90% of midday in "Against midday"). Slow streets are what the map is for. This layer is a paint change only, so moving through the hours stays smooth.
+- **Highlight:** ink over a paper casing, for a chosen stretch.
+
+Map controls are restyled onto paper with rule borders. If WebGL or the tiles fail, the page says so in plain text and keeps working.
+
+### Numbered hotspot markers
+
+Numbered circles (20px, ink fill, paper border, 11px tabular numerals) at the middle of the top 10 stretches. Each stretch also has an ink casing. Numbers match the ranked list beside the map under any sort. A marker hovers to copper and selecting it selects that row. The map frames the ranked stretches rather than the whole network.
+
+### Time control
+
+The network's own speed curve is the slider: an ink line (2.5px) on a tight y-axis, because a wider axis would flatten the rush hour. Peak bands sit behind it, and an orange cursor and dot mark the hour. Drag along the line, or use arrow keys, through a transparent native range input laid over the plot; focus rings the whole track. Play steps an hour every 650ms. Above the plot sit the Play button, the hour readout, and the speed for that hour. It appears on Overview and on the map's hour-by-hour period, and hour labels thin out below 460px.
+
+### String line and other canvas charts
+
+Observed trips are ink, scheduled trips are `rule-strong`, and bunched stretches are thick orange. Charts read tokens at draw time, carry a legend of keys and swatches, and report exact values through the shared ink tooltip.
+
+### Banners
+
+Flat, 4px fills with no icon or border: neutral, caution, and error. Copy says what happened and what remains usable.
+
+### Route badge
+
+A compact label in the agency's published route colors. It falls back to ink and paper when the published pair is missing or unreadable.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** use the self-hosted display face for headings and the system stack for working text.
-- **Do** preserve copper actions, distinct data and status colors, and tabular numerical alignment.
-- **Do** keep report sections flat, with fine rules and restrained tonal groupings.
-- **Do** retain readable chart axes, contained scrolling, visible narrow-screen instructions, and inspectable values.
-- **Do** let long provenance and schedule identifiers wrap within their text columns.
-- **Do** preserve visible keyboard focus, native field behavior, and reduced-motion support.
+- **Do** lead a report with its finding, then figures, then the evidence.
+- **Do** add new colors as CSS variables with values for both themes, and read them with `var()` or from computed style in canvas and map code.
+- **Do** use the shared speed scale for any speed shown as color, with `SpeedLegend` beside it.
+- **Do** wrap every computed figure's name in `Term`.
+- **Do** keep tables in `DataTable`, with `limit={25}` for anything long.
+- **Do** say what isn't known: gray for unmeasured streets, a dash for missing values, a plain sentence when a map can't draw.
+- **Do** check every change at 390px and in both themes.
 
 ### Don't:
 
-- **Don't** apply Trusted Health branding to this personal transit project.
-- **Don't** shrink whole quantitative plots to fit a narrow viewport and make their axes unreadable.
-- **Don't** replace the inline SVG controls with text glyph icons.
-- **Don't** add decorative imagery or raised card treatments to the confirmed notebook world.
-- **Don't** style archive observation counts as inferred service, speed, ridership, or on-time performance.
+- **Don't** put figures in cards or tiles; use the ruled strip.
+- **Don't** set figures, table values, or controls in the display face.
+- **Don't** use copper to encode data, or reassign a series color's meaning in one chart.
+- **Don't** scale whole charts or tables down to fit a narrow screen; contain the scroll and keep the axis text at 11px.
+- **Don't** add shadows to anything resting on the page.
+- **Don't** add decorative imagery, or apply Trusted Health or Hex branding to this personal project.
