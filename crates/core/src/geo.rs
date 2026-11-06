@@ -130,6 +130,9 @@ fn is_spike(
 
 /// How far past the earliest fitting point still counts as the same pass of the line.
 const SAME_PASS_SPAN_M: f32 = 150.0;
+/// The look ahead only applies this close to the end of the line. Elsewhere a bus parked
+/// near the start could fit further along and read as having left.
+const SPAN_NEAR_END_M: f32 = 300.0;
 /// How much better a fit further along the line must be, in meters of fit per meter
 /// along. Legs drawn exactly on top of each other differ only by rounding, and that
 /// mustn't carry a vehicle hundreds of meters ahead, where it couldn't come back.
@@ -261,6 +264,9 @@ impl Polyline {
             }
         }
         let earliest = chosen?;
+        if earliest.s < self.length() - SPAN_NEAR_END_M {
+            return Some(earliest);
+        }
         // The hook at the end of a line can double back within a few meters. Without
         // this, progress stops short of the last stop and a later fix records the arrival.
         let ahead =

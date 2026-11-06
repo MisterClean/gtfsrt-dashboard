@@ -224,7 +224,7 @@ pub fn process_gps_day(
         DayStatus::Partial
     };
     let mut warnings = vec![format!(
-        "{date}: this day could not be joined to a schedule, so it shows GPS speeds only, with no on-time performance, headways or run times. Speeds are measured between consecutive positions. They read about 5-10% below schedule-joined speeds network-wide, and up to about 20% below on winding routes or feeds with sparse reports, so use them to compare routes and times of day, not as absolute speeds."
+        "{date}: this day could not be joined to a schedule, so it shows GPS speeds only, with no on-time performance, headways or run times. Speeds are measured between consecutive positions. They read about 5-10% below schedule-joined speeds network-wide, and up to 20-25% below on winding routes or feeds with sparse reports, so use them to compare routes and times of day, not as absolute speeds."
     )];
     warnings.extend_from_slice(notes);
     warnings.extend(gaps);

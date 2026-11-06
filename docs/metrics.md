@@ -33,6 +33,8 @@ A run is one vehicle on one reported trip descriptor. A new run starts after thr
 2. Otherwise the app considers the local date and the days either side, keeps those on which the trip's service is active, and picks the one whose scheduled window is nearest the middle of the run.
 3. A run more than four hours from every such window is not counted for that trip.
 
+A run the feed dates to a day when the calendar has no service, at that trip's usual time of day, is believed: holiday and special service often look like this. It counts as observed but not scheduled, so the observed share can pass 100% on such a day. A feed with no `start_date` can't make that claim, so the same run is counted under "no service date" instead.
+
 ### Time periods
 
 | Period | Service hours | Used for |
@@ -60,7 +62,7 @@ Each position report is projected onto the pattern's line.
 | Step | Rule |
 | --- | --- |
 | First report | Any point on the line within 120 m. When the line passes there more than once, each pass is followed through the whole run. The one with the fewest off-route reports wins, then the most progress, and only a real tie goes to where the schedule expects the vehicle. Choosing by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. |
-| Later reports | The best fit between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). The earliest pass within 25 m of the best fit wins, so GPS noise can't jump a vehicle to a return leg. The best fit within the next 150 m is then used, so a hook at the end of a line is reached rather than stopped short of. |
+| Later reports | The best fit between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). The earliest pass within 25 m of the best fit wins, so GPS noise can't jump a vehicle to a return leg. Within 300 m of the end of the line, the best fit in the next 150 m is then used, so a terminal hook is reached rather than stopped short of. |
 | Off route | A report more than 120 m from the line is skipped and counted. |
 | Forward only | Progress never decreases. A report landing behind the furthest point is held there, and one landing more than 30 m behind is counted. |
 
@@ -281,7 +283,7 @@ These came out of independent validation against raw data, and each is small eno
 
 ### GPS-only speeds
 
-When a day can't be joined to a schedule, speed comes from straight lines between consecutive reports. Compared with schedule-joined speeds on the same reports, that read 10.2% low in Madison and 5.2% low in King County, and up to 22% low on single winding routes. A few routes read high, up to 9%, so no single correction factor works. Ranking between routes holds up well (rank correlation 0.96 and 0.99). Use these speeds to compare routes and times of day, not as absolute figures.
+When a day can't be joined to a schedule, speed comes from straight lines between consecutive reports. Compared with schedule-joined speeds on the same reports, that read 10.2% low in Madison and 5.2% low in King County, and 22% to 26% low on the worst single routes. A few routes read high, up to 9%, so no single correction factor works. Ranking between routes holds up well (rank correlation 0.96 and 0.99). Use these speeds to compare routes and times of day, not as absolute figures.
 
 ## Not calculated
 
