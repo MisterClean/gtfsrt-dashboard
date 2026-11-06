@@ -770,6 +770,43 @@ fn bootstrap_peak(
     (interval(&mut peaks), interval(&mut changes))
 }
 
+/// The bootstrap resamples pooled day totals, because resampling every segment for
+/// every route would be too slow. Reported speeds are fixed-segment, so each
+/// interval keeps its width but is moved to surround the figure printed beside it.
+fn centered_intervals(
+    (peak_interval, change_interval): (Option<Interval>, Option<Interval>),
+    rows: &[&RouteHour],
+    periods: Periods,
+    speed_peak: Option<f32>,
+    peak_change: Option<f32>,
+) -> (Option<Interval>, Option<Interval>) {
+    let is_peak = |hour: usize| in_period(hour, periods.am) || in_period(hour, periods.pm);
+    let pooled_peak = Totals::collect(
+        rows.iter()
+            .copied()
+            .filter(|r| is_peak(usize::from(r.hour))),
+    )
+    .speed();
+    let pooled_mid = Totals::collect(
+        rows.iter()
+            .copied()
+            .filter(|r| in_period(usize::from(r.hour), periods.mid)),
+    )
+    .speed();
+    let pooled_change = pooled_peak
+        .zip(pooled_mid)
+        .and_then(|(peak, mid)| (mid > 0.0).then(|| peak / mid - 1.0));
+    let shift = |interval: Option<Interval>, pooled: Option<f32>, reported: Option<f32>| {
+        let (low, high) = interval?;
+        let offset = reported? - pooled?;
+        Some((low + offset, high + offset))
+    };
+    (
+        shift(peak_interval, pooled_peak, speed_peak),
+        shift(change_interval, pooled_change, peak_change),
+    )
+}
+
 /// The slowest stretch of a pattern during `hours`, kept away from the ends of
 /// the line where turnarounds and layovers distort speed.
 fn slowest_stretch(
@@ -888,7 +925,6 @@ fn route_score(
     let empty = Vec::new();
     let segs = context.segs_by_route.get(&route).unwrap_or(&empty);
     let fixed = fixed_speeds(library, merged, segs);
-    let (peak_ci, peak_change_ci) = bootstrap_peak(library, merged, route);
 
     // Fixed-segment speeds when they cover at least half the route; otherwise the
     // route lacks comparable data in some period and pooled speeds are all there is.
@@ -906,6 +942,17 @@ fn route_score(
             pooled(&|h| in_period(h, periods.am) || in_period(h, periods.pm)),
         )
     };
+
+    let peak_change = speed_peak
+        .zip(speed_mid)
+        .and_then(|(peak, mid)| (mid > 0.0).then(|| round3(f64::from(peak / mid - 1.0))));
+    let (peak_ci, peak_change_ci) = centered_intervals(
+        bootstrap_peak(library, merged, route),
+        &rows,
+        periods,
+        speed_peak,
+        peak_change,
+    );
 
     let hourly: Vec<Option<f32>> = (0..SERVICE_HOURS)
         .map(|hour| {
@@ -965,9 +1012,7 @@ fn route_score(
         speed_peak,
         scheduled_speed: totals.scheduled_speed(),
         fixed_coverage: fixed.coverage,
-        peak_change: speed_peak
-            .zip(speed_mid)
-            .and_then(|(peak, mid)| (mid > 0.0).then(|| round3(f64::from(peak / mid - 1.0)))),
+        peak_change,
         peak_ci,
         peak_change_ci,
         on_time: merged.split_deviation(&totals.deviation),
@@ -2338,6 +2383,33 @@ mod tests {
         assert_eq!(report.stops.len(), 5);
         assert!(report.stops.iter().all(|s| s.nearest_stop_m.is_some()));
         assert_eq!(report.spacing_histogram.iter().sum::<u32>(), 4);
+    }
+
+    #[test]
+    fn route_intervals_surround_the_figure_shown_beside_them() {
+        let mut library = Library::default();
+        let dates = [20261102, 20261103, 20261104, 20261105, 20261106];
+        for (index, date) in dates.iter().enumerate() {
+            let slow = 1500 + index as i64 * 100;
+            analysed_day(
+                &mut library,
+                *date,
+                &[
+                    ("T0", 7 * 3600, 0, slow),
+                    ("T1", 7 * 3600 + 600, 0, slow),
+                    ("T2", 7 * 3600 + 1200, 3 * 3600, 900),
+                    ("T3", 7 * 3600 + 1800, 3 * 3600, 900),
+                ],
+            );
+        }
+        let scores = route_scores(&library, &Merged::compute(&library, selection(&dates)));
+        let score = &scores[0];
+        let (low, high) = score.peak_ci.expect("five days give an interval");
+        let peak = score.speed_peak.unwrap();
+        assert!(low <= peak && peak <= high, "{low} {peak} {high}");
+        let (low, high) = score.peak_change_ci.expect("five days give an interval");
+        let change = score.peak_change.unwrap();
+        assert!(low <= change && change <= high, "{low} {change} {high}");
     }
 
     #[test]

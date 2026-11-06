@@ -45,6 +45,9 @@ struct Accumulator {
     seg_hours: FxHashMap<(u32, u8), SegHour>,
     stop_periods: FxHashMap<(u32, u8, u32, u8), StopPeriod>,
     vehicles_seen: FxHashSet<(u32, u8, u32)>,
+    /// A trip counts once, even when a vehicle swap splits it into two runs.
+    trips_seen: FxHashSet<u32>,
+    trips_seen_complete: FxHashSet<u32>,
 }
 
 impl Accumulator {
@@ -100,7 +103,14 @@ pub fn process_day(
         .collect();
 
     sort_and_dedup(&mut buffer.fixes);
-    quality.fixes_unique = buffer.fixes.len() as u64;
+    // The buffer also holds neighbouring days. Count only the hours this day owns,
+    // the same ones `add_input_counts` assigns to it.
+    let owned_start = origin + 3 * 3600;
+    let owned = move |fix: &Fix| {
+        let time = i64::from(fix.time);
+        time >= owned_start && time < owned_start + 86_400
+    };
+    quality.fixes_unique = buffer.fixes.iter().filter(|fix| owned(fix)).count() as u64;
 
     let mut trips: Vec<TripRow> = Vec::new();
     let mut events: Vec<StopEvent> = Vec::new();
@@ -109,7 +119,7 @@ pub fn process_day(
     for run in runs(&buffer.fixes) {
         let descriptor = buffer.descriptors[run[0].descriptor as usize];
         let Some(trip_index) = trip_of[descriptor.trip as usize] else {
-            quality.fixes_trip_unmatched += run.len() as u64;
+            quality.fixes_trip_unmatched += run.iter().filter(|fix| owned(fix)).count() as u64;
             continue;
         };
         let trip = &schedule.trips[trip_index as usize];
@@ -119,6 +129,7 @@ pub fn process_day(
         quality.fixes_on_day += run.len() as u64;
         process_run(
             schedule,
+            trip_index,
             trip,
             run,
             buffer,
@@ -135,11 +146,8 @@ pub fn process_day(
 
     let (route_vehicles, network_vehicles) = count_vehicles(&acc.vehicles_seen);
 
-    quality.trips_observed = trips
-        .iter()
-        .filter(|t| t.coverage >= OBSERVED_COVERAGE)
-        .count() as u32;
-    quality.trips_complete = trips.iter().filter(|t| t.complete()).count() as u32;
+    quality.trips_observed = acc.trips_seen.len() as u32;
+    quality.trips_complete = acc.trips_seen_complete.len() as u32;
 
     add_poll_coverage(buffer, schedule, date, origin, &mut quality);
 
@@ -365,6 +373,7 @@ fn add_input_counts(buffer: &RtBuffer, origin: i64, quality: &mut Quality) {
 #[allow(clippy::too_many_arguments)]
 fn process_run(
     schedule: &Schedule,
+    trip_index: u32,
     trip: &Trip,
     run: &[Fix],
     buffer: &RtBuffer,
@@ -438,7 +447,7 @@ fn process_run(
     };
     let first_observed = (first.t - origin) as i32;
     let last_observed = (last.t - origin) as i32;
-    if coverage >= OBSERVED_COVERAGE {
+    if coverage >= OBSERVED_COVERAGE && acc.trips_seen.insert(trip_index) {
         acc.route_hour(
             trip.route,
             pattern.dir,
@@ -451,7 +460,7 @@ fn process_run(
             .service_seconds_observed += seconds;
     });
 
-    trips.push(TripRow {
+    let row = TripRow {
         pattern: trip.pattern,
         route: trip.route,
         dir: pattern.dir,
@@ -469,7 +478,11 @@ fn process_run(
         end_deviation: stop_row.end_deviation,
         fixes: trace.points.len() as u32,
         off_route: trace.off_route,
-    });
+    };
+    if row.complete() {
+        acc.trips_seen_complete.insert(trip_index);
+    }
+    trips.push(row);
 }
 
 /// Where the schedule says the trip should be, as a tie-breaker for the first fix.
@@ -1064,6 +1077,33 @@ mod tests {
             });
         assert!(headways.count >= 4, "{headways:?}");
         assert_eq!(headways.gapped, headways.count, "{headways:?}");
+    }
+
+    #[test]
+    fn a_vehicle_swap_mid_trip_still_counts_as_one_observed_trip() {
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "T0", "V1", 7 * 3600, 0, 1.0);
+        drive(&mut buffer, "T0", "V2", 7 * 3600, 30, 1.0);
+        let result = run_day(&mut buffer);
+        assert_eq!(result.cube.trips.len(), 2, "both runs stay visible");
+        assert_eq!(result.cube.quality.trips_observed, 1);
+        let observed: u32 = result
+            .cube
+            .route_hours
+            .iter()
+            .map(|r| r.trips_observed)
+            .sum();
+        assert_eq!(observed, 1);
+    }
+
+    #[test]
+    fn funnel_counts_cover_only_the_hours_a_day_owns() {
+        let mut buffer = RtBuffer::default();
+        // The evening before this service day starts, still in the buffer.
+        drive(&mut buffer, "UNKNOWN", "V1", -6 * 3600, 0, 1.0);
+        let result = run_day(&mut buffer);
+        assert_eq!(result.cube.quality.fixes_trip_unmatched, 0);
+        assert_eq!(result.cube.quality.fixes_unique, 0);
     }
 
     #[test]
