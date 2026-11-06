@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Every route, every hour.
+  // Every route, every hour, sized to the space it has.
   import type {Mode, RouteScore} from '../engine/types';
+  import {measure} from '../lib/actions';
   import {hourRange, hourShort, speedWithUnit, type Units} from '../lib/format';
   import {HOURS} from '../lib/scale';
   import {breaksMps, classVar} from '../lib/speed-scale';
@@ -14,17 +15,19 @@
   }
   let {routes, units, mode, onselect}: Props = $props();
   const breaks = $derived(breaksMps(mode));
-  const cell = 28;
+  let available = $state(700);
   const rowHeight = 21;
   const left = 54;
-  const width = left + HOURS.length * cell;
+  const cell = $derived(Math.max(12, Math.min(44, Math.floor((available - left) / HOURS.length))));
+  const width = $derived(left + HOURS.length * cell);
+  const labelEvery = $derived(cell >= 26 ? 2 : cell >= 16 ? 3 : 6);
   const height = $derived(20 + routes.length * rowHeight);
 </script>
 
-<div class="scroll-x" tabindex="0" role="region" aria-label="Speed by route and hour. Scrolls sideways.">
+<div class="fit" use:measure={w => (available = w)}>
   <svg class="heat" viewBox="0 0 {width} {height}" width={width} height={height} role="group" aria-label="Speed by route and service hour">
     {#each HOURS as hour, i}
-      {#if (hour - 4) % 2 === 0}
+      {#if (hour - 4) % labelEvery === 0}
         <text x={left + i * cell + cell / 2} y="13" text-anchor="middle">{hourShort(hour)}</text>
       {/if}
     {/each}
@@ -57,6 +60,7 @@
 </div>
 
 <style>
+  .fit { min-width: 0; }
   .heat { display: block; }
   .heat text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
   .heat text.label { fill: var(--ink); font-size: 12px; font-weight: 600; }

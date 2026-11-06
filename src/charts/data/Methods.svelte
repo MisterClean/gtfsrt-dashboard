@@ -9,6 +9,23 @@
   };
   const windowText = $derived(`${minutesText(app.earlyS)} early to ${minutesText(app.lateS)} late`);
 
+  // A link from a report opens its section. Waits a frame, since moving to this page
+  // scrolls to the top first.
+  $effect(() => {
+    const topic = app.methodTopic;
+    if (!topic) return;
+    const frame = requestAnimationFrame(() => {
+      const section = document.getElementById(`method-${topic}`);
+      if (section instanceof HTMLDetailsElement) {
+        section.open = true;
+        section.scrollIntoView({block: 'start'});
+        section.querySelector('summary')?.focus({preventScroll: true});
+      }
+      app.methodTopic = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
   const rules = [
     {tag: 'T1', name: 'Terminal layover', rule: 'Measured from the first report more than 500 ft (152 m) past where the trip was first seen, up to the first report within 500 ft of the furthest point it reached.', why: 'Vehicles waiting on purpose at the ends of a line are not running slowly.'},
     {tag: 'T2', name: 'Standstill', rule: 'A run of intervals each moving 100 ft (30 m) or less, lasting 10 minutes or more in total, is removed.', why: 'Breakdowns, holds and parked vehicles still logged in. Ordinary stop and signal time stays.'},
@@ -33,7 +50,7 @@
 </div>
 
 <div class="definitions">
-  <details open>
+  <details id="method-speed" open>
     <summary>Operating speed</summary>
     <div class="body">
       <p>Distance along the route line divided by elapsed time between position reports, added up across intervals: total distance over total time, not an average of speeds. It includes time at stops, at signals and in traffic, which is the time a rider spends on board. It excludes terminal layovers. It leaves out walking and waiting, so it isn’t a door-to-door trip time.</p>
@@ -57,7 +74,7 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-period">
     <summary>Period speeds on fixed segments</summary>
     <div class="body">
       <p>Some trips only run at certain hours. A rush-only trip into slow downtown blocks would look like congestion if every measurement were simply pooled by period. So the route scorecard compares morning peak (7–9 AM), midday (10 AM–2 PM) and evening peak (4–6 PM) on the same street segments.</p>
@@ -66,14 +83,14 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-ci">
     <summary>Confidence intervals</summary>
     <div class="body">
       <p>With five or more days selected, the route scorecard shows a 95% interval on peak speed and on the change from midday. Days are resampled with replacement 1,000 times, using each route’s pooled daily speeds, so it reflects how much the result would move with a different set of days. It does not capture error in individual GPS reports. Because the interval uses pooled speeds, a fixed-segment estimate can fall just outside it.</p>
     </div>
   </details>
 
-  <details>
+  <details id="method-time">
     <summary>Service days and time</summary>
     <div class="body">
       <p>Days here are local GTFS service days, not UTC archive days. Scheduled times count from noon minus twelve hours on the service date, so a trip can run past 24:00:00 and daylight-saving days still line up. One service day overlaps two UTC archive files, and each file is read only once.</p>
@@ -82,17 +99,17 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-matching">
     <summary>Placing vehicles on the route</summary>
     <div class="body">
       <p>A trip ID leads to a route line and stop list in that day’s schedule. Each report is projected onto the line inside a window that moves with the vehicle: from 60 m behind its last position to as far ahead as the speed backstop allows, plus 200 m. This keeps a match on the correct pass of a loop or an out-and-back line. Reports more than 120 m from the line count as off route and are skipped.</p>
-      <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used, then the best fit within the next 150 m, so a hook at the end of a line is reached rather than stopped short of.</p>
+      <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used. Within 300 m of the end of the line, the best fit in the next 150 m is used instead, so a terminal hook is reached rather than stopped short of.</p>
       <p>Some agencies draw their lines out to each stop's curb and back. A vehicle doesn't drive those detours, so they are removed before measuring distance: a turn of 75° or more between two segments of up to 30 m, where the road carries on in about the same direction beyond it.</p>
       <p>Stops are placed along the line so that their order is preserved, choosing the combination that keeps stops closest to the line.</p>
     </div>
   </details>
 
-  <details>
+  <details id="method-passes">
     <summary>Stop passes</summary>
     <div class="body">
       <p>A vehicle passes a stop when its progress crosses a point just beyond the stop, interpolated between the reports either side. If those reports are more than five minutes apart, or the trip started past the stop, no pass is recorded rather than guessing.</p>
@@ -100,7 +117,7 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-ontime">
     <summary>On-time performance</summary>
     <div class="body">
       <p>The observed departure minus the scheduled departure at each timepoint, or the arrival at the last stop. The current window counts a departure as on time from {windowText}. Exactly {minutesText(app.earlyS)} early is on time, and exactly {minutesText(app.lateS)} late is late.</p>
@@ -108,7 +125,7 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-headways">
     <summary>Headways, bunching and excess wait</summary>
     <div class="body">
       <p>These apply to frequent service only: stops and times where the schedule runs every 15 minutes or better. At lower frequencies riders time their arrival, so schedule adherence is the right measure instead.</p>
@@ -124,14 +141,14 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-runtime">
     <summary>Run times</summary>
     <div class="body">
       <p>Time from the first stop passed to the last, on trips observed moving over at least 90% of their line. The 10th, 50th and 90th percentiles come from the route’s main pattern in each direction, grouped by the hour the trip was scheduled to start, beside the median scheduled time between the same stops.</p>
     </div>
   </details>
 
-  <details>
+  <details id="method-hotspots">
     <summary>Delay hotspots</summary>
     <div class="body">
       <p>Delay is time lost on a street cell compared with that cell’s own freest conditions, pooled across every route through it. The reference is the 85th percentile of its hourly speeds, and needs at least three hours with enough measurements. Delay is the sum over hours of time spent minus the time the same distance would take at the reference speed, counting only time above it.</p>
@@ -140,21 +157,21 @@
     </div>
   </details>
 
-  <details>
+  <details id="method-slowest">
     <summary>Slowest stretch</summary>
     <div class="body">
       <p>The slowest window of about half a mile (800 m) on a route’s main pattern at peak. It keeps a mile from each end of the line, or 10% of its length on routes under three miles, to avoid turnarounds and layovers. Named by the nearest stops.</p>
     </div>
   </details>
 
-  <details>
+  <details id="method-spacing">
     <summary>Stop spacing</summary>
     <div class="body">
       <p>Distances along the line between consecutive stops on each route’s main pattern in each direction. Under 800 ft (244 m) counts as closely spaced. This describes the stops as scheduled. It doesn’t weigh ridership, access or safety, so it’s where a stop balancing review starts rather than ends.</p>
     </div>
   </details>
 
-  <details>
+  <details id="method-service">
     <summary>Service levels and vehicles</summary>
     <div class="body">
       <p>A trip counts as observed when it moved over at least half of its line, by the hour it was scheduled to start. Scheduled trips come from the calendar and calendar exceptions for that date. Trips defined only through <code>frequencies.txt</code> aren’t expanded, so they count once and their schedule comparisons aren’t meaningful.</p>
@@ -166,6 +183,8 @@
 <p class="note">The full reference, with formulas and how each measure compares with common agency practice, is in <a href="https://github.com/MisterClean/gtfsrt-dashboard/blob/main/docs/metrics.md" target="_blank" rel="noopener noreferrer">docs/metrics.md</a>.</p>
 
 <style>
+  /* Opened from a report link: clear of the sticky top bar. */
+  details { scroll-margin-top: 72px; }
   .claims { display: grid; gap: 8px; }
   .claims ul, .plain { list-style: none; display: grid; gap: 6px; max-width: 72ch; }
   .claims li, .plain li, .body p { text-wrap: pretty; }

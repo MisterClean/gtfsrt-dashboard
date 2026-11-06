@@ -5,6 +5,7 @@ import type {
   AnalyzeResult, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
 } from '../engine/types';
 import {decodeDates, encodeDates, lastDays} from './dates';
+import {slowestHour} from './findings';
 import {dateNumber, plural, type Units} from './format.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
@@ -44,6 +45,10 @@ class AppState {
   routeId = $state<string | null>(null);
   directionIndex = $state(0);
   mapHour = $state(17);
+  /** The visitor picked an hour, or a link did. Until then the map opens on the slowest one. */
+  private hourChosen = false;
+  /** The method section a report link asked for, opened once the page is there. */
+  methodTopic = $state<MethodTopic | null>(null);
 
   units = $state<Units>('imperial');
   theme = $state<'auto' | 'light' | 'dark'>('auto');
@@ -154,7 +159,7 @@ class AppState {
     if (view && ['overview', 'map', 'routes', 'route', 'reliability', 'stops', 'hotspots', 'data'].includes(view)) this.view = view;
     this.routeId = params.get('route');
     const hour = Number(params.get('hour'));
-    if (Number.isInteger(hour) && hour >= 0 && hour < 30 && params.has('hour')) this.mapHour = hour;
+    if (Number.isInteger(hour) && hour >= 0 && hour < 30 && params.has('hour')) this.setMapHour(hour);
     const mode = params.get('mode') as Mode | null;
     if (mode && ['All', 'Bus', 'Rail', 'Ferry', 'Other', 'Unknown'].includes(mode)) this.mode = mode;
     const dates = decodeDates(params);
@@ -360,6 +365,7 @@ class AppState {
       this.routes = routes;
       this.quality = quality;
       this.reportError = null;
+      if (!this.hourChosen) this.mapHour = slowestHour(overview)?.hour ?? this.mapHour;
       this.version += 1;
     } catch (error) {
       if (token === this.refreshToken) this.reportError = errorText(error);
@@ -367,6 +373,16 @@ class AppState {
   }
 
   // ---- Navigation -----------------------------------------------------------
+
+  setMapHour(hour: number) {
+    this.mapHour = hour;
+    this.hourChosen = true;
+  }
+
+  showMethod(topic: MethodTopic) {
+    this.methodTopic = topic;
+    this.go('data');
+  }
 
   go(view: View, routeId?: string) {
     this.view = view;
@@ -379,6 +395,9 @@ class AppState {
     scrollTo({top: 0});
   }
 }
+
+/** The sections of Data & methods a report can link to. */
+export type MethodTopic = 'speed' | 'period' | 'ci' | 'time' | 'matching' | 'passes' | 'ontime' | 'headways' | 'runtime' | 'hotspots' | 'slowest' | 'spacing' | 'service';
 
 export function feedLabel(feed: Feed) {
   const name = feed.agency_name ?? feed.agency_id ?? 'Unnamed agency';

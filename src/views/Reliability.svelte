@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Term from '../components/Term.svelte';
   import LineChart from '../charts/LineChart.svelte';
   import DeviationHistogram from '../charts/network/DeviationHistogram.svelte';
   import HourlyStack from '../charts/network/HourlyStack.svelte';
@@ -39,11 +40,6 @@
   const earlyOf = (r: RouteScore) => ratioOf(r.on_time.early, r.on_time.total);
   const lateOf = (r: RouteScore) => ratioOf(r.on_time.late, r.on_time.total);
   const asMinutes = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? null : Number((seconds / 60).toFixed(2)));
-  const signedMinutes = (seconds: number | null | undefined) => {
-    if (seconds === null || seconds === undefined) return '—';
-    const value = (seconds / 60).toFixed(1);
-    return seconds > 0 ? `+${value}` : value.replace('-', '−');
-  };
   const titleOf = (r: RouteScore) => `${r.label} ${routeName(r.label, r.long_name)}`.trim();
 
   const onTimeRows = $derived<RankedRow[]>(
@@ -107,7 +103,7 @@
     {key: 'ontime', label: 'On time', title: `Departures at timepoints ${windowText}`, value: onTimeOf, format: r => pct(onTimeOf(r))},
     {key: 'late', label: 'Late', descending: true, value: lateOf, format: r => pct(lateOf(r))},
     {key: 'early', label: 'Early', descending: true, value: earlyOf, format: r => pct(earlyOf(r))},
-    {key: 'dev', label: 'Mean deviation, min', title: 'Average minutes from schedule. Positive means late.', descending: true, value: r => asMinutes(r.mean_deviation_s), format: r => signedMinutes(r.mean_deviation_s)},
+    {key: 'dev', label: 'Mean deviation', csvLabel: 'Mean deviation, min', title: 'Average time from schedule, in minutes and seconds. Positive means late.', descending: true, value: r => asMinutes(r.mean_deviation_s), format: r => deviation(r.mean_deviation_s)},
     {key: 'timed', label: 'Timed departures', descending: true, value: r => r.on_time.total, format: r => int(r.on_time.total)},
     {key: 'bunched', label: 'Bunched', title: 'Vehicles arriving within a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => r.headways?.bunched ?? null, format: r => pct(r.headways?.bunched)},
     {key: 'gapped', label: 'After a gap', title: 'Vehicles arriving more than one and a half scheduled headways after the one before. Frequent service only.', descending: true, value: r => r.headways?.gapped ?? null, format: r => pct(r.headways?.gapped)},
@@ -144,22 +140,22 @@
     <div class="stats-pair">
       <dl class="stats" aria-label="Schedule adherence at timepoints">
         <div class="stat">
-          <dt>On time</dt>
+          <dt><Term topic="ontime">On time</Term></dt>
           <dd>{pct(ratioOf(o.on_time.on_time, o.on_time.total))}</dd>
           <div class="sub">{int(o.on_time.total)} departures at timepoints</div>
         </div>
         <div class="stat">
-          <dt>Early</dt>
+          <dt><Term topic="ontime">Early</Term></dt>
           <dd>{pct(ratioOf(o.on_time.early, o.on_time.total))}</dd>
           <div class="sub">{earlyMinutes === 0 ? 'before the scheduled time' : `over ${earlyMinutes} min ahead of schedule`}</div>
         </div>
         <div class="stat">
-          <dt>Late</dt>
+          <dt><Term topic="ontime">Late</Term></dt>
           <dd>{pct(ratioOf(o.on_time.late, o.on_time.total))}</dd>
           <div class="sub">{lateMinutes} min or more behind schedule</div>
         </div>
         <div class="stat">
-          <dt>Mean deviation</dt>
+          <dt><Term topic="ontime">Mean deviation</Term></dt>
           <dd>{deviation(o.mean_deviation_s)}</dd>
           <div class="sub">minutes:seconds, positive means late</div>
         </div>
@@ -167,22 +163,22 @@
       {#if o.headways}
         <dl class="stats" aria-label="Headways on frequent service">
           <div class="stat">
-            <dt>Bunched</dt>
+            <dt><Term topic="headways">Bunched</Term></dt>
             <dd>{pct(o.headways.bunched)}</dd>
             <div class="sub">within a quarter of the scheduled headway</div>
           </div>
           <div class="stat">
-            <dt>After a gap</dt>
+            <dt><Term topic="headways">After a gap</Term></dt>
             <dd>{pct(o.headways.gapped)}</dd>
             <div class="sub">over 1.5 scheduled headways behind the last</div>
           </div>
           <div class="stat">
-            <dt>Excess wait</dt>
+            <dt><Term topic="headways">Excess wait</Term></dt>
             <dd>{minutes(o.headways.excess_wait_s, 1)}</dd>
             <div class="sub">{minutes(o.headways.actual_wait_s, 1)} actual, {minutes(o.headways.scheduled_wait_s, 1)} scheduled</div>
           </div>
           <div class="stat">
-            <dt>Wait assessment</dt>
+            <dt><Term topic="headways">Wait assessment</Term></dt>
             <dd>{pct(o.headways.wait_ok)}</dd>
             <div class="sub">within 3 min over the scheduled headway</div>
           </div>
@@ -199,11 +195,11 @@
       </div>
       <div class="pair wide-left">
         <figure>
-          <figcaption><h3>On time, late and early by hour</h3></figcaption>
+          <figcaption><h3><Term topic="ontime">On time, late and early by hour</Term></h3></figcaption>
           <HourlyStack rows={o.hourly} />
         </figure>
         <figure>
-          <figcaption><h3>How far from the schedule</h3></figcaption>
+          <figcaption><h3><Term topic="ontime">How far from the schedule</Term></h3></figcaption>
           <DeviationHistogram bins={o.deviation_bins} edges={o.deviation_edges} earlyS={app.earlyS} lateS={app.lateS} />
         </figure>
       </div>
@@ -215,7 +211,7 @@
       </div>
       <div class="pair">
         <figure>
-          <figcaption><h3>On-time departures</h3></figcaption>
+          <figcaption><h3><Term topic="ontime">On-time departures</Term></h3></figcaption>
           {#if onTimeRows.length}
             <RankedBars rows={onTimeRows} color="var(--blue)" max={1} label="Routes ranked by on-time share, worst first" onselect={id => app.go('route', id)} />
           {:else}
@@ -224,7 +220,7 @@
         </figure>
         <figure>
           <figcaption class="with-control">
-            <h3>Headways on frequent service</h3>
+            <h3><Term topic="headways">Headways on frequent service</Term></h3>
             <div class="seg" role="group" aria-label="Headway measure">
               <button aria-pressed={measure === 'bunched'} onclick={() => (measure = 'bunched')}>Bunched</button>
               <button aria-pressed={measure === 'gapped'} onclick={() => (measure = 'gapped')}>After a gap</button>
@@ -243,7 +239,7 @@
     <section class="section">
       <div class="section-head">
         <div>
-          <h2>Headway regularity through the day</h2>
+          <h2><Term topic="headways">Headway regularity through the day</Term></h2>
           <p class="note">Only stops and times the schedule serves every 15 minutes or better. At lower frequencies riders time their arrival, so keeping to the schedule is the measure that matters. Hours with fewer than {MIN_HOUR_HEADWAYS} headways are left out.</p>
         </div>
       </div>
@@ -253,8 +249,8 @@
           yMin={0}
           format={v => `${(v * 100).toFixed(0)}%`}
           series={[
-            {key: 'gapped', label: 'After a gap', color: 'var(--orange)', values: hourlyHeadway(r => r.headways?.gapped)},
-            {key: 'bunched', label: 'Bunched', color: 'var(--purple)', values: hourlyHeadway(r => r.headways?.bunched)},
+            {key: 'bunched', label: 'Bunched', color: 'var(--orange)', values: hourlyHeadway(r => r.headways?.bunched)},
+            {key: 'gapped', label: 'After a gap', color: 'var(--purple)', values: hourlyHeadway(r => r.headways?.gapped)},
           ]}
         />
       {:else}
@@ -276,6 +272,7 @@
         search={r => `${r.label} ${r.long_name}`}
         placeholder="Find a route…"
         onrow={r => app.go('route', r.id)}
+        limit={25}
         maxHeight="72vh"
       />
       </div>

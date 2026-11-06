@@ -2,6 +2,7 @@
   import Spark from '../charts/Spark.svelte';
   import DataTable, {type Column} from '../components/DataTable.svelte';
   import SpeedLegend from '../components/SpeedLegend.svelte';
+  import Term from '../components/Term.svelte';
   import {engine} from '../engine/client';
   import type {Hotspot, HotspotReport, NetworkMap} from '../engine/types';
   import {hourLabel, int, length, pct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
@@ -59,6 +60,10 @@
     }),
   );
 
+  // The list and the map's numbers match, whichever way the stretches are ranked.
+  const TOP = 10;
+  const top = $derived(sorted.slice(0, TOP).filter(h => h.path.length > 1).map((h, index) => ({path: h.path, rank: index + 1, label: `${index + 1}: ${stretchName(h)}`})));
+
   const delayShare = $derived(report && report.bus_hours_per_day > 0 ? report.delay_hours_per_day / report.bus_hours_per_day : null);
   const topTenShare = $derived.by(() => {
     if (!report || report.delay_hours_per_day <= 0) return null;
@@ -95,8 +100,8 @@
   ];
 
   const columns = $derived<Column<Hotspot>[]>([
-    {key: 'rank', label: 'Rank', value: h => h.rank},
     {key: 'stretch', label: 'Stretch', left: true, wrap: true, value: stretchName},
+    {key: 'rank', label: 'Rank', value: h => h.rank},
     {key: 'routes', label: 'Routes', left: true, wrap: true, value: h => h.routes.join(', ')},
     {key: 'length', label: `Length, ${app.units === 'imperial' ? 'mi' : 'km'}`, descending: true, value: h => distance(h.length_m), format: h => distance(h.length_m).toFixed(2)},
     {key: 'delay', label: 'Time lost, hours a day', title: 'Vehicle hours lost each day against this stretch\'s freest conditions', descending: true, value: h => Number(h.delay_hours_per_day.toFixed(2)), format: h => h.delay_hours_per_day.toFixed(1)},
@@ -118,7 +123,7 @@
   <div class="page-head">
     <div>
       <h1>Delay hotspots</h1>
-      <p class="lede">Where vehicles lose the most time, measured against each street's own freest conditions: the 85th percentile of its hourly speeds. A street that is slow all day loses little by this measure, so look for it under worst speed instead. These are vehicle hours, not rider hours, because the archive has no ridership.</p>
+      <p class="lede">Where vehicles lose the most time, measured against each street's own freest hours.</p>
     </div>
   </div>
 
@@ -129,17 +134,17 @@
   {#if report}
     <dl class="stats">
       <div class="stat">
-        <dt>Time lost</dt>
+        <dt><Term topic="hotspots">Time lost</Term></dt>
         <dd>{int(report.delay_hours_per_day)} <small>vehicle hours a day</small></dd>
         <div class="sub">against each street's freest hours</div>
       </div>
       <div class="stat">
-        <dt>Share of vehicle hours</dt>
+        <dt><Term topic="hotspots">Share of vehicle hours</Term></dt>
         <dd>{pct(delayShare)}</dd>
         <div class="sub">of {int(report.bus_hours_per_day)} measured hours a day</div>
       </div>
       <div class="stat">
-        <dt>Top 10 stretches</dt>
+        <dt><Term topic="hotspots">Top 10 stretches</Term></dt>
         <dd>{pct(topTenShare)}</dd>
         <div class="sub">of all time lost across the network</div>
       </div>
@@ -147,7 +152,8 @@
 
     <section class="section" aria-label="Map and ranked stretches">
       <div class="tools">
-        <div class="seg" role="group" aria-label="Time period shown on the map">
+        <span class="fine">Map colors</span>
+        <div class="seg" role="group" aria-label="Time period shown on the map colors">
           {#each periods as option}
             <button aria-pressed={period === option.value} onclick={() => (period = option.value)}>{option.label}</button>
           {/each}
@@ -164,9 +170,11 @@
             {period}
             mode={app.scaleMode}
             units={app.units}
-            height="min(72vh, 680px)"
+            height="max(360px, min(calc(100dvh - 360px), 680px))"
             highlight={selected?.path ?? null}
-            label="Map of speed on each street, with the chosen stretch outlined"
+            ranked={top}
+            onrank={rank => choose(sorted[rank - 1])}
+            label="Map of speed on each street, with the top {top.length} stretches outlined and numbered"
           />
           <SpeedLegend mode={app.scaleMode} units={app.units} />
         </div>
@@ -181,7 +189,7 @@
           </div>
           {#if sorted.length}
             <ol class="list">
-              {#each sorted.slice(0, 8) as hotspot, index}
+              {#each sorted.slice(0, TOP) as hotspot, index}
                 {@const active = !!selected && sameStretch(selected, hotspot)}
                 <li>
                   <button class:active aria-pressed={active} onclick={() => choose(hotspot)}>
@@ -228,10 +236,11 @@
         search={h => `${stretchName(h)} ${h.routes.join(' ')}`}
         placeholder="Find a street or route…"
         onrow={choose}
+        limit={25}
         maxHeight="72vh"
       />
       </div>
-      <p class="note">Time lost shows where running time could be recovered. It doesn't say why, which could be traffic, signals, stops or turns. The map's colors show the period chosen above, while time lost covers the whole service day.</p>
+      <p class="note">Freest means the 85th percentile of a stretch's hourly speeds, so a street that is slow all day loses little by this measure. Look for it under worst speed instead. Time lost shows where running time could be recovered. It doesn't say why, which could be traffic, signals, stops or turns. It covers the whole service day, and these are vehicle hours, not rider hours, because the archive has no ridership.</p>
     </section>
   {:else if !failure}
     <p class="empty">Calculating…</p>
@@ -240,7 +249,7 @@
 
 <style>
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
-  .map-col { display: grid; gap: 10px; min-width: 0; }
+  .map-col { display: grid; gap: 10px; min-width: 0; position: sticky; top: 72px; }
   .ranked { display: grid; gap: 10px; min-width: 0; }
   .ranked-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
   .list { list-style: none; display: grid; }
@@ -262,5 +271,6 @@
   .compact-heads :global(table.data th) { white-space: normal; min-width: 52px; line-height: 1.25; }
   @media (max-width: 1100px) {
     .layout { grid-template-columns: minmax(0, 1fr); }
+    .map-col { position: static; }
   }
 </style>

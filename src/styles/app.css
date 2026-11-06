@@ -75,7 +75,7 @@
   --gray-series: #8e8d85;
   --c0: #ff8a75;
   --c1: #e8604f;
-  --c2: #a0543f;
+  --c2: #bf6a52;
   --c3: #6c6a64;
   --c4: #3c6ea8;
   --c5: #4c92e6;
@@ -200,7 +200,14 @@ select.input:hover, input.input:hover, .field select:hover { border-color: var(-
 .scroll-x { overflow-x: auto; min-width: 0; }
 
 /* Tables */
-.table-wrap { overflow: auto; min-width: 0; border-block: 1px solid var(--rule); }
+.table-wrap {
+  overflow: auto; min-width: 0; border-block: 1px solid var(--rule);
+  /* A shadow at the right edge while more columns remain. The first layer scrolls with
+     the table and covers it at the far end. */
+  background:
+    linear-gradient(to left, var(--paper) 40%, transparent) right center / 36px 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right center / 14px 100% no-repeat scroll;
+}
 table.data { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
 table.data th, table.data td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); vertical-align: middle; }
 table.data tr:last-child td { border-bottom: 0; }
@@ -214,6 +221,11 @@ table.data th button { all: unset; cursor: pointer; display: inline-flex; gap: 4
 table.data th button:hover { color: var(--ink); }
 table.data th button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 table.data th.left, table.data td.left { text-align: left; }
+/* The first column stays put so a row keeps its name while the rest scrolls. */
+table.data th:first-child, table.data td:first-child { position: sticky; left: 0; background: var(--paper); box-shadow: inset -1px 0 0 var(--rule); }
+table.data th:first-child { z-index: 3; box-shadow: inset 0 -1px 0 var(--rule-strong), inset -1px 0 0 var(--rule); }
+table.data td:first-child { z-index: 1; }
+table.data td.clip { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 table.data td.wrap { white-space: normal; min-width: 200px; max-width: 320px; line-height: 1.35; }
 table.data tbody tr:hover td { background: var(--surface); }
 table.data tbody tr.clickable { cursor: pointer; }
@@ -253,6 +265,8 @@ table.data .dim { color: var(--faint); }
 
 @media (max-width: 860px) {
   :root { --gutter: 16px; --rail: 0px; }
+  table.data th, table.data td { padding: 6px; }
+  table.data td.wrap:first-child { min-width: 140px; max-width: 170px; }
   h1, .display { font-size: 28px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat { padding: 10px 10px 10px 0; }

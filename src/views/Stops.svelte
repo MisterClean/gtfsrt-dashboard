@@ -1,11 +1,12 @@
 <script lang="ts">
+  import Term from '../components/Term.svelte';
   import SpacingHistogram from '../charts/network/SpacingHistogram.svelte';
   import StopsMap from '../charts/network/StopsMap.svelte';
   import DataTable, {type Column} from '../components/DataTable.svelte';
   import RouteBadge from '../components/RouteBadge.svelte';
   import {engine} from '../engine/client';
   import type {RouteSpacing, StopRow, StopsReport} from '../engine/types';
-  import {int, pct, shortLength} from '../lib/format';
+  import {deviation, int, pct, shortLength} from '../lib/format';
   import {app, errorText} from '../lib/state.svelte';
 
   const FEET = 3.28084;
@@ -85,11 +86,6 @@
   ]);
 
   const deviationMinutes = (seconds: number | null) => (seconds === null ? null : Number((seconds / 60).toFixed(2)));
-  const signedMinutes = (seconds: number | null) => {
-    if (seconds === null) return '—';
-    const value = (seconds / 60).toFixed(1);
-    return seconds > 0 ? `+${value}` : value.replace('-', '−');
-  };
 
   const stopColumns = $derived<Column<StopRow>[]>([
     {key: 'name', label: 'Stop', left: true, wrap: true, value: s => s.name},
@@ -99,7 +95,7 @@
     {key: 'scheduled', label: 'Scheduled a day', descending: true, value: s => Number(s.scheduled_per_day.toFixed(1)), format: s => int(s.scheduled_per_day)},
     {key: 'zone', label: 'Stop zone, s', title: 'Average seconds within about 25 m either side of the stop', descending: true, value: s => (s.zone_seconds === null ? null : Number(s.zone_seconds.toFixed(1))), format: s => (s.zone_seconds === null ? '—' : s.zone_seconds.toFixed(0))},
     {key: 'hours', label: 'Stop zone, hours a day', title: 'Vehicle hours spent in this stop zone each day', descending: true, value: s => Number(s.zone_hours_per_day.toFixed(2)), format: s => s.zone_hours_per_day.toFixed(1)},
-    {key: 'deviation', label: 'Mean deviation, min', title: 'Average minutes from schedule at this stop. Positive means late.', descending: true, value: s => deviationMinutes(s.mean_deviation_s), format: s => signedMinutes(s.mean_deviation_s)},
+    {key: 'deviation', label: 'Mean deviation', csvLabel: 'Mean deviation, min', title: 'Average time from schedule at this stop, in minutes and seconds. Positive means late.', descending: true, value: s => deviationMinutes(s.mean_deviation_s), format: s => deviation(s.mean_deviation_s)},
     {key: 'nearest', label: `Nearest stop, ${distanceUnit}`, title: 'Shortest distance along any route to a neighbouring stop', value: s => toDistance(s.nearest_stop_m), format: s => int(toDistance(s.nearest_stop_m))},
   ]);
 </script>
@@ -124,22 +120,22 @@
   {#if report && summary}
     <dl class="stats">
       <div class="stat">
-        <dt>Stops in use</dt>
+        <dt><Term topic="spacing">Stops in use</Term></dt>
         <dd>{int(inUse.length)}</dd>
         <div class="sub">with scheduled or observed service</div>
       </div>
       <div class="stat">
-        <dt>Median spacing</dt>
+        <dt><Term topic="spacing">Median spacing</Term></dt>
         <dd>{shortLength(summary.median, app.units)}</dd>
         <div class="sub">on each route's main line</div>
       </div>
       <div class="stat">
-        <dt>Stops per {densityUnit}</dt>
+        <dt><Term topic="spacing">Stops per {densityUnit}</Term></dt>
         <dd>{summary.perKm === null ? '—' : toDensity(summary.perKm).toFixed(1)}</dd>
         <div class="sub">along those lines</div>
       </div>
       <div class="stat">
-        <dt>Closely spaced gaps</dt>
+        <dt><Term topic="spacing">Closely spaced gaps</Term></dt>
         <dd>{pct(summary.closeShare)}</dd>
         <div class="sub">under {thresholdText}</div>
       </div>
@@ -154,11 +150,11 @@
       </div>
       <div class="pair">
         <figure>
-          <figcaption><h3>Gaps between consecutive stops</h3></figcaption>
+          <figcaption><h3><Term topic="spacing">Gaps between consecutive stops</Term></h3></figcaption>
           <SpacingHistogram histogram={report.spacing_histogram} binM={report.spacing_bin_m} thresholdM={report.close_threshold_m} units={app.units} height={320} />
         </figure>
         <figure>
-          <figcaption><h3>Where stops sit closest together</h3></figcaption>
+          <figcaption><h3><Term topic="spacing">Where stops sit closest together</Term></h3></figcaption>
           <StopsMap stops={inUse} thresholdM={report.close_threshold_m} units={app.units} height="320px" />
           <div class="legend">
             <span class="key"><span class="swatch dot" style:background="var(--orange)"></span>Under {thresholdText} from a neighbouring stop</span>
@@ -181,6 +177,7 @@
         search={r => `${r.label} ${r.headsign}`}
         placeholder="Find a route…"
         onrow={r => app.go('route', r.route)}
+        limit={25}
         maxHeight="56vh"
       />
     </section>
@@ -198,7 +195,7 @@
         caption="Stops with their service, time around the stop and distance to the nearest stop"
         defaultSort="hours"
         defaultDescending
-        limit={100}
+        limit={25}
         filename="stops.csv"
         search={s => `${s.name} ${s.code} ${s.routes.join(' ')}`}
         placeholder="Find a stop or route…"

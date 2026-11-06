@@ -5,6 +5,12 @@
     title?: string;
     left?: boolean;
     wrap?: boolean;
+    /** One line, cut with an ellipsis, so one long cell can't set the row height. */
+    clip?: boolean;
+    /** The full text of a clipped cell. */
+    hint?: (row: R) => string;
+    /** The CSV heading, when it needs a unit the table shows another way. */
+    csvLabel?: string;
     /** The value used to sort, and the CSV cell unless `csv` is given. */
     value: (row: R) => number | string | null | undefined;
     format?: (row: R) => string;
@@ -91,7 +97,7 @@
 
   function exportCsv() {
     if (!filename) return;
-    downloadCsv(filename, columns.map(c => ({label: c.label, value: c.csv ?? c.value})), sorted);
+    downloadCsv(filename, columns.map(c => ({label: c.csvLabel ?? c.label, value: c.csv ?? c.value})), sorted);
   }
 </script>
 
@@ -104,7 +110,7 @@
     {#if filename}<button class="btn small quiet" onclick={exportCsv}>Download CSV</button>{/if}
   </div>
 {/if}
-<div class="table-wrap" tabindex="0" role="region" aria-label={caption} style:max-height={maxHeight}>
+<div class="table-wrap" tabindex="0" role="region" aria-label={caption} style:max-height={!limit || showAll ? maxHeight : undefined}>
   <table class="data">
     <caption class="sr-only">{caption}</caption>
     <thead>
@@ -139,7 +145,7 @@
       {#each visible as row}
         <tr class:clickable={!!onrow} onclick={() => onrow?.(row)}>
           {#each columns as column}
-            <td class:left={column.left} class:wrap={column.wrap}>
+            <td class:left={column.left} class:wrap={column.wrap} class:clip={column.clip} title={column.hint?.(row)}>
               {#if column.cell}{@render column.cell(row)}{:else}{column.format ? column.format(row) : (column.value(row) ?? '—')}{/if}
             </td>
           {/each}

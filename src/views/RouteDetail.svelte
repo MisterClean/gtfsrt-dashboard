@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Term from '../components/Term.svelte';
   // One route in depth: where and when it slows, how each trip ran, and how
   // reliable it is against the schedule.
   import LineChart from '../charts/LineChart.svelte';
@@ -29,7 +30,8 @@
   let highlight = $state<[number, number][] | null>(null);
 
   let chosenDate = $state<string | null>(null);
-  let timeWindow = $state<'all' | 'am' | 'mid' | 'pm' | 'eve'>('all');
+  // Null follows the data: the part of the day where vehicles bunch most.
+  let chosenWindow = $state<WindowKey | null>(null);
   let line = $state<StringLine | null>(null);
   let eventsAvailable = $state(true);
   let lineFailure = $state<string | null>(null);
@@ -112,6 +114,7 @@
     };
   });
 
+  type WindowKey = 'all' | 'am' | 'mid' | 'pm' | 'eve';
   const windows = [
     {value: 'all', label: 'All day', from: null, to: null},
     {value: 'am', label: '6–10 AM', from: 6 * 3600, to: 10 * 3600},
@@ -119,6 +122,23 @@
     {value: 'pm', label: '3–7 PM', from: 15 * 3600, to: 19 * 3600},
     {value: 'eve', label: 'After 7 PM', from: 19 * 3600, to: 26 * 3600},
   ] as const;
+  /** A whole day is too dense to read, so the chart opens where bunching is worst. */
+  const busiestWindow = $derived.by<WindowKey>(() => {
+    let best: WindowKey = 'pm';
+    let most = 0;
+    for (const option of windows) {
+      if (option.from === null) continue;
+      const bunched = (direction?.hourly ?? [])
+        .filter(row => row.hour * 3600 >= option.from && row.hour * 3600 < option.to)
+        .reduce((sum, row) => sum + (row.headways ? row.headways.bunched * row.headways.count : 0), 0);
+      if (bunched > most) {
+        most = bunched;
+        best = option.value;
+      }
+    }
+    return best;
+  });
+  const timeWindow = $derived(chosenWindow ?? busiestWindow);
   const activeWindow = $derived(windows.find(option => option.value === timeWindow) ?? windows[0]);
 
   /** Tells directions apart even when an agency repeats a headsign. */
@@ -307,12 +327,12 @@
 
     <dl class="stats">
       <div class="stat">
-        <dt>Operating speed</dt>
+        <dt><Term topic="speed">Operating speed</Term></dt>
         <dd>{speed(score.speed, app.units)} <small>{unit}</small></dd>
         <div class="sub">{speed(score.scheduled_speed, app.units)} scheduled</div>
       </div>
       <div class="stat">
-        <dt>Peak against midday</dt>
+        <dt><Term topic="period">Peak against midday</Term></dt>
         <dd>{signedPct(score.peak_change)}</dd>
         <div class="sub">
           {#if score.peak_change_ci}
@@ -323,24 +343,24 @@
         </div>
       </div>
       <div class="stat">
-        <dt>On-time departures</dt>
+        <dt><Term topic="ontime">On-time departures</Term></dt>
         <dd>{pct(ratioOf(score.on_time.on_time, score.on_time.total))}</dd>
         <div class="sub">{pct(ratioOf(score.on_time.late, score.on_time.total))} late, {pct(ratioOf(score.on_time.early, score.on_time.total))} early</div>
       </div>
       <div class="stat">
-        <dt>Trips observed</dt>
+        <dt><Term topic="service">Trips observed</Term></dt>
         <dd>{int(score.trips_observed / days)} <small>a day</small></dd>
         <div class="sub">{pct(ratioOf(score.trips_observed, score.trips_scheduled), 1)} of {int(score.trips_scheduled / days)} scheduled</div>
       </div>
       {#if score.headways}
         <div class="stat">
-          <dt>Excess wait</dt>
+          <dt><Term topic="headways">Excess wait</Term></dt>
           <dd>{minutes(score.headways.excess_wait_s, 1)}</dd>
           <div class="sub">{pct(score.headways.bunched)} bunched, {pct(score.headways.gapped)} after a gap</div>
         </div>
       {/if}
       <div class="stat">
-        <dt>Run time, median</dt>
+        <dt><Term topic="runtime">Run time, median</Term></dt>
         <dd>{minutes(score.run_p50_s)}</dd>
         <div class="sub">{minutes(score.run_p90_s)} at the 90th percentile, {minutes(score.run_scheduled_s)} scheduled</div>
       </div>
@@ -366,7 +386,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Where and when it slows</h2>
+            <h2><Term topic="speed">Where and when it slows</Term></h2>
             <p class="note">Each column is a stretch of the route, first stop on the left. Each row is an hour. A vertical band is a place that is always slow; a horizontal one is a time of day that is. Choose a row to show that hour on the map.</p>
           </div>
           <button class="btn small quiet" onclick={downloadProfile}>Download CSV</button>
@@ -380,7 +400,7 @@
           mode={scaleMode}
           slowest={direction.slowest}
           selectedHour={app.mapHour}
-          onpick={hour => (app.mapHour = hour)}
+          onpick={hour => app.setMapHour(hour)}
         />
         <div class="map-row">
           <div class="map-col">
@@ -395,12 +415,12 @@
                 label="Map of average speed along route {score.label}"
               />
             {/key}
-            <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} height={96} scope="on this route" onchange={hour => (app.mapHour = hour)} />
+            <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} scope="on this route" onchange={hour => (app.mapHour = hour)} />
           </div>
           <aside class="map-side">
             {#if direction.slowest}
               <div class="slowest">
-                <h3>Slowest stretch at peak</h3>
+                <h3><Term topic="slowest">Slowest stretch at peak</Term></h3>
                 <p class="slowest-speed">{speedWithUnit(direction.slowest.speed, app.units)}</p>
                 <p class="note">{direction.slowest.from} to {direction.slowest.to}, about {formatLength(direction.slowest.length_m, app.units)}.</p>
                 <div class="tools">
@@ -425,7 +445,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Every trip on one day</h2>
+            <h2><Term topic="passes">Every trip on one day</Term></h2>
             <p class="note">Time runs across and the route runs down. Lines that converge are vehicles catching each other, and a line flattening out is a vehicle standing still.</p>
           </div>
           <div class="tools">
@@ -439,7 +459,7 @@
             </label>
             <div class="seg" role="group" aria-label="Time of day">
               {#each windows as option}
-                <button aria-pressed={timeWindow === option.value} onclick={() => (timeWindow = option.value)}>{option.label}</button>
+                <button aria-pressed={timeWindow === option.value} onclick={() => (chosenWindow = option.value)}>{option.label}</button>
               {/each}
             </div>
             {#if line}<span class="fine num">{plural(line.trips.length, 'trip')}</span>{/if}
@@ -464,7 +484,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Run times</h2>
+            <h2><Term topic="runtime">Run times</Term></h2>
             <p class="note">How long the main pattern takes end to end, by the hour a trip was scheduled to start. A wide bar means an unpredictable run, which the schedule has to cover with recovery time.</p>
           </div>
         </div>
@@ -478,7 +498,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Where lateness builds</h2>
+            <h2><Term topic="ontime">Where lateness builds</Term></h2>
             <p class="note">Mean deviation from the schedule at each stop, by time of day. A climbing line is losing time; a falling one is recovering it. Many agencies interpolate times between timepoints, so read the trend rather than single stops.</p>
           </div>
         </div>
@@ -492,7 +512,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Headways</h2>
+            <h2><Term topic="headways">Headways</Term></h2>
             {#if hasHeadways}
               <p class="note">The time between vehicles, averaged across stops, in the hours scheduled every 15 minutes or better. Riders on frequent service don't time their arrival, so spacing matters more to them than the timetable.</p>
             {/if}
@@ -539,7 +559,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Stop by stop</h2>
+            <h2><Term topic="passes">Stop by stop</Term></h2>
             <p class="note">Stop time is the average spent within about 80 feet of the stop, including queuing and dwell. With position reports every 20 seconds or so, it is only meaningful averaged over many passes.</p>
           </div>
         </div>
@@ -551,6 +571,7 @@
           filename="route-{score.id}-direction-{direction.dir}-stops.csv"
           search={stop => `${stop.name} ${stop.id}`}
           placeholder="Find a stop…"
+          limit={25}
           maxHeight="70vh"
         />
       </section>
@@ -558,7 +579,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2>Hour by hour</h2>
+            <h2><Term topic="speed">Hour by hour</Term></h2>
             <p class="note">The numbers behind this direction's charts. Pointing at either chart moves both.</p>
           </div>
         </div>

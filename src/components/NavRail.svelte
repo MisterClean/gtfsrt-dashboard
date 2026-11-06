@@ -60,7 +60,7 @@
   .prefs .seg button { min-height: 24px; padding: 1px 7px; font-size: 11.5px; display: inline-flex; align-items: center; }
   .prefs p { line-height: 1.4; font-size: 11.5px; }
   @media (max-width: 860px) {
-    .rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: 4px var(--gutter); overflow-x: auto; }
+    .rail { top: 0; z-index: 25; height: auto; background: var(--paper); border-right: 0; border-bottom: 1px solid var(--rule); padding: 4px var(--gutter); overflow-x: auto; }
     ul { display: flex; gap: 2px; }
     li button { white-space: nowrap; padding: 4px 8px; }
     li button svg { display: none; }

@@ -8,24 +8,29 @@ export interface Finding {
   route?: string;
 }
 
+/** The slowest hour with real service. Night service runs fast on empty streets. */
+export function slowestHour(overview: Overview) {
+  const measured = overview.hourly.filter(h => h.speed !== null && h.service_hours_observed >= 3);
+  if (!measured.length) return null;
+  const busiest = Math.max(...measured.map(h => h.service_hours_observed));
+  const daytime = measured.filter(h => h.service_hours_observed >= busiest * 0.4);
+  return daytime.reduce((a, b) => ((b.speed ?? 0) < (a.speed ?? 0) ? b : a));
+}
+
 export function findings(overview: Overview, routes: RouteScore[], units: Units): Finding[] {
   const list: Finding[] = [];
   const s = (value: number | null | undefined) => speedWithUnit(value, units);
 
-  const measured = overview.hourly.filter(h => h.speed !== null && h.service_hours_observed >= 3);
-  if (measured.length) {
-    // Night service runs fast on empty streets, so look at the hours with real service.
-    const busiest = Math.max(...measured.map(h => h.service_hours_observed));
-    const daytime = measured.filter(h => h.service_hours_observed >= busiest * 0.4);
-    const slowest = daytime.reduce((a, b) => ((b.speed ?? 0) < (a.speed ?? 0) ? b : a));
-    if (overview.speed_mid && slowest.speed) {
-      const change = slowest.speed / overview.speed_mid - 1;
-      list.push({
-        text: `The slowest hour is ${hourRange(slowest.hour)}, at ${s(slowest.speed)}${Math.abs(change) >= 0.01 ? `, ${pct(Math.abs(change))} ${change < 0 ? 'below' : 'above'} midday` : ''}.`,
-      });
-    }
+  const slowest = slowestHour(overview);
+  if (slowest && overview.speed_mid && slowest.speed) {
+    const change = slowest.speed / overview.speed_mid - 1;
+    list.push({
+      text: `The slowest hour is ${hourRange(slowest.hour)}, at ${s(slowest.speed)}${Math.abs(change) >= 0.01 ? `, ${pct(Math.abs(change))} ${change < 0 ? 'below' : 'above'} midday` : ''}.`,
+    });
   }
 
+  // Service running to schedule says the least, so it comes last.
+  let matchesSchedule: Finding | null = null;
   if (overview.speed && overview.scheduled_speed) {
     const gap = overview.speed / overview.scheduled_speed - 1;
     if (Math.abs(gap) >= 0.02) {
@@ -33,7 +38,7 @@ export function findings(overview: Overview, routes: RouteScore[], units: Units)
         text: `Vehicles run ${pct(Math.abs(gap))} ${gap < 0 ? 'slower' : 'faster'} than the schedule assumes (${s(overview.speed)} measured, ${s(overview.scheduled_speed)} scheduled).`,
       });
     } else {
-      list.push({text: `Measured speed matches the schedule closely: ${s(overview.speed)} against ${s(overview.scheduled_speed)} scheduled.`});
+      matchesSchedule = {text: `Measured speed matches the schedule closely: ${s(overview.speed)} against ${s(overview.scheduled_speed)} scheduled.`};
     }
   }
 
@@ -72,6 +77,7 @@ export function findings(overview: Overview, routes: RouteScore[], units: Units)
       text: `Only ${pct(share)} of scheduled trips appear in the realtime feed. A missing trip may be a cancellation or a reporting gap, so treat service levels with care.`,
     });
   }
+  if (matchesSchedule) list.push(matchesSchedule);
   return list;
 }
 

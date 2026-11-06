@@ -68,7 +68,7 @@ Each position report is projected onto the pattern's line.
 
 Distances use a local flat projection for each line, which is accurate well within one percent over the length of a route.
 
-Line length is measured after removing **stop spikes**. Some agencies draw each shape out to the stop's curb position and back, and a vehicle doesn't drive those detours. A spike is a turn of 75° or more between two segments of up to 30 m, where the road carries on within 45° of the same direction beyond it. That last test keeps real corners and U-turns. In Madison, leaving spikes in read 1.3% fast overall and nearly 5% on routes with many stops. An independent check against straight-line GPS distance on straight roads confirmed the cleaned line in the validation.
+Line length is measured after removing **stop spikes**. Some agencies draw each shape out to the stop's curb position and back, and a vehicle doesn't drive those detours. A spike is a turn of 75° or more between two segments of up to 30 m, where the road carries on within 45° of the same direction beyond it. That last test keeps real corners and U-turns. In Madison, leaving spikes in reads about 1.2% fast overall and nearly 5% on routes with many stops. An independent check against straight-line GPS distance on straight roads confirmed the cleaned line in the validation.
 
 ### Stop positions
 
@@ -278,8 +278,8 @@ These came out of independent validation against raw data, and each is small eno
 - **Terminal repositioning can read as a departure.** The first-stop departure is the first time a vehicle crosses the stop, so a bus creeping forward during layover can read as leaving early. Treat single first-stop events with care.
 - **A vehicle reporting its trip long before starting can lock on mid-line.** Only the first fix on the line seeds the match, so its first position decides which pass it starts from.
 - **One trip ID run by two vehicles counts twice in on-time performance.** This is rare: 26 events on 3 trips in a day of King County Metro service.
-- **Buses that leave the shape stay noisy.** Where vehicles regularly run a different path from the published shape, stop events and some hourly speeds on that route are unreliable. The route's off-route count in Data & methods is the signal.
-- **Corners are measured at the vertex.** A vehicle rounds a corner rather than turning on the centerline, so true distance is slightly shorter. On Madison this bounds the network figure between about 15.17 and 15.23 mph.
+- **Buses that leave the shape stay noisy.** Where vehicles regularly run a different path from the published shape, stop events and some hourly speeds on that route are unreliable. Madison's Route S is the clearest case found.
+- **Corners are measured at the vertex.** A vehicle rounds a corner rather than turning on the centerline, so true distance is slightly shorter. On Madison the effect on the network figure is under 0.3%.
 
 ### GPS-only speeds
 

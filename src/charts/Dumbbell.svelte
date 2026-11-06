@@ -5,7 +5,7 @@
 <script lang="ts">
   // Each route's midday speed against its speed in a peak period, slowest first.
   import {measure} from '../lib/actions';
-  import {routeName, speed, speedWithUnit, type Units} from '../lib/format';
+  import {routeName, speed, speedUnit, speedWithUnit, type Units} from '../lib/format';
   import {linear, ticks} from '../lib/scale';
   import {tooltip} from '../lib/tooltip.svelte';
 
@@ -22,7 +22,7 @@
 
   let width = $state(700);
   const rowHeight = 26;
-  const top = 8;
+  const top = 22;
   const bottom = 24;
 
   const usable = $derived(
@@ -31,13 +31,20 @@
       .sort((a, b) => a.peak - b.peak),
   );
   const shown = $derived(limit ? usable.slice(0, limit) : usable);
-  const names = $derived(new Map(usable.map(r => [r.id, `${r.label} ${routeName(r.label, r.name)}`.trim().slice(0, 30)])));
+  /** A route's name, without repeating its label when the name already says it. */
+  function nameOf(row: Row) {
+    const name = routeName(row.label, row.name);
+    const says = new RegExp(`(^|\\W)${row.label.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&')}(\\W|$)`, 'i').test(name);
+    const full = (says ? name : `${row.label} ${name}`).trim();
+    return full.length > 30 ? `${full.slice(0, 29).trimEnd()}…` : full;
+  }
+  const names = $derived(new Map(usable.map(r => [r.id, nameOf(r)])));
   const longest = $derived(Math.max(0, ...[...names.values()].map(n => n.length)));
   const left = $derived(width < 520 ? 60 : Math.min(220, 24 + longest * 6.6));
-  const right = 52;
+  const right = 84;
   const height = $derived(top + shown.length * rowHeight + bottom);
   const extent = $derived.by(() => {
-    const values = usable.flatMap(r => [r.mid, r.peak]);
+    const values = shown.flatMap(r => [r.mid, r.peak]);
     if (!values.length) return [0, 1] as [number, number];
     return [Math.min(...values) * 0.94, Math.max(...values) * 1.03] as [number, number];
   });
@@ -48,10 +55,12 @@
 
 <div class="chart" use:measure={w => (width = w)}>
   <svg viewBox="0 0 {width} {height}" role="group" aria-label="Midday and {peakLabel} speed for each route, slowest first">
+    <text class="head" x={width - 4} y="12" text-anchor="end">{peakLabel}, {speedUnit(units)}</text>
     {#each tickValues as tick}
       <line class="grid-line" x1={x(tick / factor)} x2={x(tick / factor)} y1={top} y2={height - bottom} />
       <text x={x(tick / factor)} y={height - 7} text-anchor="middle">{tick}</text>
     {/each}
+    <text x={left - 10} y={height - 7} text-anchor="end">{speedUnit(units)}</text>
     {#each shown as row, i}
       {@const cy = top + i * rowHeight + rowHeight / 2}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -83,7 +92,6 @@
 <div class="legend">
   <span class="key"><span class="swatch" style:background="var(--blue)" style:border-radius="50%"></span>Midday</span>
   <span class="key"><span class="swatch" style:background="var(--orange)" style:border-radius="50%"></span>{peakLabel}</span>
-  <span class="key">Right: {peakLabel.toLowerCase()} speed</span>
 </div>
 
 <style>
@@ -92,4 +100,5 @@
   .row:hover .hit, .row:focus-visible .hit { fill: var(--surface); }
   .chart :global(text.name) { fill: var(--ink); font-size: 12.5px; }
   .chart :global(text.value) { fill: var(--ink); font-weight: 650; font-size: 12px; }
+  .chart :global(text.head) { font-weight: 600; }
 </style>

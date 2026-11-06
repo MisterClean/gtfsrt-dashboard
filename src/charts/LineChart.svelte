@@ -20,6 +20,8 @@
 
 
   interface Props {
+    /** Keeps the legend row for one series, so the plot lines up with charts beside it. */
+    legend?: boolean;
     series: Series[];
     hours?: number[];
     format: (value: number) => string;
@@ -43,6 +45,7 @@
     yMax,
     label,
     showPeaks = true,
+    legend = false,
   }: Props = $props();
 
   let width = $state(600);
@@ -149,7 +152,7 @@
     {/if}
   </svg>
 </div>
-{#if series.length > 1}
+{#if series.length > 1 || legend}
   <div class="legend">
     {#each series as s}
       <span class="key"><span class="line" style:background={s.color}></span>{s.label}</span>

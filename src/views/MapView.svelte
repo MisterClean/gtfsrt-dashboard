@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Term from '../components/Term.svelte';
   import SpeedLegend from '../components/SpeedLegend.svelte';
   import {engine} from '../engine/client';
   import type {MapFeature, NetworkMap} from '../engine/types';
@@ -52,7 +53,7 @@
   const unit = $derived(speedUnit(app.units));
 
   function setHour(hour: number) {
-    app.mapHour = hour;
+    app.setMapHour(hour);
     app.writeUrl();
   }
 </script>
@@ -86,7 +87,7 @@
   {#if failure}<p class="banner error" role="alert">The map could not be drawn. {failure}</p>{/if}
   <div class="layout">
     <div class="main-col">
-      <SpeedMap data={network} hour={app.mapHour} {period} {metric} mode={app.scaleMode} units={app.units} height="calc(100dvh - {period === 'hour' ? 372 : 228}px)" onselect={f => (pinned = f)} />
+      <SpeedMap data={network} hour={app.mapHour} {period} {metric} mode={app.scaleMode} units={app.units} height="calc(100dvh - {period === 'hour' ? 396 : 228}px)" onselect={f => (pinned = f)} />
       {#if metric === 'speed'}
         <SpeedLegend mode={app.scaleMode} units={app.units} />
       {:else}
@@ -103,8 +104,8 @@
     <aside class="side">
       {#if period === 'hour' && current}
         <dl class="facts">
-          <div><dt>Streets under {app.units === 'imperial' ? '8 mph' : '13 km/h'}</dt><dd>{pct(current.slow_share)}</dd><span class="fine">of {int(current.cells)} measured segments, {hourRange(app.mapHour)}</span></div>
-          <div><dt>Network speed</dt><dd>{speedWithUnit(current.speed, app.units)}</dd><span class="fine">pooled over every segment this hour</span></div>
+          <div><dt><Term topic="speed">Streets under {app.units === 'imperial' ? '8 mph' : '13 km/h'}</Term></dt><dd>{pct(current.slow_share)}</dd><span class="fine">of {int(current.cells)} measured segments, {hourRange(app.mapHour)}</span></div>
+          <div><dt><Term topic="speed">Network speed</Term></dt><dd>{speedWithUnit(current.speed, app.units)}</dd><span class="fine">pooled over every segment this hour</span></div>
         </dl>
       {/if}
       {#if pinned}

@@ -3,6 +3,7 @@
   import Dumbbell from '../charts/Dumbbell.svelte';
   import DataTable, {type Column} from '../components/DataTable.svelte';
   import SpeedLegend from '../components/SpeedLegend.svelte';
+  import Term from '../components/Term.svelte';
   import {engine} from '../engine/client';
   import type {DayRow, HourRow, NetworkMap} from '../engine/types';
   import {findings, scopeLine} from '../lib/findings';
@@ -38,6 +39,7 @@
 
   const o = $derived(app.overview);
   const list = $derived(o ? findings(o, app.routes, app.units) : []);
+  const lead = $derived(list[0] ?? null);
   const byHour = $derived(new Map<number, HourRow>((o?.hourly ?? []).map(row => [row.hour, row])));
   const at = <T,>(read: (row: HourRow) => T | null) => HOURS.map(h => {
     const row = byHour.get(h);
@@ -61,9 +63,9 @@
     {key: 'ontime', label: 'On time', value: d => share(d.on_time.on_time, d.on_time.total), format: d => pct(share(d.on_time.on_time, d.on_time.total)), descending: true},
     {key: 'observed', label: 'Trips observed', value: d => d.trips_observed, format: d => int(d.trips_observed), descending: true},
     {key: 'scheduled', label: 'Scheduled', value: d => d.trips_scheduled, format: d => int(d.trips_scheduled), descending: true},
-    {key: 'share', label: 'Share', value: d => share(d.trips_observed, d.trips_scheduled), format: d => pct(share(d.trips_observed, d.trips_scheduled)), descending: true},
+    {key: 'share', label: 'Share observed', value: d => share(d.trips_observed, d.trips_scheduled), format: d => pct(share(d.trips_observed, d.trips_scheduled)), descending: true},
     {key: 'gaps', label: 'Capture gaps', title: 'Five-minute periods during scheduled service with no archived feed capture', value: d => d.empty_buckets, format: d => (d.service_buckets === 0 ? '—' : d.empty_buckets ? `${(d.empty_buckets * 5).toLocaleString('en-US')} min` : 'None')},
-    {key: 'status', label: 'Status', left: true, value: d => (d.status === 'Partial' ? 'Partial' : 'Complete'), format: d => (d.status === 'Partial' ? 'Partial, see note above' : 'Complete')},
+    {key: 'status', label: 'Status', left: true, value: d => (d.status === 'Partial' ? 'Partial' : 'Complete'), format: d => (d.status === 'Partial' ? 'Partial, see note above' : d.empty_buckets > 0 ? 'Complete, with gaps' : 'Complete')},
   ]);
 </script>
 
@@ -72,28 +74,36 @@
     <div class="page-head">
       <div>
         <h1>{app.feed ? feedLabel(app.feed) : ''}</h1>
-        <p class="lede">{datesLabel(o.dates.map(d => Number(d.replaceAll('-', ''))))} · {scopeLine(o)}</p>
       </div>
+    </div>
+    <div class="lead-row">
+      {#if lead}
+        <p class="lead">
+          {lead.text}
+          {#if lead.route}<button class="link-btn" onclick={() => app.go('route', lead.route)}>Open route</button>{/if}
+        </p>
+      {/if}
+      <p class="fine scope">{datesLabel(o.dates.map(d => Number(d.replaceAll('-', ''))))} · {scopeLine(o)}</p>
     </div>
 
     <dl class="stats">
       <div class="stat">
-        <dt>Operating speed</dt>
+        <dt><Term topic="speed">Operating speed</Term></dt>
         <dd>{speed(o.speed, app.units)} <small>{unit}</small></dd>
         <div class="sub">{speed(o.scheduled_speed, app.units)} scheduled, stops included</div>
       </div>
       <div class="stat">
-        <dt>Peak speed</dt>
+        <dt><Term topic="period">Peak speed</Term></dt>
         <dd>{speed(o.speed_peak, app.units)} <small>{unit}</small></dd>
         <div class="sub">{signedPct(peakChange)} against midday</div>
       </div>
       <div class="stat">
-        <dt>On-time departures</dt>
+        <dt><Term topic="ontime">On-time departures</Term></dt>
         <dd>{pct(onTimeShare)}</dd>
         <div class="sub">{pct(lateShare)} late, at timepoints</div>
       </div>
       <div class="stat">
-        <dt>Trips observed</dt>
+        <dt><Term topic="service">Trips observed</Term></dt>
         {#if o.trips_scheduled_per_day > 0}
           <dd>{int(o.trips_observed_per_day)} <small>a day</small></dd>
           <div class="sub">{pct(observedShare, 1)} of {int(o.trips_scheduled_per_day)} scheduled</div>
@@ -104,13 +114,13 @@
       </div>
       {#if o.headways}
         <div class="stat">
-          <dt>Excess wait</dt>
+          <dt><Term topic="headways">Excess wait</Term></dt>
           <dd>{minutes(o.headways.excess_wait_s, 1)}</dd>
-          <div class="sub">{pct(o.headways.bunched)} bunched, frequent service</div>
+          <div class="sub">{pct(o.headways.bunched)} bunched</div>
         </div>
       {/if}
       <div class="stat">
-        <dt>Vehicles at peak</dt>
+        <dt><Term topic="service">Vehicles at peak</Term></dt>
         <dd>{int(o.peak_vehicles)}</dd>
         <div class="sub">{int(o.service_hours_observed_per_day)} service hours a day</div>
       </div>
@@ -119,21 +129,21 @@
     <section class="hero" aria-label="Speed map and findings">
       <div class="hero-map">
         {#if mapFailure}<p class="banner error" role="alert">The map could not be drawn. {mapFailure}</p>{/if}
-        <SpeedMap data={network} hour={app.mapHour} mode={app.scaleMode} units={app.units} height="max(360px, calc(100dvh - 446px))" onselect={() => app.go('map')} />
-        <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} onchange={h => (app.mapHour = h)} />
+        <SpeedMap data={network} hour={app.mapHour} mode={app.scaleMode} units={app.units} height="max(360px, calc(100dvh - 506px))" onselect={() => app.go('map')} />
         <SpeedLegend mode={app.scaleMode} units={app.units} />
+        <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} onchange={h => app.setMapHour(h)} />
       </div>
       <aside class="findings">
         <h2>What the data shows</h2>
         <ul>
-          {#each list as finding}
+          {#each list.slice(1) as finding}
             <li>
               {finding.text}
               {#if finding.route}<button class="link-btn" onclick={() => app.go('route', finding.route)}>Open route</button>{/if}
             </li>
           {/each}
         </ul>
-        <button class="btn small" onclick={() => app.go('hotspots')}>See where the time goes</button>
+        <button class="btn small" onclick={() => app.go('hotspots')}>Open delay hotspots</button>
       </aside>
     </section>
 
@@ -143,7 +153,7 @@
       </div>
       <div class="small-multiples">
         <figure>
-          <figcaption><h3>Speed, {unit}</h3></figcaption>
+          <figcaption><h3><Term topic="speed">Speed, {unit}</Term></h3></figcaption>
           <LineChart
             bind:hover
             label="Measured and scheduled speed by hour"
@@ -156,7 +166,7 @@
           />
         </figure>
         <figure>
-          <figcaption><h3>On-time departures at timepoints</h3></figcaption>
+          <figcaption><h3><Term topic="ontime">On-time departures at timepoints</Term></h3></figcaption>
           <LineChart
             bind:hover
             label="Share of departures on time by hour"
@@ -167,7 +177,7 @@
           />
         </figure>
         <figure>
-          <figcaption><h3>Trips starting per hour</h3></figcaption>
+          <figcaption><h3><Term topic="service">Trips starting per hour</Term></h3></figcaption>
           <LineChart
             bind:hover
             label="Trips scheduled and observed by hour"
@@ -180,12 +190,13 @@
           />
         </figure>
         <figure>
-          <figcaption><h3>Vehicles in service</h3></figcaption>
+          <figcaption><h3><Term topic="service">Vehicles in service</Term></h3></figcaption>
           <LineChart
             bind:hover
             label="Distinct vehicles in service by hour"
             yMin={0}
             format={v => v.toFixed(0)}
+            legend
             series={[{key: 'veh', label: 'Vehicles', color: 'var(--ink)', values: at(r => r.vehicles)}]}
           />
         </figure>
@@ -195,7 +206,7 @@
     <section class="section">
       <div class="section-head">
         <div>
-          <h2>Slowest routes at peak</h2>
+          <h2><Term topic="period">Slowest routes at peak</Term></h2>
           <p class="note">Midday against the 7–9 AM and 4–6 PM peaks, on the same street segments in each period. Choose a route to open it.</p>
         </div>
         <button class="btn small" onclick={() => app.go('routes')}>All routes</button>
@@ -214,6 +225,11 @@
 
 <style>
   .page { gap: 22px; padding-top: 18px; }
+  .page-head { margin-bottom: -14px; }
+  .lead-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 32px; margin-bottom: -6px; }
+  .lead { font-size: 18px; line-height: 1.35; color: var(--ink); text-wrap: pretty; }
+  .lead :global(.link-btn) { font-size: 13px; margin-left: 4px; }
+  .scope { flex: none; }
   .page :global(.section) { margin-top: 10px; }
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
   .hero-map { display: grid; gap: 12px; min-width: 0; }

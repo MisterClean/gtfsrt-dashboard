@@ -4,7 +4,7 @@
   import type {MapHour} from '../engine/types';
   import {measure} from '../lib/actions';
   import {hourLabel, hourRange, hourShort, speed, speedUnit, toDisplaySpeed, type Units} from '../lib/format';
-  import {HOURS, PEAKS, linePath, linear, niceRange, ticks} from '../lib/scale';
+  import {HOURS, PEAKS, linePath, linear, ticks} from '../lib/scale';
 
   interface Props {
     hours: MapHour[];
@@ -15,7 +15,7 @@
     scope?: string;
     onchange: (hour: number) => void;
   }
-  let {hours, hour, units, height = 96, scope = 'across the network', onchange}: Props = $props();
+  let {hours, hour, units, height = 120, scope = 'across the network', onchange}: Props = $props();
 
   let width = $state(600);
   let playing = $state(false);
@@ -29,7 +29,8 @@
   };
   const domain = $derived.by(() => {
     const values = hours.map(row => row.speed).filter((v): v is number => v !== null).map(v => toDisplaySpeed(v, units));
-    return values.length ? niceRange(Math.min(...values), Math.max(...values), 3) : ([0, 1] as [number, number]);
+    // Tight to the data: a 1.5 mph rush hour is the whole story, and a wider axis flattens it.
+    return values.length ? ([Math.floor(Math.min(...values)), Math.ceil(Math.max(...values))] as [number, number]) : ([0, 1] as [number, number]);
   });
   const x = $derived(linear([HOURS[0], HOURS[HOURS.length - 1] + 1], [margin.left, width - margin.right]));
   const y = $derived(linear(domain, [height - margin.bottom, margin.top]));
@@ -40,7 +41,6 @@
       return value === null ? null : ([center(h), y(value)] as const);
     });
   const track = $derived(linePath(points(HOURS)));
-  const progress = $derived(linePath(points(HOURS.filter(h => h <= hour))));
   const tickValues = $derived(ticks(domain[0], domain[1], 2));
   const hourTicks = $derived(width < 460 ? [4, 10, 16, 22] : [4, 7, 10, 13, 16, 19, 22, 25]);
   const current = $derived(valueAt(hour));
@@ -72,6 +72,7 @@
     <span class="now">
       {#if byHour.get(hour)?.speed}<strong>{speed(byHour.get(hour)?.speed, units)} {speedUnit(units)}</strong> {scope}, {hourRange(hour)}{:else}No measured service in this hour{/if}
     </span>
+    <span class="hint">Drag along the line to move the map</span>
   </div>
   <div class="track" use:measure={w => (width = w)}>
     <svg viewBox="0 0 {width} {height}" aria-hidden="true">
@@ -85,8 +86,7 @@
       {#each hourTicks as h}
         <text x={center(h)} y={height - 5} text-anchor="middle">{hourShort(h)}</text>
       {/each}
-      <path d={track} class="line-track" />
-      <path d={progress} class="line-progress" />
+      <path d={track} class="line" />
       <line class="cursor" x1={center(hour)} x2={center(hour)} y1={margin.top} y2={height - margin.bottom} />
       {#if current !== null}
         <circle cx={center(hour)} cy={y(current)} r="5.5" class="dot" />
@@ -123,14 +123,14 @@
   .track:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
   .track svg { display: block; width: 100%; height: auto; overflow: visible; }
   .track text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-  .line-track { fill: none; stroke: var(--rule-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .line-progress { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .hint { margin-left: auto; font-size: 12px; color: var(--faint); }
   .cursor { stroke: var(--orange); stroke-width: 1; }
   .dot { fill: var(--orange); stroke: var(--paper); stroke-width: 2; }
   input {
     position: absolute; top: 0; bottom: 18px; height: calc(100% - 18px); margin: 0; opacity: 0; appearance: none;
     -webkit-appearance: none; cursor: ew-resize; touch-action: pan-y;
   }
-  input::-webkit-slider-thumb { -webkit-appearance: none; width: 2px; height: 100px; }
-  input::-moz-range-thumb { width: 2px; height: 100px; border: 0; }
+  input::-webkit-slider-thumb { -webkit-appearance: none; width: 2px; height: 140px; }
+  input::-moz-range-thumb { width: 2px; height: 140px; border: 0; }
 </style>

@@ -109,8 +109,11 @@
   .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
   .progress span { display: block; height: 100%; background: var(--copper); transition: width 300ms ease-out; }
   @media (max-width: 860px) {
-    .topbar { padding-left: var(--gutter); }
-    .brand { width: 100%; }
+    /* A sticky bar would take a fifth of a phone screen. The report links stay reachable. */
+    .topbar { position: relative; padding-left: var(--gutter); }
+    .brand { width: auto; flex: 1 1 auto; }
+    .status { order: 1; min-height: 0; }
+    .selectors { order: 2; flex: 1 1 100%; }
     .estimate { display: none; }
   }
 </style>

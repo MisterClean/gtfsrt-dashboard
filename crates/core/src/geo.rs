@@ -63,7 +63,7 @@ const SPIKE_MAX_ROAD_TURN_DEG: f64 = 45.0;
 /// Removes the short detours some agencies draw from the road to each stop's curb.
 ///
 /// A vehicle doesn't drive these, but their length adds up: in Madison they make speeds
-/// read about 1.3% fast overall, and nearly 5% on routes with many stops. A spike
+/// read about 1.2% fast overall, and nearly 5% on routes with many stops. A spike
 /// is a sharp turn between two short segments where the road carries on in the same
 /// direction beyond it. That last test is what keeps real corners and U-turns, where
 /// the road comes out heading somewhere else.
