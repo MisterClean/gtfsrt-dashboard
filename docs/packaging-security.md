@@ -27,7 +27,7 @@ Production requirements:
 2. **Restrict browser capabilities and networking.** Request no filesystem, location, camera or other device permissions for archive exploration. Keep secrets and credentials out of all client assets. Serve an enforced Content Security Policy on both the page and worker responses, restricting scripts/workers to our release and connections to required application/archive endpoints. Permit WASM compilation without broadly enabling JavaScript evaluation. The exact policy must be tested, not copied into production on assumption.
 3. **Constrain inputs before SQL.** Expose fixed analytical operations with prepared values. Validate dates, feed types, identifiers and result limits. Construct and validate HTTPS URLs by parsed origin and exact archive bucket/path prefix; allowing all of `storage.googleapis.com` would include unrelated buckets. Do not accept arbitrary SQL or fetch URLs from archive text, query strings or shared dashboard configurations.
 4. **Treat archive text as data.** Escape names and alerts; never insert producer content as HTML or code. Validate link schemes and destinations. Do not automatically load images or other resources mentioned in archive content.
-5. **Bound work and recover.** Cap selected objects, bytes, result sizes and concurrency. Apply a DuckDB memory target, query deadlines and a main-thread-controlled worker termination/reset path. Compressed file size and the database memory setting do not bound total browser memory. Validate behavior on constrained devices.
+5. **Bound work and recover.** Cap selected objects, bytes, result sizes and concurrency. Apply a DuckDB memory target and a worker termination/reset path the visitor controls. Compressed file size and the database memory setting do not bound total browser memory. Validate behavior on constrained devices.
 6. **Keep privacy claims precise.** Run SQL locally and avoid analytics and unnecessary third-party resources. Direct archive requests still disclose the requested objects and network address to the archive's hosting provider. A future map provider adds a separate network recipient. Use a restrictive referrer policy and make optional persistent caches visible and clearable.
 
 [DuckDB's security guidance](https://duckdb.org/docs/2.0/operations_manual/securing_duckdb/overview) treats untrusted SQL and resource consumption as security concerns. WASM hosting narrows the available capabilities, but the application must still control what it asks DuckDB to do.
@@ -42,11 +42,11 @@ Production requirements:
 | Enforced policy on page and workers | `scripts/security.mjs` served by `scripts/serve.mjs` | Browser run with no policy violations, and `tests/contracts.test.mjs` |
 | No JavaScript evaluation | `'wasm-unsafe-eval'` only, no `'unsafe-eval'` or inline scripts | `tests/contracts.test.mjs` |
 | No inline styles in production | `style-src 'self'`, with Svelte's `style:` directive using the CSSOM | Browser run with no policy violations |
-| Fixed SQL | Templates in `crates/core/src/sql.rs` with checked aliases and typed casts | Unit tests and `crates/core/tests/sql_contract.rs` |
+| Fixed SQL | Templates in `crates/core/src/sql.rs` with checked aliases and typed casts. No interface can run other SQL. | Unit tests in CI. `crates/core/tests/sql_contract.rs` needs the DuckDB CLI and runs on request |
 | Archive URLs only | `validateArchiveURL` checks origin and exact bucket prefix | `tests/contracts.test.mjs` |
 | Source text is data | Svelte escapes text by default, and the app never uses `{@html}` | Code review |
 | CSV safety | `csvCell` defuses values a spreadsheet would run as formulas | `tests/contracts.test.mjs` |
-| Bounded work | [Resource bounds](architecture.md#resource-bounds) and a stop control | Code review, browser run |
+| Bounded work | [Resource bounds](architecture.md#resource-bounds), a stop control that always unwinds, and a stall notice. Reads have no fixed deadline, because a large day is legitimately slow | `tests/e2e.mjs`, which needs a network and runs on request |
 
 ## Who sees what
 

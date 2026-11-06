@@ -21,9 +21,9 @@ Reports calculate in meters and seconds. The interface converts to mph or km/h.
 - **Definition:** The GTFS service date a trip belongs to, not the calendar or UTC date of its reports.
 - **Origin:** Scheduled times count from noon minus twelve hours on the service date. A trip can run past 24:00:00, and daylight-saving days line up.
 - **Service hour:** Seconds from the origin divided by 3,600, from 0 to 29. Hour 25 reads as 1 AM on the following calendar day. Charts show hours 4 to 27.
-- **Time zone:** `agency_timezone` from the schedule, read through the browser's own time zone database.
+- **Time zone:** `agency_timezone` from the schedule, read through the browser's own time zone database. A feed with no schedule at all gets a zone estimated from the longitude of its vehicles, and the app says so on every day it affects. The estimate can be wrong in Arizona, Alaska and Hawaii, and any later schedule replaces it.
 - **Reading the archive:** Archive files are split by UTC day, so one service day overlaps two files. Five consecutive weekdays read six files in a North American time zone, and each is read once. A day's read window runs 30 hours from its origin.
-- **Known limit:** The newest day in the archive lacks its evening until the next UTC file is published. The app warns when this happens.
+- **Incomplete days:** The newest day in the archive lacks its evening until the next UTC file is published, and a file can be missing from the archive altogether. When either cuts into a day's scheduled service, the day is marked partial, the app names the missing hours, and the day isn't saved, so it is read again next time. A day with no rows at all isn't treated as a result. It says so and stays out of every average.
 
 ### Assigning a run to a service date
 
@@ -47,7 +47,7 @@ These match the CTA scorecard. Peak means the morning and evening peaks together
 
 ### Schedule version
 
-For each service date, the app chooses the most recently retrieved version whose advertised dates cover the day and which was retrieved on or before it. Missing feed dates count as open-ended. If only a later capture covers the day, the earliest such capture is used and flagged. When an agency publishes several schedule sources, a version is chosen from each. If any source has no covering version, the day is skipped with a message.
+For each service date, the app chooses the most recently retrieved version whose advertised dates cover the day and which was retrieved on or before it. Missing feed dates count as open-ended. If only a later capture covers the day, the earliest such capture is used and flagged. When an agency publishes several schedule sources, a version is chosen from each. If any source has no covering version, the day falls back to GPS speeds, and the app says so.
 
 ### Patterns
 
@@ -267,7 +267,7 @@ Counts of position reports at each GTFS-RT `occupancy_status` value, per route a
 
 A frozen GPS unit repeats one report time across polls, so only the first is kept. When a report has no timestamp, its fetch time stands in, and those are counted.
 
-A feed that reports differential updates gets a warning, because the archive doesn't keep every deletion and vehicle state can be incomplete. When under half of the trip-bearing reports read for a day match the schedule, the app warns that the feed and schedule appear to use different IDs.
+A feed that reports differential updates gets a warning, because the archive doesn't keep every deletion and vehicle state can be incomplete. When fewer than one in ten trip-bearing reports match the schedule, the feed and schedule don't belong together, and the day falls back to GPS speeds. Between one in ten and four in five, the app keeps the schedule join and notes that some trips were left out, which is normal for a feed shared with other agencies.
 
 ## Not calculated
 

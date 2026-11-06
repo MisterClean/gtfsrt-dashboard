@@ -64,7 +64,7 @@ flowchart LR
 ```
 
 1. **Plan.** `plan.rs` works out which UTC objects cover the requested service days, and which time window each one needs. Five consecutive weekdays need six objects, not ten.
-2. **Choose the schedule.** For each service day, `plan.rs` picks the schedule version in force: the most recently captured one that covers the date and was already published. Results are labelled when only a later capture exists.
+2. **Choose the schedule.** For each service day, `plan.rs` picks the schedule version in force: the most recently captured one that covers the date and was already published. Results are labelled when only a later capture exists. A day with no usable schedule, or whose trip IDs match less than a tenth of the realtime feed, falls back to GPS speeds and says so.
 3. **Read.** DuckDB reads the object with a filter on `fetch_timestamp`. Files have one row group per poll, each with its own statistics, so rows outside the window are skipped without downloading their data pages. Columns are projected, so about a quarter of the data pages go unread.
 4. **Ingest.** Batches reach Rust as Arrow's own typed arrays and text offsets, with no per-value decoding in JavaScript. IDs are interned, so a fix takes 24 bytes.
 5. **Analyse.** `day.rs` splits fixes into runs per trip and vehicle, works out each run's service date, map-matches it to the trip's shape (`trace.rs`), applies the filtering rules, and derives stop passes, schedule deviation, headways and segment speeds.
@@ -94,14 +94,22 @@ Cached entries are keyed by feed, date and `METRIC_VERSION`, so changing a calcu
 
 | Control | Value | Notes |
 | --- | --- | --- |
-| Days in one analysis | 62 | Days are processed and freed one at a time, so this bounds waiting, not memory. |
+| Days in one analysis | 62 | Raw fixes are freed as each day finishes, so this mainly bounds waiting. Rollups for selected days stay in memory, and stop events are kept for only three days at a time and read back on demand. A very long selection on the largest feeds can still run short of memory. |
 | Single daily object | 600 MiB | The largest feed today is about 190 MB a day. |
 | Single schedule table | 64 MiB | Bounds a bad catalog entry. |
-| Metadata files | 8 MiB | Catalogs and feed lists. |
+| Metadata files | 8 MiB | Catalogs, checked once read. |
 | DuckDB memory target | 768 MB | Total tab memory can be higher. |
 | Fix buffer | about 1.25 days | Older fixes are evicted after each day. |
 
-The interface shows the expected download before anything starts, and nothing is fetched until the visitor clicks Analyze. Days already on the device load without asking. Stop terminates the DuckDB worker at once, and every finished day is kept.
+The interface shows the expected download before anything starts, and nothing is fetched until the visitor clicks Analyze. Days already on the device load without asking. Stop terminates the DuckDB worker at once, and every finished day is kept. The app flags an analysis that has made no progress for two minutes.
+
+## Runs and incomplete days
+
+Each analysis is one `Run` in the worker, holding its own engine reference. DuckDB never settles calls in flight when its worker is terminated, so every wait races a stop signal, and a stopped run unwinds at once rather than resuming later. A new run or a change of agency waits for the old run to finish unwinding, and every event carries its run's number, so nothing from an old run can land in a new one.
+
+Only complete days are saved. A day whose scheduled service runs into a missing or unpublished archive file is marked partial, shows which hours are absent, and is read again next time, because the archive may have them by then. A day with no rows at all isn't a result: it says so and stays out of every average. Saving writes the day's index entry last, so a partly saved day can't be restored as if it were whole. Unreadable saved results are removed and analyzed again.
+
+The merged sums are recomputed on demand, and anything that changes the library clears them, so a report can't read sums from before a day or schedule arrived.
 
 ## Source contracts
 
@@ -125,6 +133,8 @@ crates/core/src/
   geo.rs        projection onto route lines, stop placement
   schedule.rs   GTFS tables compiled into patterns and street segments
   rt.rs         buffered realtime fixes and quality counts
+  gps.rs        speeds from position alone, when a feed can't join a schedule
+  mode.rs       transit modes from route types
   trace.rs      map-matching and the interval rules
   day.rs        one service day into rollups
   cube.rs       the additive rollup types and cache encoding
@@ -134,6 +144,7 @@ crates/core/src/
   sql.rs        the SQL templates
 crates/wasm/    browser bindings
 src/engine/     worker, cache, client, network contracts
+src/components/ shell, table, date picker and other shared pieces
 src/lib/        state, formatting, scales, downloads
 src/charts/     SVG and canvas charts
 src/map/        MapLibre map, basemap style, time control

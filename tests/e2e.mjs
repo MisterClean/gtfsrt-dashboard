@@ -89,6 +89,45 @@ try {
   const again = [...contacted].filter(url => url.includes('vehicle_positions')).length;
   assert.equal(again, reads, 'cached days need no archive reads');
 
+  // Regression: switching agency during a restore once showed one agency's numbers
+  // under another's name.
+  await page.waitForFunction(() => window.__transit.routes.length > 0, null, {timeout: 30000, polling: 50});
+  const madisonRoutes = await page.evaluate(() => window.__transit.routes.map(route => route.label).join());
+  await page.reload();
+  await page.waitForFunction(() => window.__transit?.feeds.length > 0 && window.__transit.running, null, {timeout: 30000, polling: 10});
+  const other = await page.evaluate(() => {
+    const app = window.__transit;
+    const feed = app.feeds.find(candidate => candidate.agency_id === 'mountain-line-missoula') ?? app.feeds.find(candidate => candidate.base64url !== app.feedKey);
+    app.selectFeed(feed.base64url, null);
+    return feed.base64url;
+  });
+  await page.waitForFunction(key => window.__transit.feedKey === key && !window.__transit.running, other, {timeout: 30000, polling: 100});
+  await page.waitForTimeout(500);
+  const afterSwitch = await page.evaluate(() => {
+    const app = window.__transit;
+    return {analyzed: app.analyzedDates.length, overview: app.overview, routes: app.routes.map(route => route.label).join(), error: app.error};
+  });
+  assert.equal(afterSwitch.overview, null, 'the previous agency\'s results are gone');
+  assert.equal(afterSwitch.analyzed, 0, 'nothing from the previous agency is marked as analyzed');
+  assert.notEqual(afterSwitch.routes, madisonRoutes);
+  assert.equal(afterSwitch.error, null);
+
+  // Regression: Stop once left the analysis hanging, or let it resume into the next run.
+  const stopping = Date.now();
+  await page.evaluate(() => { window.__transit.analyze(); });
+  await page.waitForFunction(() => /Reading|Checking/.test(window.__transit.stage?.message ?? ''), null, {timeout: 60000, polling: 50});
+  await page.evaluate(() => window.__transit.stop());
+  await page.waitForFunction(() => !window.__transit.running, null, {timeout: 5000, polling: 50});
+  const stopped = await page.evaluate(() => ({error: window.__transit.error, result: window.__transit.result}));
+  assert.equal(stopped.error, null, 'stopping is not an error');
+  assert.equal(stopped.result?.stopped, true);
+  console.log(`Stop settled ${Date.now() - stopping} ms after the run began.`);
+
+  // And the feed can still be analyzed afterwards.
+  await page.evaluate(() => { const app = window.__transit; app.setDates(app.dates.slice(-1)); return app.analyze(); });
+  await page.waitForFunction(() => window.__transit.hasResults && !window.__transit.running, null, {timeout: 180000, polling: 200});
+  assert.equal(await page.evaluate(() => window.__transit.error), null, 'a stopped feed analyzes cleanly afterwards');
+
   const outsiders = [...contacted].filter(url => !ALLOWED.some(prefix => url.startsWith(prefix)));
   assert.deepEqual(outsiders, [], 'the browser contacted only this host, the archive and the basemap');
   assert.deepEqual(problems, [], 'no console errors or policy violations');
