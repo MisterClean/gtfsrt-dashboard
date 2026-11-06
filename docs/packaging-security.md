@@ -1,54 +1,25 @@
-# Rust packaging and browser security
+# Packaging and browser security
 
-Design and implementation notes, November 6, 2026. Rust integration and self-contained static packaging are implemented. The visible Chromium MVP passed real archive queries and local page/worker CSP checks; [MVP validation](mvp-validation.md) records the evidence and remaining production/browser gates. The requirements below remain the design contract, not a claim that every compatibility or security gate has passed.
-
-## Recommended packaging
-
-Ship one versioned static application release containing all executable dependencies. A visitor opens an HTTPS URL; they do not install Rust, npm, DuckDB or native software. The public archive remains an external data source.
-
-For a Rust implementation, use a client-rendered Rust framework such as Leptos for the interface and application state, `wasm-bindgen` for a small JavaScript bridge, and the existing tested DuckDB-Wasm worker for SQL. Keep normal HTML controls, tables and accessible chart descriptions. A canvas/game-style renderer is not required to use WASM.
-
-```mermaid
-flowchart LR
-    subgraph Browser
-        Rust[Rust interface and application logic in WASM]
-        Bridge[Small JavaScript bridge]
-        DB[DuckDB-Wasm in a background worker]
-        Rust --> Bridge --> DB
-    end
-    DB --> Archive[Public archive HTTPS Parquet]
-```
-
-The Rust module can call asynchronous JavaScript functions and await their results through [wasm-bindgen](https://wasm-bindgen.github.io/wasm-bindgen/reference/js-promises-and-rust-futures.html). The bridge should expose a few typed operations—catalog discovery, bounded queries, cancellation and status—rather than an unrestricted execution interface. Keep large data in DuckDB and transfer small aggregates or appropriately sized Arrow buffers.
+One versioned static release contains every executable dependency. A visitor opens an HTTPS URL and installs nothing. The public archive remains an external data source, and the optional basemap is the only other outside connection.
 
 | Part | Release artifact |
 | --- | --- |
-| Rust UI, application rules and browser-compatible Rust dependencies | Application `.wasm` module |
-| Rust/browser interoperability | Generated JavaScript plus a small maintained bridge |
-| Analytical engine | Pinned DuckDB `.wasm` and matching worker/library JavaScript |
-| Required DuckDB extensions, if any | Version/platform-matched signed files served with the application |
-| Page, styles, icons and any chart library | Locally packaged static assets |
-| Build tools | Used during development/CI; not required on visitors' computers |
+| Rust analytics and SQL templates | `transit_wasm_bg-[hash].wasm`, with generated bindings |
+| Interface | `index-[hash].js` and `index-[hash].css` from Vite and Svelte |
+| Engine worker | `worker-[hash].js` |
+| SQL engine | `duckdb-base-[hash].wasm` and `duckdb-browser-base.worker-[hash].js`, pinned |
+| DuckDB extensions | Signed Parquet and ICU files at `engine/extensions/v2.0.0/wasm_eh/`, SHA-256 pinned |
+| Map renderer | Bundled MapLibre, with `maplibre-gl-worker-[hash].mjs` |
+| Font and icons | Self-hosted font, inline SVG icons |
+| Build tools | Used during development and CI, never by visitors |
 
-Produce one `dist/` directory or release ZIP, with hashed asset names and atomic publication of matching assets. [Leptos supports static client-rendered deployment](https://book.leptos.dev/deployment/csr.html). Bundle the tested DuckDB build unchanged initially; its wrapper and engine versions differ, as documented in [the feasibility decision](feasibility.md).
+The earlier design used a Rust interface through Leptos. [Architecture](architecture.md) explains why the interface moved to TypeScript while the analytics stayed in Rust.
 
-Rust is a viable language choice, but it is not required for WASM analytics: the current JavaScript interface already runs the SQL engine in WASM. A Rust UI adds a compiler and interoperability boundary. It will not by itself reduce archive download sizes or make DuckDB queries faster.
-
-## Why several files are appropriate
-
-Browser game ports commonly combine compiled WASM with browser JavaScript and separate assets. [Emscripten documents these deployment components](https://emscripten.org/docs/compiling/Deploying-Pages.html). Its optional [single-file packaging](https://emscripten.org/docs/tools_reference/settings_reference.html#single-file) embeds resources into JavaScript/HTML; it does not remove the browser runtime or turn every component into a single standalone WASM module.
-
-Most compatible Rust dependencies can be compiled into the Rust module. DuckDB is a C++ engine with a separate browser runtime. Linking Rust and DuckDB into one custom module is possible in principle, but requires custom toolchain/runtime integration. The [Rust Emscripten target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-emscripten.html) supports C/C++ interoperability and describes the compatibility requirements. The ordinary Rust browser target does not make native `duckdb` Cargo bindings a drop-in substitute for DuckDB-Wasm.
-
-Maintaining that custom engine build would add upgrade and debugging work without establishing a security advantage. Prefer one deployable release with separately cacheable modules.
-
-An installable/offline web application can be a later delivery option. Caching the application does not make uncached archive data available offline. Begin without a service worker; add one only with tested cache limits and coordinated asset-version updates.
+The browser's WASM sandbox limits what any of this can reach, but it doesn't make code automatically trustworthy. Memory corruption inside a C++ module, abuse of permitted APIs and resource exhaustion all remain possible, so the rules below still apply. Rust reduces memory-safety errors in safe Rust code. It does not change DuckDB's implementation or replace browser policies.
 
 ## Security model
 
-Protect the user's browser, local data, privacy and device resources from malicious source content, unexpected network requests, compromised dependencies and excessively large queries.
-
-WASM runs within the browser's sandbox and can reach outside its memory only through exposed host APIs. That is useful protection, but does not make its code automatically trustworthy. Memory corruption inside a C++ module, abuse of permitted APIs and resource exhaustion remain possible. Rust reduces memory-safety errors in safe Rust application code; it does not change DuckDB's implementation or replace browser security policies. A worker keeps computation off the UI thread; it is not a separate security origin. See the [WebAssembly security model](https://webassembly.org/docs/security/).
+Protect the user's browser, local data, privacy and device resources from malicious source content, unexpected network requests, compromised dependencies and excessively large queries. A worker keeps computation off the UI thread; it is not a separate security origin. See the [WebAssembly security model](https://webassembly.org/docs/security/).
 
 Production requirements:
 
@@ -63,11 +34,30 @@ Production requirements:
 
 **Worker policy matters:** a same-origin worker generally does not inherit the document's CSP. `worker-src` limits worker creation; a CSP on the worker response constrains the worker's subsequent behavior. See [worker CSP](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#content_security_policy) and [WASM compilation policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src#unsafe_webassembly_execution).
 
-## Next acceptance gates
+## How the release meets these
 
-1. Build a minimal Rust page that repeats the existing Madison count and route aggregate through the tested DuckDB worker; assert engine version and result parity. This validates the new language boundary before a larger UI.
-2. Produce a self-hosted release and inspect **every** network destination. The current feasibility recorder captures only archive requests, so it does not establish the absence of dynamic extension or CDN downloads.
-3. Test enforced policies on an HTTPS host, including both page and worker. Confirm an off-allowlist URL is blocked, malicious alert markup displays literally, and supplied values cannot modify a query template.
-4. Confirm an expensive or stalled query can be stopped, errors release resources, and an asset upgrade cannot mix incompatible JS/WASM versions. Test the selected browser support matrix.
+| Requirement | Implementation | Checked by |
+| --- | --- | --- |
+| Self-hosted, pinned dependencies | `package-lock.json`, `Cargo.lock`, pinned extension hashes | `npm run verify:release` |
+| Enforced policy on page and workers | `scripts/security.mjs` served by `scripts/serve.mjs` | Browser run with no policy violations, and `tests/contracts.test.mjs` |
+| No JavaScript evaluation | `'wasm-unsafe-eval'` only, no `'unsafe-eval'` or inline scripts | `tests/contracts.test.mjs` |
+| No inline styles in production | `style-src 'self'`, with Svelte's `style:` directive using the CSSOM | Browser run with no policy violations |
+| Fixed SQL | Templates in `crates/core/src/sql.rs` with checked aliases and typed casts | Unit tests and `crates/core/tests/sql_contract.rs` |
+| Archive URLs only | `validateArchiveURL` checks origin and exact bucket prefix | `tests/contracts.test.mjs` |
+| Source text is data | Svelte escapes text by default, and the app never uses `{@html}` | Code review |
+| CSV safety | `csvCell` defuses values a spreadsheet would run as formulas | `tests/contracts.test.mjs` |
+| Bounded work | [Resource bounds](architecture.md#resource-bounds) and a stop control | Code review, browser run |
 
-Passing the existing data-access test establishes functionality. These additional gates establish a production packaging and security baseline; they are not a claim that any application is vulnerability-free.
+## Who sees what
+
+- **The website host** serves static files and sees ordinary page requests. It receives no transit data and no analysis results.
+- **The archive host (Google Cloud Storage)** sees the visitor's network address and which objects they request, because the browser fetches them directly.
+- **OpenFreeMap** sees the visitor's network address and the map area on screen when the street basemap is on. It needs no key or account, and the visitor can turn it off. Transit data never goes there.
+
+The app runs no analytics. Results stay in the visitor's browser until they clear them.
+
+The basemap is the one outside dependency added since the MVP, and it is a deliberate trade-off. Planners need street names to locate a problem. If the tiles fail to load or the visitor turns them off, the speed lines still draw on a plain background.
+
+## Open gates
+
+The app has run in Chromium only. Before claiming wider support, test Safari, Firefox and Edge, a constrained-memory device, an HTTPS deployment with real headers, and asset upgrades across releases. Passing these checks establishes a baseline. It is not a claim that the application is free of vulnerabilities.

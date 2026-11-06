@@ -5,6 +5,7 @@
 pub mod cube;
 pub mod day;
 pub mod geo;
+pub mod gps;
 pub mod library;
 pub mod mode;
 pub mod plan;

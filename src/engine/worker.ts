@@ -12,6 +12,8 @@ import {
 } from './cache';
 import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord} from './types';
 
+/** Below this share of matching trip IDs, schedule-based metrics would mislead. */
+const MIN_TRIP_MATCH = 0.5;
 const SCHEDULE_TABLES = ['agency', 'routes', 'stops', 'shapes', 'calendar', 'calendar_dates', 'trips', 'stop_times'] as const;
 
 let engineReady: Promise<unknown> | undefined;
@@ -215,6 +217,31 @@ async function timezoneOf(choice: ScheduleChoice): Promise<string | null> {
   return null;
 }
 
+/**
+ * A rough zone from where vehicles are, for feeds with no schedule to state one.
+ * The archive covers the United States, so longitude bands are close enough, and
+ * the app says when it has done this.
+ */
+async function timezoneFromPositions(feedKey: string, date: number) {
+  const iso = formatDate(date);
+  const url = `${ARCHIVE}vehicle_positions/date=${iso}/base64url=${feedKey}/data.parquet`;
+  if ((await objectSize(url, `Archive ${iso}`)) === null) return null;
+  await ensureDatabase();
+  const alias = 'timezone_probe.parquet';
+  await db!.registerFileURL(alias, validateArchiveURL(url), duckdb.DuckDBDataProtocol.HTTP, false);
+  try {
+    const rows = await rowsOf(`SELECT longitude FROM read_parquet('${alias}') WHERE longitude IS NOT NULL AND longitude <> 0 LIMIT 1`);
+    const longitude = Number(rows[0]?.longitude);
+    if (!Number.isFinite(longitude)) return null;
+    if (longitude > -85.5) return 'America/New_York';
+    if (longitude > -101) return 'America/Chicago';
+    if (longitude > -115) return 'America/Denver';
+    return 'America/Los_Angeles';
+  } finally {
+    await db!.dropFile(alias).catch(() => {});
+  }
+}
+
 /** Samples UTC offsets from the browser's own time zone database. */
 function clockSamples(timezone: string, firstDate: number, lastDate: number) {
   const formatter = new Intl.DateTimeFormat('en-US', {timeZone: timezone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric'});
@@ -291,24 +318,25 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
   const catalogsJson = JSON.stringify(catalogs);
   const urlsJson = JSON.stringify(scheduleUrls);
 
+  // A day with no covering schedule still gets GPS speeds. Only the time zone has
+  // to come from somewhere else.
   const choices = new Map<number, ScheduleChoice>();
-  const dayDates: number[] = [];
+  const dayDates = [...remaining];
   for (const date of remaining) {
     const choice: ScheduleChoice | null = JSON.parse(Engine.chooseSchedule(urlsJson, catalogsJson, date));
-    if (!choice) {
-      result.skipped.push({date, reason: 'The archive has no schedule version covering this date, so speeds, on-time performance and headways cannot be calculated.'});
-      continue;
-    }
-    choices.set(date, choice);
-    dayDates.push(date);
+    if (choice) choices.set(date, choice);
   }
-  if (!dayDates.length) return result;
 
   // Time zone first: service days can't be located in UTC files without it.
   const cachedFeed = await getEntry<FeedEntry>('feeds', feedKey);
   let timezone = cachedFeed?.timezone ?? null;
-  timezone ??= await timezoneOf(choices.get(dayDates[0])!);
-  if (!timezone) throw new Error('This schedule does not state a time zone, so its service days cannot be located.');
+  const firstChoice = dayDates.map(date => choices.get(date)).find(Boolean);
+  if (!timezone && firstChoice) timezone = await timezoneOf(firstChoice);
+  if (!timezone) {
+    timezone = await timezoneFromPositions(feedKey, dayDates[0]);
+    if (timezone) emit({event: 'warning', message: `The archive has no schedule stating this agency's time zone, so ${timezone} was estimated from vehicle positions. Hours of the day may be off if that is wrong.`});
+  }
+  if (!timezone) throw new Error('This feed has no schedule and no readable positions, so its service days cannot be located.');
   await putEntry('feeds', feedKey, {timezone} satisfies FeedEntry);
   engine!.setClock(clockSamples(timezone, dayDates[0], dayDates[dayDates.length - 1]));
 
@@ -363,23 +391,25 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
 
     for (const date of file.completes as number[]) {
       const choice = choices.get(date);
-      if (!choice) continue;
-      await loadSchedule(feedKey, choice, formatDate(date));
+      if (choice) await loadSchedule(feedKey, choice, formatDate(date));
       emit({event: 'stage', message: `Analysing ${formatDate(date)}`, fraction: progress(1), dayIndex, dayCount: dayDates.length});
-      const match = engine!.tripMatchRate(choice.key);
-      if (engine!.fixCount() > 0 && match < 0.5) {
-        emit({event: 'warning', message: `Only ${(match * 100).toFixed(0)}% of realtime trip IDs on ${formatDate(date)} match the schedule, so most trips can't be measured. This agency's realtime and schedule feeds appear to use different IDs.`});
+      const match = choice ? engine!.tripMatchRate(choice.key) : 0;
+      if (choice && (engine!.fixCount() === 0 || match >= MIN_TRIP_MATCH)) {
+        const output = engine!.processDay(date, choice.key, file.ends_at) as {cube: Uint8Array; events: Uint8Array};
+        await putEntry('days', dayKey(feedKey, date, version), {cube: output.cube, digest: choice.key, savedAt: new Date().toISOString()} satisfies DayEntry);
+        await putEntry('events', dayKey(feedKey, date, version), {events: output.events} satisfies EventsEntry);
+      } else {
+        // Realtime trip IDs match no archived schedule, or there is no schedule.
+        const output = engine!.processGpsDay(date) as {cube: Uint8Array; meta: Uint8Array; digest: string};
+        await putEntry('schedules', scheduleKey(feedKey, output.digest), {meta: output.meta} satisfies ScheduleEntry);
+        await putEntry('days', dayKey(feedKey, date, version), {cube: output.cube, digest: output.digest, savedAt: new Date().toISOString()} satisfies DayEntry);
       }
-      const output = engine!.processDay(date, choice.key, file.ends_at) as {cube: Uint8Array; events: Uint8Array};
-      await putEntry('days', dayKey(feedKey, date, version), {cube: output.cube, digest: choice.key, savedAt: new Date().toISOString()} satisfies DayEntry);
-      await putEntry('events', dayKey(feedKey, date, version), {events: output.events} satisfies EventsEntry);
       result.analyzed.push(date);
       completedDays += 1;
       emit({event: 'day', date, cached: false});
-      const origin = engine!.serviceOrigin(date);
       const next = dayDates[dayDates.indexOf(date) + 1];
       const nextOrigin = next ? engine!.serviceOrigin(next) : undefined;
-      if (nextOrigin !== undefined && origin !== undefined) engine!.evictBefore(nextOrigin);
+      if (nextOrigin !== undefined) engine!.evictBefore(nextOrigin);
     }
   }
   engine!.clearBuffer();

@@ -51,6 +51,7 @@
   let map: MapLibre | undefined;
   let loaded = $state(false);
   let tilesFailed = $state(false);
+  let unavailable = $state(false);
   let fitted = false;
   let featuresById = new Map<number, MapFeature>();
 
@@ -200,16 +201,23 @@
     if (!container) return;
     const dark = app.darkActive;
     const basemap = app.basemap;
-    const instance = new MapLibre({
-      container,
-      style: mapStyle(dark, basemap),
-      center: [0, 30],
-      zoom: 2,
-      attributionControl: {compact: true},
-      dragRotate: false,
-      pitchWithRotate: false,
-      maxPitch: 0,
-    });
+    let instance: MapLibre;
+    try {
+      instance = new MapLibre({
+        container,
+        style: mapStyle(dark, basemap),
+        center: [0, 30],
+        zoom: 2,
+        attributionControl: {compact: true},
+        dragRotate: false,
+        pitchWithRotate: false,
+        maxPitch: 0,
+      });
+    } catch {
+      // Every other report still works without graphics acceleration.
+      unavailable = true;
+      return;
+    }
     map = instance;
     instance.touchZoomRotate.disableRotation();
     instance.keyboard.enable();
@@ -252,6 +260,9 @@
 
 <div class="map-frame" style:height={height}>
   <div class="map" bind:this={container} role="application" aria-label={label}></div>
+  {#if unavailable}
+    <p class="unavailable">This map needs WebGL2, which this browser or device has turned off. Every number on the page is still available in the tables and downloads.</p>
+  {/if}
   {#if tilesFailed && app.basemap}
     <p class="tile-note fine">The street basemap could not load. Speeds still draw.</p>
   {/if}
@@ -260,5 +271,6 @@
 <style>
   .map-frame { position: relative; min-height: 280px; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; background: var(--surface); }
   .map { position: absolute; inset: 0; }
+  .unavailable { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; text-align: center; color: var(--muted); max-width: 52ch; margin: auto; }
   .tile-note { position: absolute; left: 8px; top: 8px; background: var(--paper); padding: 3px 8px; border-radius: 3px; }
 </style>

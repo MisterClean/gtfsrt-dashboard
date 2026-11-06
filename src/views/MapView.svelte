@@ -41,40 +41,37 @@
   }
 </script>
 
-<div class="page">
-  <div class="page-head">
-    <div>
+<div class="page map-page">
+  <div class="head">
+    <div class="title">
       <h1>Speed map</h1>
-      <p class="lede">Average speed on each street, stops included. Both directions are drawn when you zoom in, and every route on a street is pooled.</p>
+      <p class="note">Average speed on each street, stops included. Every route on a street is pooled. Zoom in to see each direction.</p>
     </div>
     <div class="tools">
-      <label class="field">Route
-        <select class="input" bind:value={route}>
+      <div class="seg" role="group" aria-label="Time period">
+        {#each periods as option}
+          <button aria-pressed={period === option.value} onclick={() => (period = option.value)}>{option.label}</button>
+        {/each}
+      </div>
+      <div class="seg" role="group" aria-label="Measure">
+        <button aria-pressed={metric === 'speed'} onclick={() => (metric = 'speed')}>Speed</button>
+        <button aria-pressed={metric === 'versus'} onclick={() => (metric = 'versus')}>Against midday</button>
+      </div>
+      <label>
+        <span class="sr-only">Route</span>
+        <select class="input route-select" bind:value={route}>
           <option value="">All routes</option>
           {#each app.routes as r}<option value={r.id}>{`${r.label} ${routeName(r.label, r.long_name)}`.trim()}</option>{/each}
         </select>
       </label>
-      <button class="btn" disabled={!network} onclick={() => network && download(network, app)}>Download GeoJSON</button>
-    </div>
-  </div>
-
-  <div class="tools">
-    <div class="seg" role="group" aria-label="Time period">
-      {#each periods as option}
-        <button aria-pressed={period === option.value} onclick={() => (period = option.value)}>{option.label}</button>
-      {/each}
-    </div>
-    <div class="seg" role="group" aria-label="Measure">
-      <button aria-pressed={metric === 'speed'} onclick={() => (metric = 'speed')}>Speed</button>
-      <button aria-pressed={metric === 'versus'} onclick={() => (metric = 'versus')}>Compared with midday</button>
     </div>
   </div>
 
   <div class="layout">
     <div class="main-col">
-      <SpeedMap data={network} hour={app.mapHour} {period} {metric} mode={app.mode} units={app.units} height="calc(100dvh - 330px)" onselect={f => (pinned = f)} />
+      <SpeedMap data={network} hour={app.mapHour} {period} {metric} mode={app.scaleMode} units={app.units} height="calc(100dvh - {period === 'hour' ? 372 : 228}px)" onselect={f => (pinned = f)} />
       {#if metric === 'speed'}
-        <SpeedLegend mode={app.mode} units={app.units} />
+        <SpeedLegend mode={app.scaleMode} units={app.units} />
       {:else}
         <div class="legend">
           {#each versusLabels as label, i}
@@ -124,14 +121,20 @@
         <label><input type="checkbox" checked={app.basemap} onchange={event => app.setBasemap(event.currentTarget.checked)} /> Show street basemap</label>
         <p class="fine">Basemap tiles come from OpenFreeMap, which sees your network address and the area on screen. Transit data never goes there.</p>
       </div>
-      <p class="note">A segment needs three measurements in an hour to be drawn. A segment near the end of a route can reflect a vehicle turning around, and one at a busy stop includes boarding time.</p>
+      <button class="btn small" disabled={!network} onclick={() => network && download(network, app)}>Download GeoJSON</button>
+      <p class="note">A street is colored when it has at least two measurements and one for each day selected. Gray lines had no measured service in this period. A segment near the end of a route can reflect a vehicle turning around, and one at a busy stop includes boarding time.</p>
     </aside>
   </div>
 </div>
 
 <style>
+  .map-page { gap: 12px; padding-top: 14px; padding-bottom: 28px; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 24px; }
+  .title { display: grid; gap: 2px; min-width: 0; flex: 1 1 320px; }
+  .title h1 { font-size: 30px; }
+  .route-select { width: 190px; height: 34px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
-  .main-col { display: grid; gap: 10px; min-width: 0; }
+  .main-col { display: grid; gap: 8px; min-width: 0; }
   .side { display: grid; gap: 18px; position: sticky; top: 72px; }
   .facts { display: grid; gap: 14px; }
   .facts dt { font-size: 12px; font-weight: 600; color: var(--muted); }

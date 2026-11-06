@@ -13,7 +13,7 @@
     height?: number;
     onchange: (hour: number) => void;
   }
-  let {hours, hour, units, height = 112, onchange}: Props = $props();
+  let {hours, hour, units, height = 96, onchange}: Props = $props();
 
   let width = $state(600);
   let playing = $state(false);

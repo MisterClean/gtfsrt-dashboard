@@ -20,6 +20,8 @@
   });
 
   const label = $derived(app.feed ? feedLabel(app.feed) : '');
+  // One note per distinct message, however many days it applies to.
+  const notes = $derived([...new Set([...app.warnings, ...(app.overview?.days.flatMap(day => day.warnings) ?? [])])]);
 </script>
 
 <svelte:head>
@@ -36,7 +38,7 @@
     {#if app.error}
       <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error}</div></div>
     {/if}
-    {#each app.warnings as warning}
+    {#each notes as warning}
       <div class="notice"><div class="banner caution" role="status">{warning}</div></div>
     {/each}
 

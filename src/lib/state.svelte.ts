@@ -63,6 +63,11 @@ class AppState {
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   feed = $derived(this.feeds.find(f => f.base64url === this.feedKey) ?? null);
+  /** Which speed scale to color with. A commuter rail network on the bus scale is one solid color. */
+  scaleMode = $derived.by((): Mode => {
+    if (this.mode !== 'All') return this.mode;
+    return (this.overview?.speed ?? 0) > 9 ? 'Rail' : 'Bus';
+  });
   loadedDates = $derived(this.dates.filter(d => this.analyzedDates.includes(d)));
   pendingDates = $derived(this.dates.filter(d => !this.analyzedDates.includes(d)));
   hasResults = $derived(this.loadedDates.length > 0);

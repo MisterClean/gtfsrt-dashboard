@@ -85,7 +85,7 @@
         <div class="stat">
           <dt>Excess wait</dt>
           <dd>{minutes(o.headways.excess_wait_s, 1)}</dd>
-          <div class="sub">{pct(o.headways.bunched)} bunched on frequent service</div>
+          <div class="sub">{pct(o.headways.bunched)} bunched, frequent service</div>
         </div>
       {/if}
       <div class="stat">
@@ -97,9 +97,9 @@
 
     <section class="hero" aria-label="Speed map and findings">
       <div class="hero-map">
-        <SpeedMap data={network} hour={app.mapHour} mode={app.mode} units={app.units} height="min(58vh, 560px)" onselect={() => app.go('map')} />
+        <SpeedMap data={network} hour={app.mapHour} mode={app.scaleMode} units={app.units} height="max(360px, calc(100dvh - 446px))" onselect={() => app.go('map')} />
         <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} onchange={h => (app.mapHour = h)} />
-        <SpeedLegend mode={app.mode} units={app.units} />
+        <SpeedLegend mode={app.scaleMode} units={app.units} />
       </div>
       <aside class="findings">
         <h2>What the data shows</h2>
@@ -191,6 +191,8 @@
 {/if}
 
 <style>
+  .page { gap: 22px; padding-top: 18px; }
+  .page :global(.section) { margin-top: 10px; }
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
   .hero-map { display: grid; gap: 12px; min-width: 0; }
   .findings { display: grid; gap: 14px; }

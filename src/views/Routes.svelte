@@ -106,8 +106,8 @@
     <div class="section-head">
       <div><h2>Every route, every hour</h2><p class="note">Sorted slowest at peak first. Colors use the same scale as the map.</p></div>
     </div>
-    <SpeedLegend mode={app.mode} units={app.units} />
-    <RouteHeat routes={byPeak} units={app.units} mode={app.mode} onselect={id => app.go('route', id)} />
+    <SpeedLegend mode={app.scaleMode} units={app.units} />
+    <RouteHeat routes={byPeak} units={app.units} mode={app.scaleMode} onselect={id => app.go('route', id)} />
   </section>
 </div>
 

@@ -8,6 +8,7 @@
 use js_sys::{Float64Array, Object, Reflect, Uint8Array};
 use transit_core::cube::{self, CachedSchedule, DayCube, METRIC_VERSION, StopEvent};
 use transit_core::day::process_day;
+use transit_core::gps::process_gps_day;
 use transit_core::library::Library;
 use transit_core::report::{self, Merged, Selection};
 use transit_core::rt::{RawFix, RtBuffer};
@@ -462,6 +463,45 @@ impl Engine {
             "events",
             &Uint8Array::from(event_bytes.as_slice()).into(),
         )?;
+        Ok(output)
+    }
+
+    /// Analyses a day from position alone, for feeds that can't join a schedule.
+    /// Returns the encoded cube and metadata for caching.
+    #[wasm_bindgen(js_name = processGpsDay)]
+    pub fn process_gps_day(&mut self, date: u32) -> Result<Object, JsError> {
+        let known = self
+            .schedules
+            .last()
+            .map(|schedule| schedule.routes.clone())
+            .unwrap_or_default();
+        let day = process_gps_day(&mut self.buffer, &known, ServiceDate(date), &self.clock)
+            .map_err(error)?;
+        self.library.add_schedule(&day.meta);
+        let meta_bytes = cube::encode(&CachedSchedule {
+            metric_version: METRIC_VERSION,
+            meta: day.meta,
+        })
+        .map_err(error)?;
+        let cube_bytes = cube::encode(&day.cube).map_err(error)?;
+        let digest = day.cube.digest.clone();
+        self.library
+            .add_day(day.cube, Some(Vec::new()))
+            .map_err(error)?;
+        self.merged = None;
+
+        let output = Object::new();
+        set(
+            &output,
+            "cube",
+            &Uint8Array::from(cube_bytes.as_slice()).into(),
+        )?;
+        set(
+            &output,
+            "meta",
+            &Uint8Array::from(meta_bytes.as_slice()).into(),
+        )?;
+        set(&output, "digest", &JsValue::from_str(&digest))?;
         Ok(output)
     }
 

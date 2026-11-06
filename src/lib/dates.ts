@@ -1,6 +1,6 @@
 // Choosing service days. The newest UTC file can't hold a complete local service
 // day, because evening service spills into the next UTC date.
-import {dateNumber, isoDate, parseIso} from './format';
+import {dateNumber, isoDate, parseIso} from './format.ts';
 
 export function addDays(iso: string, days: number) {
   const date = parseIso(iso);

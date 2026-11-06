@@ -8,42 +8,42 @@ web
 
 ## Stack
 
-Rust-first browser application compiled to WebAssembly, with a small JavaScript bridge to the pinned DuckDB-WASM worker. Static assets will be served at `michaelmclean.me/gtfsrt-dashboard/` from the existing website and Railway deployment.
+A static web application. TypeScript and Svelte 5 for the interface, built with Vite. Rust compiled to WebAssembly for all analytics, running in a worker beside the pinned DuckDB-WASM engine. MapLibre GL for maps. Static assets will be served at `michaelmclean.me/gtfsrt-dashboard/` from the existing website and Railway deployment.
 
 ## Users
 
-People exploring a selected transit agency and mode using the public GTFS-RT archive. Specific professional roles remain open.
+Transit planners, service analysts and agency staff who today spend weeks building this kind of reporting by hand, and the advocates and journalists who hold agencies to account. They know what operating speed, timepoints and headway adherence mean, and they will check a number before they repeat it. They usually work at a desktop during the day.
 
 ## Product Purpose
 
-Let a visitor inspect an agency's archived vehicle activity without the website hosting, processing, or receiving their transit working set.
+Put the reporting a seasoned planner would build for themselves at their fingertips, from public data, for any agency in the GTFS-RT archive. The goal is decisions: bus lanes, signal priority, stop consolidation and schedule changes. The dashboard shows where and when service loses time, and how sure we are.
 
 ## Capabilities and Constraints
 
-- The user confirmed the bounded archive explorer as the MVP: route activity, hourly coverage, vehicle positions, and inspectable sources.
-- Read public archive catalogs and exact Parquet objects directly from the browser, then run bounded DuckDB queries in a worker.
-- One feed and UTC day by default; enforce the architecture's object, byte, memory, result, and time budgets.
-- Support agency/feed and transit-mode selection only where source metadata supports the distinction. Never invent mode classifications.
-- Preserve cancellation, useful missing-data errors, SQL/provenance inspection, and source-quality disclosures.
-- No server query API, credentials, transit-data proxy, analytics, or automatic persistent raw-data warehouse.
-- Schedule-relative metrics and speed comparisons are outside the confirmed MVP.
-- Compile Rust before release; browsers load the compiled modules and run the application locally.
+- Read public archive catalogs and Parquet objects directly from the browser. Run all queries and analysis on the visitor's device.
+- The website must never receive, proxy or process transit data. No server query API, credentials, accounts, analytics or data upload.
+- Show the expected download before anything starts, and stop on request while keeping finished days.
+- Keep derived results in the visitor's browser, visible and clearable. Never persist raw vehicle data.
+- Never invent a classification or claim beyond the evidence. An absent trip is not proof of a cancellation, and there is no ridership in the archive.
+- Carry definitions, exclusions and thresholds with every result. Everything must be exportable.
 - Keep source public-safe and commit work in logical chunks.
 
 ## Brand Commitments
 
-Use the user's CTA Bus Speed Scorecard as the supplied reference: a warm, restrained transit notebook, readable quantitative comparisons, and clear methods. This is a personal transit project, not a Trusted Health or Hex dashboard.
+Use the user's CTA Bus Speed Scorecard as the reference: a warm, restrained transit notebook, readable quantitative comparisons, and clear methods. This is a personal transit project, not a Trusted Health or Hex dashboard.
 
 ## Evidence on Hand
 
-- `docs/architecture.md`: source contracts, metric boundaries, budgets, and MVP acceptance gates.
-- `docs/packaging-security.md`: Rust integration and self-hosted release requirements.
-- `docs/evidence/`: real Madison browser-query evidence for November 5, 2026.
-- The supplied CTA scorecard and source repository demonstrate the intended family of views; their speed/ridership measures are not available from a simple vehicle archive scan.
+- `docs/metrics.md`: every metric's definition, formula and limits.
+- `docs/architecture.md`: the pipeline, source contracts and resource bounds.
+- `docs/validation.md`: independent checks against raw data, and results for every agency in the archive.
+- `docs/packaging-security.md`: release contents and the security model.
+- The CTA scorecard and its source: https://github.com/MisterClean/cta-bus-speed-scorecard
 
 ## Product Principles
 
-- Execute on the visitor's device and keep resource use bounded.
-- Make a small real selection useful before broadening analysis.
-- Treat archive coverage as distinct from transit service delivered.
-- Carry source selection, metric definitions, and exclusions with every result.
+- The visitor's device does the work, and the host stays out of the data path.
+- Show something real quickly and refine it: results appear after the first day and improve with each one added.
+- Lead with the finding, then let the planner drill down to the evidence.
+- Measure the same way in every period, so comparisons mean what they appear to mean.
+- Say what isn't known as plainly as what is.
