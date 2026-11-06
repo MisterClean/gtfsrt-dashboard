@@ -12,7 +12,8 @@
     "probe": "node spike/run-browser-probe.mjs",
     "probe:serve": "node spike/serve.mjs",
     "build:wasm": "node scripts/build.mjs --wasm-only",
-    "check": "svelte-check --tsconfig ./tsconfig.json --output human"
+    "check": "svelte-check --tsconfig ./tsconfig.json --output human",
+    "test:e2e": "node tests/e2e.mjs"
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev114.0",
