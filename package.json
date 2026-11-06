@@ -1,0 +1,14 @@
+{
+  "name": "gtfsrt-dashboard-feasibility",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "probe": "node spike/run-browser-probe.mjs",
+    "probe:serve": "node spike/serve.mjs"
+  },
+  "devDependencies": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev114.0",
+    "esbuild": "0.25.12",
+    "playwright": "1.58.2"
+  }
+}

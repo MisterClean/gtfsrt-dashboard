@@ -1,0 +1,834 @@
+{
+  "startedAt": "2026-11-06T18:15:11.513Z",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+  "origin": "http://127.0.0.1:56335",
+  "crossOriginIsolated": false,
+  "checks": [
+    {
+      "name": "browser-fetch-inventory",
+      "ok": true,
+      "milliseconds": 145,
+      "value": {
+        "feeds": 76,
+        "agencies": 22
+      }
+    },
+    {
+      "name": "browser-head",
+      "ok": true,
+      "milliseconds": 85,
+      "value": {
+        "status": 200,
+        "contentLength": "34180170",
+        "visibleHeaders": {
+          "cache-control": "public, max-age=3600",
+          "content-length": "34180170",
+          "content-type": "application/octet-stream",
+          "date": "Fri, 06 Nov 2026 18:15:11 GMT",
+          "expires": "Fri, 06 Nov 2026 19:15:11 GMT",
+          "last-modified": "Fri, 06 Nov 2026 05:04:21 GMT",
+          "server": "UploadServer",
+          "x-guploader-uploadid": "AFy3sg2EtBvTMfHQbfGXmSipJwOUQcRa5BRHFh3FTOhjLkH3CD4fogZmavNTV2LrrOG9fpYn"
+        }
+      }
+    },
+    {
+      "name": "browser-range",
+      "ok": true,
+      "milliseconds": 77,
+      "value": {
+        "status": 206,
+        "magic": "PAR1",
+        "visibleContentRange": null
+      }
+    },
+    {
+      "name": "instantiate-wasm",
+      "ok": true,
+      "milliseconds": 462,
+      "value": {
+        "bundle": "base",
+        "maximumThreads": 1,
+        "allowFullHTTPReads": false,
+        "forceFullHTTPReads": false
+      }
+    },
+    {
+      "name": "engine-version",
+      "ok": true,
+      "milliseconds": 19,
+      "value": {
+        "sql": "SELECT version() AS engine_version",
+        "rows": [
+          {
+            "engine_version": "v2.0.0"
+          }
+        ]
+      }
+    },
+    {
+      "name": "register-remote-parquet",
+      "ok": true,
+      "milliseconds": 1,
+      "value": {
+        "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+        "directIO": false
+      }
+    },
+    {
+      "name": "vehicle-schema",
+      "ok": true,
+      "milliseconds": 3434,
+      "value": {
+        "sql": "DESCRIBE SELECT * FROM read_parquet('madison.parquet')",
+        "rows": [
+          {
+            "column_name": "source_file",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "feed_url",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "feed_timestamp",
+            "column_type": "UBIGINT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "fetch_timestamp",
+            "column_type": "TIMESTAMP WITH TIME ZONE",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "entity_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "trip_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "route_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "direction_id",
+            "column_type": "UINTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "start_time",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "start_date",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "schedule_relationship",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "vehicle_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "vehicle_label",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "license_plate",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "latitude",
+            "column_type": "FLOAT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "longitude",
+            "column_type": "FLOAT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "bearing",
+            "column_type": "FLOAT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "odometer",
+            "column_type": "DOUBLE",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "speed",
+            "column_type": "FLOAT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "current_stop_sequence",
+            "column_type": "UINTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "stop_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "current_status",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "timestamp",
+            "column_type": "UBIGINT",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "congestion_level",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "occupancy_status",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "occupancy_percentage",
+            "column_type": "UINTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "wheelchair_accessible",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "modified_trip_modifications_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "modified_trip_affected_trip_id",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "modified_trip_start_date",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "modified_trip_start_time",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "multi_carriage_details_json",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "feed_version",
+            "column_type": "VARCHAR",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "incrementality",
+            "column_type": "INTEGER",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          },
+          {
+            "column_name": "is_deleted",
+            "column_type": "BOOLEAN",
+            "null": "YES",
+            "key": null,
+            "default": null,
+            "extra": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "vehicle-row-count",
+      "ok": true,
+      "milliseconds": 1149,
+      "value": {
+        "sql": "SELECT count(*) AS rows FROM read_parquet('madison.parquet')",
+        "rows": [
+          {
+            "rows": "296588"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vehicle-route-aggregate",
+      "ok": true,
+      "milliseconds": 2798,
+      "value": {
+        "sql": "\n    SELECT route_id, count(*) AS snapshot_rows,\n           count(DISTINCT vehicle_id) AS distinct_reported_vehicles,\n           min(fetch_timestamp) AS first_fetch, max(fetch_timestamp) AS last_fetch\n    FROM read_parquet('madison.parquet')\n    GROUP BY route_id ORDER BY snapshot_rows DESC LIMIT 10\n  ",
+        "rows": [
+          {
+            "route_id": null,
+            "snapshot_rows": "40990",
+            "distinct_reported_vehicles": "150",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "D",
+            "snapshot_rows": "34713",
+            "distinct_reported_vehicles": "29",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "A",
+            "snapshot_rows": "34408",
+            "distinct_reported_vehicles": "31",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "B",
+            "snapshot_rows": "25419",
+            "distinct_reported_vehicles": "28",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "C",
+            "snapshot_rows": "23066",
+            "distinct_reported_vehicles": "23",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "80",
+            "snapshot_rows": "20044",
+            "distinct_reported_vehicles": "20",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "G",
+            "snapshot_rows": "13956",
+            "distinct_reported_vehicles": "19",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "F",
+            "snapshot_rows": "12784",
+            "distinct_reported_vehicles": "23",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "R",
+            "snapshot_rows": "10501",
+            "distinct_reported_vehicles": "23",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          },
+          {
+            "route_id": "H",
+            "snapshot_rows": "9594",
+            "distinct_reported_vehicles": "20",
+            "first_fetch": 1793836801920.219,
+            "last_fetch": 1793923182680.111
+          }
+        ]
+      }
+    },
+    {
+      "name": "feed-metadata",
+      "ok": true,
+      "milliseconds": 156,
+      "value": {
+        "sql": "SELECT * FROM read_parquet('feeds.parquet') WHERE agency_id = 'metro-transit-madison'",
+        "rows": [
+          {
+            "base64url": "aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM",
+            "url": "https://metromap.cityofmadison.com/gtfsrt/vehicles",
+            "feed_type": "vehicle_positions",
+            "feed_id": "metro-transit-madison-vehicle-positions",
+            "feed_name": "Metro Transit - City of Madison Vehicle Positions",
+            "agency_id": "metro-transit-madison",
+            "agency_name": "Metro Transit - City of Madison",
+            "system_id": null,
+            "system_name": null,
+            "interval_seconds": 20,
+            "schedule_url": "http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip",
+            "schedule_urls": "[\"http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip\"]"
+          },
+          {
+            "base64url": "aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdHJpcHM",
+            "url": "https://metromap.cityofmadison.com/gtfsrt/trips",
+            "feed_type": "trip_updates",
+            "feed_id": "metro-transit-madison-trip-updates",
+            "feed_name": "Metro Transit - City of Madison Trip Updates",
+            "agency_id": "metro-transit-madison",
+            "agency_name": "Metro Transit - City of Madison",
+            "system_id": null,
+            "system_name": null,
+            "interval_seconds": 20,
+            "schedule_url": "http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip",
+            "schedule_urls": "[\"http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip\"]"
+          },
+          {
+            "base64url": "aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvYWxlcnRz",
+            "url": "https://metromap.cityofmadison.com/gtfsrt/alerts",
+            "feed_type": "service_alerts",
+            "feed_id": "metro-transit-madison-service-alerts",
+            "feed_name": "Metro Transit - City of Madison Service Alerts",
+            "agency_id": "metro-transit-madison",
+            "agency_name": "Metro Transit - City of Madison",
+            "system_id": null,
+            "system_name": null,
+            "interval_seconds": 60,
+            "schedule_url": "http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip",
+            "schedule_urls": "[\"http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip\"]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "schedule-catalog",
+      "ok": true,
+      "milliseconds": 72,
+      "value": {
+        "schedules": 30,
+        "madison": [
+          {
+            "schedule_url": "http://transitdata.cityofmadison.com/GTFS/mmt_gtfs.zip",
+            "base64url": "aHR0cDovL3RyYW5zaXRkYXRhLmNpdHlvZm1hZGlzb24uY29tL0dURlMvbW10X2d0ZnMuemlw",
+            "versions": [
+              {
+                "_feed_digest": "v1:3feecbf9106b51436b33c91747ba071d8b843669f5269aa3c5589c164a524136",
+                "date_retrieved": "2025-12-05T00:00:00Z",
+                "feed_start_date": "20251207",
+                "feed_end_date": "20260228"
+              },
+              {
+                "_feed_digest": "v1:e9f662e0a8c027b624e73ae87980c7274f7a45cb38a9f33be1050b2afbac3483",
+                "date_retrieved": "2026-01-13T00:27:00Z",
+                "feed_start_date": "20251227",
+                "feed_end_date": "20260228"
+              },
+              {
+                "_feed_digest": "v1:4fef02763e505ac9784797c3ce3c4baae92c9257542e7d3e0a14dff9bc7763a7",
+                "date_retrieved": "2026-02-28T01:20:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:822b33770d8b8933280555aa73f8c8ecb2ddbb3c76639a2a426e6d6a1d747788",
+                "date_retrieved": "2026-03-03T01:07:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:744522866dad3c18593b00c043ce08a801a2c148987fa15406941fc16705d8e3",
+                "date_retrieved": "2026-03-04T01:34:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:4d42adb6dfb1acb74ef0be680aa191b8a4c4ee19c6cbaaa91613c9c7248b9d38",
+                "date_retrieved": "2026-03-05T01:20:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:0e8dc444fc81f3e9f5bfd225e35ef9b75798fea9ed10f05f1fb08f53529f3428",
+                "date_retrieved": "2026-03-07T00:54:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:eb2f3678ae668f7eaf6d3c088714bf4760ff97e56defc6274faa8d09c7d9a827",
+                "date_retrieved": "2026-03-12T01:14:00Z",
+                "feed_start_date": "20260301",
+                "feed_end_date": "20260509"
+              },
+              {
+                "_feed_digest": "v1:044d051fc18ae3cd50f57212c56308bf65e199e5fbbc9c7568d0d85d7c7ab431",
+                "date_retrieved": "2026-05-06T05:12:14Z",
+                "feed_start_date": "20260510",
+                "feed_end_date": "20260815"
+              },
+              {
+                "_feed_digest": "v1:d3828e8148875720422e7e3df5be8068831baa2b383d5eb270da0212b5e5da66",
+                "date_retrieved": "2026-08-12T05:12:32Z",
+                "feed_start_date": "20260816",
+                "feed_end_date": "20261205"
+              },
+              {
+                "_feed_digest": "v1:6f016d24a3f27cc2d797ccaac63d3d60c8957185e3cac575d65503727cf4e511",
+                "date_retrieved": "2026-08-25T05:14:26Z",
+                "feed_start_date": "20260816",
+                "feed_end_date": "20261205"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "inventory": {
+    "feeds": 76,
+    "agencies": 22
+  },
+  "selection": {
+    "date": "2026-11-05",
+    "feed": {
+      "url": "https://metromap.cityofmadison.com/gtfsrt/vehicles",
+      "base64url": "aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM",
+      "agency_id": "metro-transit-madison",
+      "agency_name": "Metro Transit - City of Madison",
+      "system_id": null,
+      "system_name": null,
+      "feed_type": "vehicle_positions",
+      "date_min": "2026-01-10",
+      "date_max": "2026-11-05",
+      "total_records": 66550013,
+      "total_bytes": 8047079289
+    }
+  },
+  "ok": true,
+  "finishedAt": "2026-11-06T18:15:19.920Z",
+  "network": [
+    {
+      "phase": "browser-fetch-inventory",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/inventory.json",
+      "method": "GET",
+      "range": null,
+      "status": 200,
+      "contentLength": 35935,
+      "contentRange": null,
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "browser-head",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "HEAD",
+      "range": null,
+      "status": 200,
+      "contentLength": 34180170,
+      "contentRange": null,
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "browser-range",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=0-3",
+      "status": 206,
+      "contentLength": 4,
+      "contentRange": "bytes 0-3/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "HEAD",
+      "range": "bytes=0-",
+      "status": 206,
+      "contentLength": 34180170,
+      "contentRange": "bytes 0-34180169/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=34111488-34127871",
+      "status": 206,
+      "contentLength": 16384,
+      "contentRange": "bytes 34111488-34127871/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=34127872-34180169",
+      "status": 206,
+      "contentLength": 52298,
+      "contentRange": "bytes 34127872-34180169/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=20103168-20119551",
+      "status": 206,
+      "contentLength": 16384,
+      "contentRange": "bytes 20103168-20119551/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=20119552-20185087",
+      "status": 206,
+      "contentLength": 65536,
+      "contentRange": "bytes 20119552-20185087/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=20185088-20447231",
+      "status": 206,
+      "contentLength": 262144,
+      "contentRange": "bytes 20185088-20447231/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=20447232-21495807",
+      "status": 206,
+      "contentLength": 1048576,
+      "contentRange": "bytes 20447232-21495807/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=21495808-25690111",
+      "status": 206,
+      "contentLength": 4194304,
+      "contentRange": "bytes 21495808-25690111/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-schema",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=25690112-34180169",
+      "status": 206,
+      "contentLength": 8490058,
+      "contentRange": "bytes 25690112-34180169/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=0-16383",
+      "status": 206,
+      "contentLength": 16384,
+      "contentRange": "bytes 0-16383/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=16384-81919",
+      "status": 206,
+      "contentLength": 65536,
+      "contentRange": "bytes 16384-81919/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=81920-344063",
+      "status": 206,
+      "contentLength": 262144,
+      "contentRange": "bytes 81920-344063/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=344064-1392639",
+      "status": 206,
+      "contentLength": 1048576,
+      "contentRange": "bytes 344064-1392639/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=1392640-5586943",
+      "status": 206,
+      "contentLength": 4194304,
+      "contentRange": "bytes 1392640-5586943/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "vehicle-route-aggregate",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=5586944-22364159",
+      "status": 206,
+      "contentLength": 16777216,
+      "contentRange": "bytes 5586944-22364159/34180170",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "feed-metadata",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/feeds.parquet",
+      "method": "HEAD",
+      "range": "bytes=0-",
+      "status": 206,
+      "contentLength": 11373,
+      "contentRange": "bytes 0-11372/11373",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "feed-metadata",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/feeds.parquet",
+      "method": "GET",
+      "range": "bytes=0-11372",
+      "status": 206,
+      "contentLength": 11373,
+      "contentRange": "bytes 0-11372/11373",
+      "allowOrigin": "*"
+    },
+    {
+      "phase": "schedule-catalog",
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/schedules.json",
+      "method": "GET",
+      "range": null,
+      "status": 200,
+      "contentLength": 190612,
+      "contentRange": null,
+      "allowOrigin": "*"
+    }
+  ],
+  "browserErrors": [],
+  "packageVersion": "1.33.1-dev114.0",
+  "browserVersion": "157.0.8103.39",
+  "networkMeasurement": "GET response Content-Length sums; excludes HEAD, TLS overhead and WASM assets. May include cached/overlapping bytes. Phase attribution is approximate."
+}

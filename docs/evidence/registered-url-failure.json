@@ -1,0 +1,139 @@
+{
+  "startedAt": "2026-11-06T18:10:01.299Z",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+  "origin": "http://127.0.0.1:55973",
+  "crossOriginIsolated": false,
+  "checks": [
+    {
+      "name": "browser-fetch-inventory",
+      "ok": true,
+      "milliseconds": 120,
+      "value": {
+        "feeds": 76,
+        "agencies": 22
+      }
+    },
+    {
+      "name": "browser-head",
+      "ok": true,
+      "milliseconds": 62,
+      "value": {
+        "status": 200,
+        "contentLength": "34180170",
+        "visibleHeaders": {
+          "cache-control": "public, max-age=3600",
+          "content-length": "34180170",
+          "content-type": "application/octet-stream",
+          "date": "Fri, 06 Nov 2026 18:10:01 GMT",
+          "expires": "Fri, 06 Nov 2026 19:10:01 GMT",
+          "last-modified": "Fri, 06 Nov 2026 05:04:21 GMT",
+          "server": "UploadServer",
+          "x-guploader-uploadid": "AFy3sg0V-NxOKLWXyN9r_a5IEH8PdE-VEw9bQlXKwLA1pwW0FU6h9WzVQnhcC4tdvWR379U8SHUK8go"
+        }
+      }
+    },
+    {
+      "name": "browser-range",
+      "ok": true,
+      "milliseconds": 88,
+      "value": {
+        "status": 206,
+        "magic": "PAR1",
+        "visibleContentRange": null
+      }
+    },
+    {
+      "name": "instantiate-wasm",
+      "ok": true,
+      "milliseconds": 528,
+      "value": {
+        "bundle": "base",
+        "maximumThreads": 1,
+        "allowFullHTTPReads": false
+      }
+    },
+    {
+      "name": "engine-version",
+      "ok": true,
+      "milliseconds": 20,
+      "value": {
+        "sql": "SELECT version() AS engine_version",
+        "rows": [
+          {
+            "engine_version": "v2.0.0"
+          }
+        ]
+      }
+    },
+    {
+      "name": "register-remote-parquet",
+      "ok": true,
+      "milliseconds": 1,
+      "value": {
+        "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+        "directIO": false
+      }
+    },
+    {
+      "name": "vehicle-schema",
+      "ok": false,
+      "milliseconds": 740,
+      "error": "Error: Invalid Error: Opening file 'madison.parquet' failed with error: Failed to open file: madison.parquet\n\nLINE 1: DESCRIBE SELECT * FROM read_parquet('madison.parquet')\n                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    }
+  ],
+  "inventory": {
+    "feeds": 76,
+    "agencies": 22
+  },
+  "selection": {
+    "date": "2026-11-05",
+    "feed": {
+      "url": "https://metromap.cityofmadison.com/gtfsrt/vehicles",
+      "base64url": "aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM",
+      "agency_id": "metro-transit-madison",
+      "agency_name": "Metro Transit - City of Madison",
+      "system_id": null,
+      "system_name": null,
+      "feed_type": "vehicle_positions",
+      "date_min": "2026-01-10",
+      "date_max": "2026-11-05",
+      "total_records": 66550013,
+      "total_bytes": 8047079289
+    }
+  },
+  "ok": false,
+  "error": "Error: Invalid Error: Opening file 'madison.parquet' failed with error: Failed to open file: madison.parquet\n\nLINE 1: DESCRIBE SELECT * FROM read_parquet('madison.parquet')\n                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+  "finishedAt": "2026-11-06T18:10:02.861Z",
+  "network": [
+    {
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/inventory.json",
+      "method": "GET",
+      "range": null,
+      "status": 200,
+      "contentLength": 35935,
+      "contentRange": null,
+      "allowOrigin": "*"
+    },
+    {
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "HEAD",
+      "range": null,
+      "status": 200,
+      "contentLength": 34180170,
+      "contentRange": null,
+      "allowOrigin": "*"
+    },
+    {
+      "url": "https://storage.googleapis.com/parquet.gtfsrt.io/vehicle_positions/date=2026-11-05/base64url=aHR0cHM6Ly9tZXRyb21hcC5jaXR5b2ZtYWRpc29uLmNvbS9ndGZzcnQvdmVoaWNsZXM/data.parquet",
+      "method": "GET",
+      "range": "bytes=0-3",
+      "status": 206,
+      "contentLength": 4,
+      "contentRange": "bytes 0-3/34180170",
+      "allowOrigin": "*"
+    }
+  ],
+  "browserErrors": [],
+  "packageVersion": "1.33.1-dev114.0",
+  "browserVersion": "157.0.8103.39"
+}

@@ -1,0 +1,17 @@
+{
+  "source": "docs/evidence/browser-probe.json",
+  "measuredAt": "2026-11-06T18:15:19.920Z",
+  "objectBytes": 34180170,
+  "getResponseBytes": 36509848,
+  "getResponseCount": 15,
+  "mergedByteRanges": [
+    [
+      0,
+      34180169
+    ]
+  ],
+  "parquetFooterBytes": 14066633,
+  "footerMeasurement": "Separate HTTPS GET Range bytes=34180162-34180169; first four returned bytes decoded as little-endian uint32; trailing magic PAR1.",
+  "wasmAssetBytes": 33753922,
+  "notes": "GET response Content-Length sums; excludes HEAD, TLS overhead and WASM assets. May include cached/overlapping bytes. Phase attribution is approximate."
+}
