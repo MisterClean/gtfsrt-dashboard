@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "crates/core", "crates/wasm"]
+resolver = "3"
+
 [package]
 name = "gtfsrt-dashboard"
 version = "0.1.0"
