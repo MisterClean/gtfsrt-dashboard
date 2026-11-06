@@ -31,6 +31,8 @@
   let chosenDate = $state<string | null>(null);
   let timeWindow = $state<'all' | 'am' | 'mid' | 'pm' | 'eve'>('all');
   let line = $state<StringLine | null>(null);
+  let eventsAvailable = $state(true);
+  let lineFailure = $state<string | null>(null);
   let lineLoading = $state(false);
   let hover = $state<number | null>(null);
   let headwayHover = $state<number | null>(null);
@@ -68,6 +70,8 @@
   });
 
   const score = $derived(detail?.score ?? null);
+  // One route's own mode picks the scale, whatever the rest of the agency runs.
+  const scaleMode = $derived(detail?.score.mode === 'Rail' || detail?.score.mode === 'Ferry' ? detail.score.mode : app.mode === 'All' ? 'Bus' : app.mode);
   const directions = $derived(detail?.directions ?? []);
   const direction = $derived<DirectionDetail | null>(directions[Math.min(app.directionIndex, directions.length - 1)] ?? null);
   const name = $derived(score ? routeName(score.label, score.long_name) : '');
@@ -90,10 +94,15 @@
     engine
       .stringLine(id, dir, dateNumber(day))
       .then(result => {
-        if (current) line = result;
+        if (!current) return;
+        line = result.line;
+        eventsAvailable = result.available;
+        lineFailure = null;
       })
-      .catch(() => {
-        if (current) line = null;
+      .catch(error => {
+        if (!current) return;
+        line = null;
+        lineFailure = errorText(error);
       })
       .finally(() => {
         if (current) lineLoading = false;
@@ -362,13 +371,13 @@
           </div>
           <button class="btn small quiet" onclick={downloadProfile}>Download CSV</button>
         </div>
-        <SpeedLegend mode={app.mode} units={app.units} />
+        <SpeedLegend mode={scaleMode} units={app.units} />
         <ProfileHeat
           profile={direction.profile}
           stops={direction.stops}
           lengthM={direction.length_m}
           units={app.units}
-          mode={app.mode}
+          mode={scaleMode}
           slowest={direction.slowest}
           selectedHour={app.mapHour}
           onpick={hour => (app.mapHour = hour)}
@@ -379,7 +388,7 @@
               <SpeedMap
                 data={network}
                 hour={app.mapHour}
-                mode={app.mode}
+                mode={scaleMode}
                 units={app.units}
                 {highlight}
                 height="420px"
@@ -444,7 +453,11 @@
         {:else if lineLoading}
           <p class="empty">Loading this day's trips…</p>
         {:else}
-          <p class="empty">No trip-level data for this direction on this day.</p>
+          <p class="empty">
+            {#if lineFailure}This chart could not be drawn. {lineFailure}
+            {:else if !eventsAvailable}Trip-level detail for this day isn't on this device, usually because saving it failed. Clear this agency's results on Data &amp; methods and analyze the day again to see it.
+            {:else}No trips were observed in this direction on this day.{/if}
+          </p>
         {/if}
       </section>
 

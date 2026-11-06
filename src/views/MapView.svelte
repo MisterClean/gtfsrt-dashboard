@@ -5,7 +5,7 @@
   import {download} from '../lib/map-export';
   import {hourRange, int, pct, routeName, speedUnit, speedWithUnit, toDisplaySpeed} from '../lib/format';
   import {HOURS} from '../lib/scale';
-  import {app} from '../lib/state.svelte';
+  import {app, errorText} from '../lib/state.svelte';
   import LineChart from '../charts/LineChart.svelte';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap, {type MapMetric, type MapPeriod} from '../map/SpeedMap.svelte';
@@ -17,11 +17,27 @@
   let metric = $state<MapMetric>('speed');
   let pinned = $state<MapFeature | null>(null);
 
+  let failure = $state<string | null>(null);
+  let request = 0;
+
   $effect(() => {
     app.version;
     const filter = route || undefined;
     if (!app.hasResults) return;
-    engine.networkMap(filter).then(result => (network = result)).catch(() => {});
+    const current = ++request;
+    engine.networkMap(filter).then(
+      result => {
+        if (current !== request) return;
+        network = result;
+        failure = null;
+      },
+      error => {
+        if (current !== request) return;
+        network = null;
+        pinned = null;
+        failure = errorText(error);
+      },
+    );
   });
 
   const current = $derived(network?.hours.find(h => h.hour === app.mapHour) ?? null);
@@ -67,6 +83,7 @@
     </div>
   </div>
 
+  {#if failure}<p class="banner error" role="alert">The map could not be drawn. {failure}</p>{/if}
   <div class="layout">
     <div class="main-col">
       <SpeedMap data={network} hour={app.mapHour} {period} {metric} mode={app.scaleMode} units={app.units} height="calc(100dvh - {period === 'hour' ? 372 : 228}px)" onselect={f => (pinned = f)} />

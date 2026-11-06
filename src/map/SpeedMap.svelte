@@ -162,10 +162,6 @@
       const feature = event.features?.[0];
       if (feature) onselect?.(featuresById.get(Number(feature.properties.id)) ?? null);
     });
-    map.on('error', event => {
-      // Missing tiles only cost the basemap. The data lines still draw.
-      if (String(event.error?.message ?? '').includes('openfreemap') || (event as any).sourceId === 'map') tilesFailed = true;
-    });
   }
 
   function valueOf(feature: MapFeature) {
@@ -219,6 +215,11 @@
       return;
     }
     map = instance;
+    // Bound first, because a failed tile source reports before the map finishes loading.
+    // Missing tiles only cost the basemap. The data lines still draw.
+    instance.on('error', event => {
+      if (String(event.error?.message ?? '').includes('openfreemap') || (event as any).sourceId === 'map') tilesFailed = true;
+    });
     instance.touchZoomRotate.disableRotation();
     instance.keyboard.enable();
     instance.addControl(new NavigationControl({showCompass: false}), 'top-right');
@@ -232,6 +233,7 @@
       bound = false;
       fitted = false;
       map = undefined;
+      tooltip.hide();
       instance.remove();
     };
   });

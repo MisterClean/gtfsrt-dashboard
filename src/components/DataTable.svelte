@@ -133,6 +133,9 @@
       </tr>
     </thead>
     <tbody>
+      {#if !visible.length}
+        <tr><td class="left empty-row" colspan={columns.length}>{query.trim() ? 'Nothing matches that filter.' : 'Nothing to show for this selection.'}</td></tr>
+      {/if}
       {#each visible as row}
         <tr class:clickable={!!onrow} onclick={() => onrow?.(row)}>
           {#each columns as column}
@@ -155,4 +158,5 @@
   .table-tools { justify-content: flex-end; }
   .table-tools input { width: min(260px, 100%); height: 30px; font-size: 12.5px; margin-right: auto; }
   .more { justify-self: start; font-size: 13px; }
+  .empty-row { color: var(--muted); padding: 16px 10px; white-space: normal; }
 </style>

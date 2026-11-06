@@ -124,6 +124,7 @@
       loaded = false;
       fitted = false;
       map = undefined;
+      tooltip.hide();
       instance.remove();
     };
   });

@@ -162,13 +162,13 @@
             data={network}
             hour={app.mapHour}
             {period}
-            mode={app.mode}
+            mode={app.scaleMode}
             units={app.units}
             height="min(72vh, 680px)"
             highlight={selected?.path ?? null}
             label="Map of speed on each street, with the chosen stretch outlined"
           />
-          <SpeedLegend mode={app.mode} units={app.units} />
+          <SpeedLegend mode={app.scaleMode} units={app.units} />
         </div>
         <div class="ranked">
           <div class="ranked-head">

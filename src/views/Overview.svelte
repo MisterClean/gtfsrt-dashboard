@@ -8,17 +8,32 @@
   import {findings, scopeLine} from '../lib/findings';
   import {dateLabel, datesLabel, int, minutes, pct, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
   import {HOURS} from '../lib/scale';
-  import {app, feedLabel} from '../lib/state.svelte';
+  import {app, errorText, feedLabel} from '../lib/state.svelte';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
   let network = $state<NetworkMap | null>(null);
+  let mapFailure = $state<string | null>(null);
   let hover = $state<number | null>(null);
+  let mapRequest = 0;
 
   $effect(() => {
     app.version;
     if (!app.hasResults) return;
-    engine.networkMap().then(result => (network = result)).catch(() => {});
+    const request = ++mapRequest;
+    engine.networkMap().then(
+      result => {
+        if (request !== mapRequest) return;
+        network = result;
+        mapFailure = null;
+      },
+      error => {
+        if (request !== mapRequest) return;
+        // Don't leave the last selection's map beside this selection's numbers.
+        network = null;
+        mapFailure = errorText(error);
+      },
+    );
   });
 
   const o = $derived(app.overview);
@@ -47,7 +62,8 @@
     {key: 'observed', label: 'Trips observed', value: d => d.trips_observed, format: d => int(d.trips_observed), descending: true},
     {key: 'scheduled', label: 'Scheduled', value: d => d.trips_scheduled, format: d => int(d.trips_scheduled), descending: true},
     {key: 'share', label: 'Share', value: d => share(d.trips_observed, d.trips_scheduled), format: d => pct(share(d.trips_observed, d.trips_scheduled)), descending: true},
-    {key: 'gaps', label: 'Capture gaps', title: 'Five-minute periods during scheduled service with no archived feed capture', value: d => d.empty_buckets, format: d => (d.empty_buckets ? `${(d.empty_buckets * 5).toLocaleString('en-US')} min` : 'None')},
+    {key: 'gaps', label: 'Capture gaps', title: 'Five-minute periods during scheduled service with no archived feed capture', value: d => d.empty_buckets, format: d => (d.service_buckets === 0 ? '—' : d.empty_buckets ? `${(d.empty_buckets * 5).toLocaleString('en-US')} min` : 'None')},
+    {key: 'status', label: 'Status', left: true, value: d => (d.status === 'Partial' ? 'Partial' : 'Complete'), format: d => (d.status === 'Partial' ? 'Partial, see note above' : 'Complete')},
   ]);
 </script>
 
@@ -78,8 +94,13 @@
       </div>
       <div class="stat">
         <dt>Trips observed</dt>
-        <dd>{int(o.trips_observed_per_day)} <small>a day</small></dd>
-        <div class="sub">{pct(observedShare, 1)} of {int(o.trips_scheduled_per_day)} scheduled</div>
+        {#if o.trips_scheduled_per_day > 0}
+          <dd>{int(o.trips_observed_per_day)} <small>a day</small></dd>
+          <div class="sub">{pct(observedShare, 1)} of {int(o.trips_scheduled_per_day)} scheduled</div>
+        {:else}
+          <dd>—</dd>
+          <div class="sub">No schedule to compare with</div>
+        {/if}
       </div>
       {#if o.headways}
         <div class="stat">
@@ -97,6 +118,7 @@
 
     <section class="hero" aria-label="Speed map and findings">
       <div class="hero-map">
+        {#if mapFailure}<p class="banner error" role="alert">The map could not be drawn. {mapFailure}</p>{/if}
         <SpeedMap data={network} hour={app.mapHour} mode={app.scaleMode} units={app.units} height="max(360px, calc(100dvh - 446px))" onselect={() => app.go('map')} />
         <HourTimeline hours={network?.hours ?? []} hour={app.mapHour} units={app.units} onchange={h => (app.mapHour = h)} />
         <SpeedLegend mode={app.scaleMode} units={app.units} />

@@ -8,7 +8,7 @@
   import type {ReadRecord} from '../engine/types';
   import {downloadFile} from '../lib/download';
   import {bytes, dateLabel, dateNumber, datesLabel, int, isoDate, plural} from '../lib/format';
-  import {app, feedLabel} from '../lib/state.svelte';
+  import {app, feedLabel, errorText} from '../lib/state.svelte';
 
   const days = $derived(app.quality?.days ?? []);
   const feed = $derived(app.feed);
@@ -55,11 +55,15 @@
   // ---- This device ----------------------------------------------------------
   let confirming = $state<'feed' | 'all' | null>(null);
   let clearing = $state(false);
+  let clearFailure = $state<string | null>(null);
 
   async function clear(all: boolean) {
     clearing = true;
+    clearFailure = null;
     try {
       await app.clearCache(all);
+    } catch (error) {
+      clearFailure = errorText(error);
     } finally {
       clearing = false;
       confirming = null;
@@ -223,7 +227,7 @@
     <div class="section-head">
       <div>
         <h2 id="funnel-heading">From raw rows to measurements</h2>
-        <p class="note">Every row removed has a count and a reason. Most feeds repeat a position across several polls, so a large share of rows normally falls away as repeats. Point at a step for more detail.</p>
+        <p class="note">Each step shows what was removed and why. Most feeds repeat a position across several polls, so a large share of rows normally falls away as repeats. Point at a step for more detail.</p>
       </div>
     </div>
     {#if days.length}
@@ -285,6 +289,7 @@
       {/if}
     </div>
 
+    {#if clearFailure}<p class="banner error" role="alert">{clearFailure}</p>{/if}
     <h3>Who sees what</h3>
     <div class="table-wrap">
       <table class="data">

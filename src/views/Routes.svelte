@@ -26,7 +26,9 @@
   });
   const peakOf = (r: RouteScore) => (peak === 'am' ? r.speed_am : peak === 'pm' ? r.speed_pm : r.speed_peak);
   const peakLabel = $derived(peak === 'am' ? 'Morning peak' : peak === 'pm' ? 'Evening peak' : 'Peak');
-  const rows = $derived(app.routes.filter(r => r.trips_observed > 0));
+  // Routes with service but no observations are the ones a planner most needs to see.
+  const rows = $derived(app.routes.filter(r => r.trips_scheduled > 0 || r.speed !== null));
+  const unobserved = $derived(app.routes.filter(r => r.trips_scheduled > 0 && r.trips_observed === 0 && r.speed === null).length);
 
   const dumbbell = $derived(rows.map(r => ({id: r.id, label: r.label, name: r.long_name, mid: r.speed_mid, peak: peakOf(r)})));
   const byPeak = $derived([...rows].sort((a, b) => (a.speed_peak ?? 99) - (b.speed_peak ?? 99)));
@@ -90,6 +92,7 @@
       onrow={r => app.go('route', r.id)}
       maxHeight="72vh"
     />
+    {#if unobserved}<p class="note"><strong>{unobserved} {unobserved === 1 ? 'route has' : 'routes have'} scheduled trips but no observations.</strong> They appear in the table with blank figures. That can mean the service didn't run, or that the feed didn't report it.</p>{/if}
     <p class="note">Speeds count time at stops and red lights and exclude terminal layovers. Without five or more days, intervals aren't shown. On-time performance and headways appear only where the data supports them; see Data &amp; methods.</p>
   </section>
 

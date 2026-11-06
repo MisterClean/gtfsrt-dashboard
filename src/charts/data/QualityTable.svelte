@@ -47,6 +47,7 @@
         {key: 'bad', label: 'Unusable coordinates', title: 'Outside valid ranges, or exactly (0, 0)', indent: true, value: q => q.bad_coordinate, base: q => q.rows},
         {key: 'repeats', label: 'Repeated polls, and rows on other days’ trips', title: 'What remains after the steps above and the reports used below. Approximate, because rows are counted by hour and reports by service day.', indent: true, value: repeats, base: q => q.rows},
         {key: 'on_day', label: 'Distinct reports on this day’s trips', title: 'One per vehicle, trip and report time', strong: true, value: q => q.fixes_on_day, base: q => q.rows},
+        {key: 'no_date', label: 'No operating day for that trip nearby', title: 'The trip ID is in the schedule, but no service date within reach runs it, so these reports could not be assigned to a day', indent: true, value: q => q.fixes_no_service_date},
         {key: 'off_route', label: 'More than 120 m off the route line', title: 'Skipped, usually a detour', indent: true, value: q => q.off_route, base: q => q.fixes_on_day},
         {key: 'backward', label: 'Moved backward along the line', title: 'More than 30 m, usually GPS jitter. Held at the furthest point reached rather than removed.', indent: true, value: q => q.backward, base: q => q.fixes_on_day},
         {key: 'fallback', label: 'Fetch time used for a missing report time', title: 'The vehicle report had no timestamp, so the time it was captured stands in', indent: true, value: q => q.fallback_time},
@@ -57,6 +58,7 @@
       title: 'Intervals between reports',
       steps: [
         {key: 'pairs', label: 'Intervals', title: 'Consecutive reports on one trip', strong: true, value: q => q.pairs},
+        {key: 'no_route', label: 'No route reported, or route changed', title: 'GPS-only days, where a pair of reports needs one route to belong to', indent: true, value: q => q.pairs_no_route, base: q => q.pairs},
         {key: 'layover', label: 'Terminal layover trimmed', indent: true, value: q => q.pairs_layover, base: q => q.pairs},
         {key: 'gap', label: 'Reporting gap over 3 minutes', indent: true, value: q => q.pairs_long_gap, base: q => q.pairs},
         {key: 'geometry', label: 'Progress the GPS doesn’t support', indent: true, value: q => q.pairs_geometry, base: q => q.pairs},
