@@ -189,7 +189,7 @@
       <div class="section-head">
         <div>
           <h2>Every stop</h2>
-          <p class="note">Sorted by vehicle hours spent around the stop. Stop-zone time runs from about 25 m before the stop to about 25 m after it, so it approximates dwell plus queuing. With positions every 20 seconds or so it only means something in aggregate, not for a single pass. At terminals and timepoints it also includes layover and scheduled holding, so those stops rank high for reasons other than delay. It says nothing about how many riders use a stop, because the archive has no ridership.</p>
+          <p class="note">Sorted by vehicle hours spent around the stop. Stop-zone time runs from about 25 m before the stop to about 25 m after it, so it approximates dwell plus queuing. With positions every 20 seconds or so it only means something in aggregate, not for a single pass. It leaves out the first and last stops of each trip and any pass over ten minutes, but a timepoint's shorter scheduled hold stays in, so timepoints can rank high for reasons other than delay. It says nothing about how many riders use a stop, because the archive has no ridership.</p>
         </div>
       </div>
       <DataTable

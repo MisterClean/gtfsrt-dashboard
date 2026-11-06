@@ -129,7 +129,7 @@ The network's own peak, midday and evening figures on the Overview are pooled ac
 
 - **Method:** Days are resampled with replacement 1,000 times, using each route's pooled daily distance and time. The interval is the 2.5th to 97.5th percentile. The random seed is fixed, so results are stable between visits.
 - **Shown for:** Route peak speed and peak change, with at least five selected days.
-- **Known limits:** It shows how much the result would move with a different set of similar days. It doesn't capture error in individual GPS reports. Because it uses pooled speeds, a fixed-segment estimate can fall just outside it.
+- **Known limits:** It shows how much the result would move with a different set of similar days. It doesn't capture error in individual GPS reports. Resampling every segment for every route would be too slow, so the interval's width comes from pooled speeds, and it is then moved to surround the fixed-segment figure shown beside it.
 
 ### Share of time stopped
 
@@ -167,6 +167,7 @@ The **main pattern** is the one with the most complete observed trips in the sel
 
 - **Definition:** The time between entering and leaving a zone around a stop. The zone extends 25 m each way, or half the distance to a neighboring stop if shorter.
 - **What it approximates:** Dwell plus queuing to reach the stop, plus the few seconds needed to cross the zone at speed.
+- **Left out:** The first and last stops of a trip, where vehicles wait by design, and any single pass over 10 minutes, which is a hold rather than boarding or queuing. Scheduled holds shorter than that at timepoints stay in.
 - **Known limits:** It can't separate dwell from a signal or a queue at the same spot, and one pass at 20 s polling is coarse. Compare stops using averages over many passes. The zone isn't centered on the true boarding point when the stop's coordinates are offset.
 
 ## Frequent-service reliability
@@ -174,6 +175,8 @@ The **main pattern** is the one with the most complete observed trips in the sel
 These measures apply only where the schedule runs every 15 minutes or better at a stop, on one route and direction. At lower frequencies riders time their arrival, so schedule adherence is the meaningful measure instead. Results with fewer than 10 headways aren't shown.
 
 An **observed headway** is the time between consecutive vehicles passing a stop, assigned to the hour of the second vehicle. It is compared with the **scheduled headway at that point**: the gap between that trip's scheduled time and the previous one in the full schedule for the day. Comparing with the two observed trips' own spacing would hide a missing trip, which is exactly the wait riders notice.
+
+A gap longer than both an hour and four scheduled headways isn't counted as a headway. It means several passes went unobserved or the feed lost the route for a while, and because average wait grows with the square of a gap, one such value would dominate the result.
 
 | Measure | Formula |
 | --- | --- |

@@ -50,7 +50,7 @@
         {key: 'off_route', label: 'More than 120 m off the route line', title: 'Skipped, usually a detour', indent: true, value: q => q.off_route, base: q => q.fixes_on_day},
         {key: 'backward', label: 'Moved backward along the line', title: 'More than 30 m, usually GPS jitter. Held at the furthest point reached rather than removed.', indent: true, value: q => q.backward, base: q => q.fixes_on_day},
         {key: 'fallback', label: 'Fetch time used for a missing report time', title: 'The vehicle report had no timestamp, so the time it was captured stands in', indent: true, value: q => q.fallback_time},
-        {key: 'unmatched', label: 'Trip ID missing from the schedule', title: 'Counted across everything read when the day was processed, which overlaps neighbouring days, so there is no total', indent: true, noTotal: true, value: q => q.fixes_trip_unmatched},
+        {key: 'unmatched', label: 'Trip ID missing from the schedule', title: 'Reports whose trip ID appears in no schedule version in force', indent: true, value: q => q.fixes_trip_unmatched},
       ],
     },
     {

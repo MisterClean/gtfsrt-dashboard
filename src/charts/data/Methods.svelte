@@ -94,7 +94,7 @@
     <summary>Stop passes</summary>
     <div class="body">
       <p>A vehicle passes a stop when its progress crosses a point just beyond the stop, interpolated between the reports either side. If those reports are more than five minutes apart, or the trip started past the stop, no pass is recorded rather than guessing.</p>
-      <p>Stop-zone time is the time between entering and leaving a zone 25 m either side of the stop, or half the distance to a neighboring stop where that is shorter. It approximates dwell plus queuing to reach the stop, and includes the few seconds a moving vehicle needs to cross the zone.</p>
+      <p>Stop-zone time is the time between entering and leaving a zone 25 m either side of the stop, or half the distance to a neighboring stop where that is shorter. It approximates dwell plus queuing to reach the stop, and includes the few seconds a moving vehicle needs to cross the zone. The first and last stops of a trip are left out, because vehicles wait there by design, and so is any pass over ten minutes, which is a hold.</p>
     </div>
   </details>
 
@@ -118,7 +118,7 @@
         <li><strong>Average wait:</strong> Σh² ÷ 2Σh, the wait for a rider arriving at random. Long gaps count for more because more riders arrive during them.</li>
         <li><strong>Excess wait:</strong> the observed average wait minus the same figure for the schedule.</li>
       </ul>
-      <p>A trip missing from the feed lengthens observed headways, so read these beside the share of trips observed. Fewer than ten headways shows nothing.</p>
+      <p>A trip missing from the feed lengthens observed headways, so read these beside the share of trips observed. A gap longer than both an hour and four scheduled headways isn't counted, because it means passes went unobserved. Fewer than ten headways shows nothing.</p>
     </div>
   </details>
 
