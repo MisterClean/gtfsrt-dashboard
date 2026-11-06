@@ -46,6 +46,9 @@ pub struct Descriptor {
     pub start_time: i32,
 }
 
+const MAX_REPORT_AGE_S: f64 = 86_400.0;
+const MAX_REPORT_AHEAD_S: f64 = 3600.0;
+
 pub const NO_START_DATE: u32 = 0;
 pub const NO_START_TIME: i32 = i32::MIN;
 
@@ -131,7 +134,11 @@ impl RtBuffer {
             counts.no_trip += 1;
             return;
         };
-        let time = if raw.timestamp.is_finite() && raw.timestamp > 0.0 {
+        // A report time a day from when it was fetched is bad data, such as milliseconds.
+        let plausible = raw.timestamp.is_finite()
+            && raw.timestamp > raw.fetch - MAX_REPORT_AGE_S
+            && raw.timestamp < raw.fetch + MAX_REPORT_AHEAD_S;
+        let time = if plausible {
             raw.timestamp as u32
         } else {
             counts.fallback_time += 1;
@@ -249,6 +256,17 @@ mod tests {
         let mut buffer = RtBuffer::default();
         buffer.push(RawFix {
             timestamp: 0.0,
+            ..raw()
+        });
+        assert_eq!(buffer.fixes[0].time, 1_793_836_800);
+        assert_eq!(buffer.hours.values().next().unwrap().fallback_time, 1);
+    }
+
+    #[test]
+    fn an_implausible_report_time_falls_back_and_is_recorded() {
+        let mut buffer = RtBuffer::default();
+        buffer.push(RawFix {
+            timestamp: 1_793_836_800_000.0, // milliseconds
             ..raw()
         });
         assert_eq!(buffer.fixes[0].time, 1_793_836_800);

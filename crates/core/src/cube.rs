@@ -9,7 +9,7 @@ use crate::time::{SERVICE_HOURS, ServiceDate};
 use serde::{Deserialize, Serialize};
 
 /// Bumped whenever a calculation changes, which invalidates cached days.
-pub const METRIC_VERSION: u32 = 2;
+pub const METRIC_VERSION: u32 = 3;
 
 /// Upper edges in seconds of the schedule-deviation bins. Reports can apply any
 /// on-time window whose edges fall on these boundaries.
@@ -231,6 +231,8 @@ pub struct Quality {
     pub fixes_unique: u64,
     pub fixes_trip_unmatched: u64,
     pub fixes_on_day: u64,
+    /// Runs matching a scheduled trip, but not close to any day that trip operates.
+    pub fixes_no_service_date: u64,
     pub off_route: u64,
     pub backward: u64,
     pub trips_scheduled: u32,
@@ -242,6 +244,8 @@ pub struct Quality {
     pub pairs_geometry: u64,
     pub pairs_too_fast: u64,
     pub pairs_standstill: u64,
+    /// GPS-only days: pairs that change route or report none.
+    pub pairs_no_route: u64,
     pub pairs_kept: u64,
     pub seconds_layover: f64,
     pub seconds_standstill: f64,
@@ -256,12 +260,83 @@ pub struct Quality {
     pub empty_buckets: u32,
 }
 
+/// Whether a day's data is all there. Partial and empty days are never saved, so they
+/// are read again once the archive has more, rather than staying wrong.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DayStatus {
+    #[default]
+    Complete,
+    /// Part of the day's service falls in an archive file that is missing or not yet
+    /// published.
+    Partial,
+    /// The archive has nothing for this day. It isn't a result, so it stays out of
+    /// every average rather than diluting it.
+    NoData,
+}
+
+/// Which parts of the archive could be read for a day.
+#[derive(Clone, Debug)]
+pub struct Coverage {
+    /// Everything up to this epoch has been read, unless listed in `missing`.
+    pub read_through: i64,
+    /// Epoch spans of archive files that don't exist.
+    pub missing: Vec<(i64, i64)>,
+}
+
+impl Coverage {
+    /// Every file was read.
+    pub fn complete() -> Self {
+        Self {
+            read_through: i64::MAX,
+            missing: Vec::new(),
+        }
+    }
+
+    /// Plain statements of what is absent between `start` and `end`, for a service day
+    /// beginning at `origin`.
+    pub fn gaps(&self, date: ServiceDate, origin: i64, start: i64, end: i64) -> Vec<String> {
+        let mut notes = Vec::new();
+        let mut spans: Vec<(i64, i64)> = self
+            .missing
+            .iter()
+            .map(|(from, to)| ((*from).max(start), (*to).min(end)))
+            .filter(|(from, to)| from < to)
+            .collect();
+        spans.sort_unstable();
+        for (from, to) in spans {
+            notes.push(format!(
+                "{date}: the archive has no file for {} to {}, so those hours are missing. This day isn't saved, and will be read again next time.",
+                clock_label(from - origin),
+                clock_label(to - origin),
+            ));
+        }
+        if end > self.read_through && self.read_through > start {
+            notes.push(format!(
+                "{date}: the archive file covering service after {} isn't published yet, so those hours are missing. This day isn't saved, and will be read again next time.",
+                clock_label(self.read_through - origin),
+            ));
+        }
+        notes
+    }
+}
+
+/// A clock time from seconds past the GTFS origin.
+fn clock_label(seconds: i64) -> String {
+    let total = seconds.rem_euclid(86_400);
+    let hour = total / 3600;
+    let minute = (total % 3600) / 60;
+    let display = if hour % 12 == 0 { 12 } else { hour % 12 };
+    let suffix = if hour < 12 { "AM" } else { "PM" };
+    format!("{display}:{minute:02} {suffix}")
+}
+
 /// One service day's rollups. Indexes refer to the schedule named by `digest`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct DayCube {
     pub date: u32,
     pub digest: String,
     pub metric_version: u32,
+    pub status: DayStatus,
     pub route_hours: Vec<RouteHour>,
     pub seg_hours: Vec<SegHour>,
     pub stop_periods: Vec<StopPeriod>,
@@ -300,6 +375,52 @@ pub struct CachedSchedule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const DAY: ServiceDate = ServiceDate(20261104);
+
+    #[test]
+    fn coverage_names_the_hours_a_missing_file_takes_out() {
+        let origin = 1_000_000;
+        let coverage = Coverage {
+            read_through: i64::MAX,
+            missing: vec![(origin + 18 * 3600, origin + 42 * 3600)],
+        };
+        let notes = coverage.gaps(DAY, origin, origin + 5 * 3600, origin + 25 * 3600);
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("6:00 PM to 1:00 AM"), "{}", notes[0]);
+        assert!(notes[0].starts_with("2026-11-04"), "{}", notes[0]);
+    }
+
+    #[test]
+    fn coverage_is_silent_when_a_missing_file_misses_the_day() {
+        let origin = 1_000_000;
+        let coverage = Coverage {
+            read_through: i64::MAX,
+            missing: vec![(origin + 40 * 3600, origin + 64 * 3600)],
+        };
+        assert!(
+            coverage
+                .gaps(DAY, origin, origin + 5 * 3600, origin + 25 * 3600)
+                .is_empty()
+        );
+        assert!(
+            Coverage::complete()
+                .gaps(DAY, origin, origin, origin + 90_000)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn coverage_says_when_the_end_of_a_day_is_not_published_yet() {
+        let origin = 1_000_000;
+        let coverage = Coverage {
+            read_through: origin + 19 * 3600,
+            missing: Vec::new(),
+        };
+        let notes = coverage.gaps(DAY, origin, origin + 5 * 3600, origin + 25 * 3600);
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("after 7:00 PM"), "{}", notes[0]);
+    }
 
     #[test]
     fn deviation_bins_place_values_on_the_expected_side_of_each_edge() {

@@ -6,7 +6,9 @@
 #![cfg(target_arch = "wasm32")]
 
 use js_sys::{Float64Array, Object, Reflect, Uint8Array};
-use transit_core::cube::{self, CachedSchedule, DayCube, METRIC_VERSION, StopEvent};
+use transit_core::cube::{
+    self, CachedSchedule, Coverage, DayCube, DayStatus, METRIC_VERSION, StopEvent,
+};
 use transit_core::day::process_day;
 use transit_core::gps::process_gps_day;
 use transit_core::library::Library;
@@ -53,6 +55,46 @@ fn set(target: &Object, key: &str, value: &JsValue) -> Result<(), JsError> {
         .map_err(|_| error("Could not build a result object."))
 }
 
+/// A batch whose columns disagree in length would otherwise panic mid-loop.
+fn check_lengths(rows: usize, columns: &[usize]) -> Result<(), JsError> {
+    if columns.iter().all(|length| *length == rows) {
+        Ok(())
+    } else {
+        Err(error(
+            "A batch of archive data has columns of different lengths.",
+        ))
+    }
+}
+
+fn coverage_and_notes(
+    read_through: f64,
+    missing: &str,
+    notes: &str,
+) -> Result<(Coverage, Vec<String>), JsError> {
+    let missing: Vec<(f64, f64)> =
+        serde_json::from_str(missing).map_err(|e| error(format!("Invalid file list: {e}")))?;
+    let notes: Vec<String> =
+        serde_json::from_str(notes).map_err(|e| error(format!("Invalid notes: {e}")))?;
+    Ok((
+        Coverage {
+            read_through: read_through as i64,
+            missing: missing
+                .into_iter()
+                .map(|(start, end)| (start as i64, end as i64))
+                .collect(),
+        },
+        notes,
+    ))
+}
+
+fn status_name(status: DayStatus) -> &'static str {
+    match status {
+        DayStatus::Complete => "complete",
+        DayStatus::Partial => "partial",
+        DayStatus::NoData => "no_data",
+    }
+}
+
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
@@ -66,6 +108,10 @@ pub struct Engine {
     schedules: Vec<Schedule>,
     buffer: RtBuffer,
     library: Library,
+    catalogs: Vec<plan::ScheduleCatalog>,
+    selection: Option<Selection>,
+    /// Recomputed on demand. Anything that changes the library clears it, so a report
+    /// can never read sums from before a day or schedule arrived.
     merged: Option<Merged>,
 }
 
@@ -85,6 +131,8 @@ impl Engine {
             schedules: Vec::new(),
             buffer: RtBuffer::default(),
             library: Library::default(),
+            catalogs: Vec::new(),
+            selection: None,
             merged: None,
         }
     }
@@ -131,6 +179,13 @@ impl Engine {
         self.builder
             .as_mut()
             .ok_or_else(|| error("A schedule must be started before adding rows."))
+    }
+
+    /// Records a problem to show with every day using the schedule being built.
+    #[wasm_bindgen(js_name = addScheduleWarning)]
+    pub fn add_schedule_warning(&mut self, warning: String) -> Result<(), JsError> {
+        self.builder()?.add_warning(warning);
+        Ok(())
     }
 
     #[wasm_bindgen(js_name = setTimezone)]
@@ -249,6 +304,10 @@ impl Engine {
         lat: &[f64],
         lon: &[f64],
     ) -> Result<(), JsError> {
+        check_lengths(
+            sequence.len(),
+            &[lat.len(), lon.len(), shape_offsets.len().saturating_sub(1)],
+        )?;
         let builder = self.builder()?;
         let shape = TextColumn::new(shape_offsets, shape_bytes);
         for row in 0..sequence.len() {
@@ -273,6 +332,16 @@ impl Engine {
         departure_bytes: &[u8],
         timepoint: &[i8],
     ) -> Result<(), JsError> {
+        check_lengths(
+            sequence.len(),
+            &[
+                timepoint.len(),
+                trip_offsets.len().saturating_sub(1),
+                stop_offsets.len().saturating_sub(1),
+                arrival_offsets.len().saturating_sub(1),
+                departure_offsets.len().saturating_sub(1),
+            ],
+        )?;
         let builder = self.builder()?;
         let trip = TextColumn::new(trip_offsets, trip_bytes);
         let stop = TextColumn::new(stop_offsets, stop_bytes);
@@ -304,6 +373,7 @@ impl Engine {
         let schedule = builder.build().map_err(error)?;
         let meta = schedule.meta();
         self.library.add_schedule(&meta);
+        self.merged = None;
         // Older schedules only matter while their days are being read.
         self.schedules.push(schedule);
         if self.schedules.len() > 2 {
@@ -325,6 +395,7 @@ impl Engine {
             return Ok(false);
         }
         self.library.add_schedule(&cached.meta);
+        self.merged = None;
         Ok(true)
     }
 
@@ -369,7 +440,22 @@ impl Engine {
         start_date_bytes: &[u8],
         start_time_offsets: &[i32],
         start_time_bytes: &[u8],
-    ) {
+    ) -> Result<(), JsError> {
+        check_lengths(
+            fetch.len(),
+            &[
+                timestamp.len(),
+                lat.len(),
+                lon.len(),
+                occupancy.len(),
+                differential.len(),
+                trip_offsets.len().saturating_sub(1),
+                vehicle_offsets.len().saturating_sub(1),
+                route_offsets.len().saturating_sub(1),
+                start_date_offsets.len().saturating_sub(1),
+                start_time_offsets.len().saturating_sub(1),
+            ],
+        )?;
         let trip = TextColumn::new(trip_offsets, trip_bytes);
         let vehicle = TextColumn::new(vehicle_offsets, vehicle_bytes);
         let route = TextColumn::new(route_offsets, route_bytes);
@@ -390,6 +476,7 @@ impl Engine {
                 differential: differential[row] == 1,
             });
         }
+        Ok(())
     }
 
     #[wasm_bindgen(js_name = fixCount)]
@@ -422,86 +509,111 @@ impl Engine {
         hits as f64 / total as f64
     }
 
-    /// Analyses one service day from the buffer. Returns the encoded cube and
-    /// events for caching. The day also joins the library.
+    /// Analyses one service day from the buffer.
+    ///
+    /// `missing` is a JSON list of `[start, end]` epochs for archive files that don't
+    /// exist, and `notes` a JSON list of messages to keep with the day. Returns the
+    /// day's `status` with its encoded results. A day with no data stays out of the
+    /// library, so it can't dilute any average.
     #[wasm_bindgen(js_name = processDay)]
     pub fn process_day(
         &mut self,
         date: u32,
         digest: &str,
-        complete_through: f64,
+        read_through: f64,
+        missing: &str,
+        notes: &str,
     ) -> Result<Object, JsError> {
         let schedule = self
             .schedules
             .iter()
             .find(|s| s.digest == digest)
             .ok_or_else(|| error("The schedule for this day is not loaded."))?;
-        let date = ServiceDate(date);
+        let (coverage, notes) = coverage_and_notes(read_through, missing, notes)?;
         let result = process_day(
             schedule,
             &mut self.buffer,
-            date,
+            ServiceDate(date),
             &self.clock,
-            complete_through as i64,
+            &coverage,
+            &notes,
         )
         .map_err(error)?;
-        let cube_bytes = cube::encode(&result.cube).map_err(error)?;
-        let event_bytes = cube::encode(&result.events).map_err(error)?;
-        self.library
-            .add_day(result.cube, Some(result.events))
-            .map_err(error)?;
-        self.merged = None;
-
         let output = Object::new();
-        set(
-            &output,
-            "cube",
-            &Uint8Array::from(cube_bytes.as_slice()).into(),
-        )?;
-        set(
-            &output,
-            "events",
-            &Uint8Array::from(event_bytes.as_slice()).into(),
-        )?;
+        set(&output, "status", &status_name(result.cube.status).into())?;
+        if result.cube.status != DayStatus::NoData {
+            let cube_bytes = cube::encode(&result.cube).map_err(error)?;
+            let event_bytes = cube::encode(&result.events).map_err(error)?;
+            self.library
+                .add_day(result.cube, Some(result.events))
+                .map_err(error)?;
+            self.merged = None;
+            set(
+                &output,
+                "cube",
+                &Uint8Array::from(cube_bytes.as_slice()).into(),
+            )?;
+            set(
+                &output,
+                "events",
+                &Uint8Array::from(event_bytes.as_slice()).into(),
+            )?;
+        }
         Ok(output)
     }
 
-    /// Analyses a day from position alone, for feeds that can't join a schedule.
-    /// Returns the encoded cube and metadata for caching.
+    /// Analyses a day from position alone, for feeds that can't join a schedule. Takes
+    /// the same `missing` and `notes` as `processDay`.
     #[wasm_bindgen(js_name = processGpsDay)]
-    pub fn process_gps_day(&mut self, date: u32) -> Result<Object, JsError> {
+    pub fn process_gps_day(
+        &mut self,
+        date: u32,
+        read_through: f64,
+        missing: &str,
+        notes: &str,
+    ) -> Result<Object, JsError> {
         let known = self
             .schedules
             .last()
             .map(|schedule| schedule.routes.clone())
             .unwrap_or_default();
-        let day = process_gps_day(&mut self.buffer, &known, ServiceDate(date), &self.clock)
-            .map_err(error)?;
-        self.library.add_schedule(&day.meta);
-        let meta_bytes = cube::encode(&CachedSchedule {
-            metric_version: METRIC_VERSION,
-            meta: day.meta,
-        })
+        let (coverage, notes) = coverage_and_notes(read_through, missing, notes)?;
+        let day = process_gps_day(
+            &mut self.buffer,
+            &known,
+            ServiceDate(date),
+            &self.clock,
+            &coverage,
+            &notes,
+        )
         .map_err(error)?;
-        let cube_bytes = cube::encode(&day.cube).map_err(error)?;
-        let digest = day.cube.digest.clone();
-        self.library
-            .add_day(day.cube, Some(Vec::new()))
-            .map_err(error)?;
-        self.merged = None;
-
         let output = Object::new();
-        set(
-            &output,
-            "cube",
-            &Uint8Array::from(cube_bytes.as_slice()).into(),
-        )?;
-        set(
-            &output,
-            "meta",
-            &Uint8Array::from(meta_bytes.as_slice()).into(),
-        )?;
-        set(&output, "digest", &JsValue::from_str(&digest))?;
+        set(&output, "status", &status_name(day.cube.status).into())?;
+        if day.cube.status != DayStatus::NoData {
+            self.library.add_schedule(&day.meta);
+            let meta_bytes = cube::encode(&CachedSchedule {
+                metric_version: METRIC_VERSION,
+                meta: day.meta,
+            })
+            .map_err(error)?;
+            let cube_bytes = cube::encode(&day.cube).map_err(error)?;
+            let digest = day.cube.digest.clone();
+            self.library
+                .add_day(day.cube, Some(Vec::new()))
+                .map_err(error)?;
+            self.merged = None;
+            set(
+                &output,
+                "cube",
+                &Uint8Array::from(cube_bytes.as_slice()).into(),
+            )?;
+            set(
+                &output,
+                "meta",
+                &Uint8Array::from(meta_bytes.as_slice()).into(),
+            )?;
+            set(&output, "digest", &JsValue::from_str(&digest))?;
+        }
         Ok(output)
     }
 
@@ -536,6 +648,13 @@ impl Engine {
         Ok(true)
     }
 
+    /// Releases a day's stop events from memory once they are safely in the cache.
+    /// They are read back on demand, and otherwise add up over a long selection.
+    #[wasm_bindgen(js_name = dropEvents)]
+    pub fn drop_events(&mut self, date: u32) {
+        self.library.events.remove(&date);
+    }
+
     #[wasm_bindgen(js_name = hasEvents)]
     pub fn has_events(&self, date: u32) -> bool {
         self.library.events.contains_key(&date)
@@ -555,7 +674,20 @@ impl Engine {
     pub fn select(&mut self, selection: &str) -> Result<(), JsError> {
         let selection: Selection = serde_json::from_str(selection)
             .map_err(|e| error(format!("Invalid selection: {e}")))?;
-        self.merged = Some(Merged::compute(&self.library, selection));
+        self.selection = Some(selection);
+        self.merged = None;
+        Ok(())
+    }
+
+    /// Merges the selected days if anything has changed since the last time.
+    fn ensure_merged(&mut self) -> Result<(), JsError> {
+        if self.merged.is_none() {
+            let selection = self
+                .selection
+                .clone()
+                .ok_or_else(|| error("Choose days to analyse first."))?;
+            self.merged = Some(Merged::compute(&self.library, selection));
+        }
         Ok(())
     }
 
@@ -569,16 +701,19 @@ impl Engine {
         serde_json::to_string(value).map_err(|e| error(format!("Could not encode a report: {e}")))
     }
 
-    pub fn overview(&self) -> Result<String, JsError> {
+    pub fn overview(&mut self) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::overview(&self.library, self.merged()?))
     }
 
-    pub fn routes(&self) -> Result<String, JsError> {
+    pub fn routes(&mut self) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::route_scores(&self.library, self.merged()?))
     }
 
     #[wasm_bindgen(js_name = networkMap)]
-    pub fn network_map(&self, route: Option<String>) -> Result<String, JsError> {
+    pub fn network_map(&mut self, route: Option<String>) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::network_map(
             &self.library,
             self.merged()?,
@@ -586,17 +721,20 @@ impl Engine {
         ))
     }
 
-    pub fn hotspots(&self) -> Result<String, JsError> {
+    pub fn hotspots(&mut self) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::hotspots(&self.library, self.merged()?))
     }
 
     #[wasm_bindgen(js_name = routeDetail)]
-    pub fn route_detail(&self, route: &str) -> Result<String, JsError> {
+    pub fn route_detail(&mut self, route: &str) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::route_detail(&self.library, self.merged()?, route))
     }
 
     #[wasm_bindgen(js_name = stringLine)]
-    pub fn string_line(&self, route: &str, dir: u8, date: u32) -> Result<String, JsError> {
+    pub fn string_line(&mut self, route: &str, dir: u8, date: u32) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::string_line(
             &self.library,
             self.merged()?,
@@ -606,11 +744,13 @@ impl Engine {
         ))
     }
 
-    pub fn stops(&self) -> Result<String, JsError> {
+    pub fn stops(&mut self) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::stops_report(&self.library, self.merged()?))
     }
 
-    pub fn quality(&self) -> Result<String, JsError> {
+    pub fn quality(&mut self) -> Result<String, JsError> {
+        self.ensure_merged()?;
         Self::json(&report::quality_report(&self.library, self.merged()?))
     }
 
@@ -641,18 +781,40 @@ impl Engine {
         Self::json(&plan)
     }
 
-    /// The schedule in force on a date. `schedule_urls` and `catalogs` are JSON.
+    /// Loads the archive's schedule catalog, once per run.
+    #[wasm_bindgen(js_name = setScheduleCatalogs)]
+    pub fn set_schedule_catalogs(&mut self, json: &str) -> Result<(), JsError> {
+        self.catalogs = plan::parse_catalogs(json).map_err(error)?;
+        Ok(())
+    }
+
+    /// The schedule in force on a date. `schedule_urls` is JSON.
     #[wasm_bindgen(js_name = chooseSchedule)]
-    pub fn choose_schedule(
-        schedule_urls: &str,
-        catalogs: &str,
-        date: u32,
-    ) -> Result<String, JsError> {
+    pub fn choose_schedule(&self, schedule_urls: &str, date: u32) -> Result<String, JsError> {
         let urls: Vec<String> = serde_json::from_str(schedule_urls)
             .map_err(|e| error(format!("Invalid schedule list: {e}")))?;
-        let catalogs: Vec<plan::ScheduleCatalog> = serde_json::from_str(catalogs)
-            .map_err(|e| error(format!("Invalid schedule catalog: {e}")))?;
-        Self::json(&plan::choose_schedule(&urls, &catalogs, ServiceDate(date)))
+        Self::json(&plan::choose_schedule(
+            &urls,
+            &self.catalogs,
+            ServiceDate(date),
+        ))
+    }
+
+    #[wasm_bindgen(js_name = describeQuery)]
+    pub fn describe_query(alias: &str) -> Result<String, JsError> {
+        sql::describe_query(alias).map_err(error)
+    }
+
+    #[wasm_bindgen(js_name = feedMetadataQuery)]
+    pub fn feed_metadata_query() -> String {
+        sql::FEED_METADATA_QUERY.to_owned()
+    }
+
+    #[wasm_bindgen(js_name = longitudeQuery)]
+    pub fn longitude_query(columns: &str, alias: &str) -> Result<String, JsError> {
+        let columns: Vec<String> =
+            serde_json::from_str(columns).map_err(|e| error(format!("Invalid columns: {e}")))?;
+        sql::longitude_query(&columns, alias).map_err(error)
     }
 
     #[wasm_bindgen(js_name = fixesQuery)]

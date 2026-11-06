@@ -6,7 +6,8 @@
 //! converts for display.
 
 use crate::cube::{
-    self, DEVIATION_BINS, DEVIATION_EDGES, Headways, Quality, RouteHour, StopPeriod, TripRow,
+    self, DEVIATION_BINS, DEVIATION_EDGES, DayStatus, Headways, Quality, RouteHour, StopPeriod,
+    TripRow,
 };
 use crate::library::Library;
 use crate::mode::Mode;
@@ -82,6 +83,13 @@ pub struct Cell {
     pub pairs: u32,
 }
 
+static EMPTY_CELL: Cell = Cell {
+    meters: 0.0,
+    seconds: 0.0,
+    stopped: 0.0,
+    pairs: 0,
+};
+
 impl Cell {
     fn add(&mut self, other: &Cell) {
         self.meters += other.meters;
@@ -108,7 +116,10 @@ pub struct Merged {
 }
 
 impl Merged {
-    pub fn compute(library: &Library, selection: Selection) -> Self {
+    pub fn compute(library: &Library, mut selection: Selection) -> Self {
+        // A link can name a day twice, and it must not count twice.
+        selection.dates.sort_unstable();
+        selection.dates.dedup();
         let route_included: Vec<bool> = library
             .routes
             .iter()
@@ -200,8 +211,12 @@ impl Merged {
         (self.dates.len() as u32).max(MIN_CELL_PAIRS)
     }
 
+    /// The sums for a segment and hour. A segment added to the library after this merge
+    /// simply has nothing yet.
     fn cell(&self, seg: u32, hour: usize) -> &Cell {
-        &self.cells[seg as usize * SERVICE_HOURS + hour]
+        self.cells
+            .get(seg as usize * SERVICE_HOURS + hour)
+            .unwrap_or(&EMPTY_CELL)
     }
 
     fn split_deviation(&self, bins: &[u64; DEVIATION_BINS]) -> OnTime {
@@ -383,6 +398,7 @@ pub struct DayRow {
     pub trips_observed: u32,
     pub empty_buckets: u32,
     pub service_buckets: u32,
+    pub status: DayStatus,
     pub warnings: Vec<String>,
 }
 
@@ -474,6 +490,7 @@ pub fn overview(library: &Library, merged: &Merged) -> Overview {
             trips_observed: day_totals.trips_observed as u32,
             empty_buckets: day.quality.empty_buckets,
             service_buckets: day.quality.service_buckets,
+            status: day.status,
             warnings: day.warnings.clone(),
         });
     }
@@ -1430,13 +1447,19 @@ fn build_hotspot(
     routes.sort_by_key(|label| natural_key(label));
     routes.dedup();
     // Daytime and evening only: a few fast or slow overnight trips say little.
-    let (worst_hour, worst_speed) = hours
-        .iter()
-        .enumerate()
-        .filter(|(hour, _)| (WORST_HOUR_FROM..WORST_HOUR_TO).contains(hour))
-        .filter_map(|(hour, cell)| cell.speed(min_pairs).map(|speed| (hour, speed)))
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .unwrap_or((0, 0.0));
+    let slowest_in = |keep: &dyn Fn(usize) -> bool| {
+        hours
+            .iter()
+            .enumerate()
+            .filter(|(hour, _)| keep(*hour))
+            .filter_map(|(hour, cell)| cell.speed(min_pairs).map(|speed| (hour, speed)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+    };
+    // An overnight-only stretch still gets a real figure from the hours it has.
+    let (worst_hour, worst_speed) =
+        slowest_in(&|hour| (WORST_HOUR_FROM..WORST_HOUR_TO).contains(&hour))
+            .or_else(|| slowest_in(&|_| true))
+            .unwrap_or((0, 0.0));
     let periods = merged.selection.periods;
     let mut peak = Cell::default();
     let mut total = Cell::default();
@@ -2064,6 +2087,7 @@ pub fn stops_report(library: &Library, merged: &Merged) -> StopsReport {
 pub struct QualityDay {
     pub date: String,
     pub digest: String,
+    pub status: DayStatus,
     pub quality: Quality,
     pub warnings: Vec<String>,
 }
@@ -2084,6 +2108,7 @@ pub fn quality_report(library: &Library, merged: &Merged) -> QualityReport {
                 QualityDay {
                     date: ServiceDate(*date).to_string(),
                     digest: day.digest.clone(),
+                    status: day.status,
                     quality: day.quality,
                     warnings: day.warnings.clone(),
                 }
@@ -2133,8 +2158,15 @@ mod tests {
                 t += 20;
             }
         }
-        let result =
-            process_day(&schedule, &mut buffer, ServiceDate(date), &clock, i64::MAX).unwrap();
+        let result = process_day(
+            &schedule,
+            &mut buffer,
+            ServiceDate(date),
+            &clock,
+            &crate::cube::Coverage::complete(),
+            &[],
+        )
+        .unwrap();
         library.add_schedule(&schedule.meta());
         library.add_day(result.cube, Some(result.events)).unwrap();
     }
@@ -2194,6 +2226,33 @@ mod tests {
             "{wide_result:?} {narrow_result:?}"
         );
         assert_eq!(narrow_result.late, narrow_result.total);
+    }
+
+    #[test]
+    fn a_day_named_twice_counts_once() {
+        let mut library = Library::default();
+        analysed_day(&mut library, THURSDAY, &[("T0", 7 * 3600, 0, 1200)]);
+        let merged = Merged::compute(&library, selection(&[THURSDAY, THURSDAY]));
+        assert_eq!(merged.dates, vec![THURSDAY]);
+        assert_eq!(overview(&library, &merged).trips_scheduled_per_day, 12.0);
+    }
+
+    #[test]
+    fn a_schedule_added_after_merging_cannot_break_a_report() {
+        let mut library = Library::default();
+        analysed_day(&mut library, THURSDAY, &[("T0", 7 * 3600, 0, 1200)]);
+        let merged = Merged::compute(&library, selection(&[THURSDAY]));
+        // A second version arrives with new streets while the merged sums are still in use.
+        let mut later = line_route().meta();
+        later.digest = "later".into();
+        for seg in &mut later.segs {
+            seg.key.x += 1000;
+        }
+        library.add_schedule(&later);
+        assert!(library.segs.len() > merged.cells.len() / SERVICE_HOURS);
+        network_map(&library, &merged, None);
+        hotspots(&library, &merged);
+        route_scores(&library, &merged);
     }
 
     #[test]
@@ -2323,7 +2382,8 @@ mod tests {
             &mut buffer,
             ServiceDate(THURSDAY),
             &clock,
-            i64::MAX,
+            &crate::cube::Coverage::complete(),
+            &[],
         )
         .unwrap();
         let mut library = Library::default();
@@ -2453,7 +2513,8 @@ mod tests {
             &mut buffer,
             ServiceDate(THURSDAY),
             &clock,
-            i64::MAX,
+            &crate::cube::Coverage::complete(),
+            &[],
         )
         .unwrap();
         let mut library = Library::default();

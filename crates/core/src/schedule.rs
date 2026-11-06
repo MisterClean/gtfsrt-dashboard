@@ -237,7 +237,10 @@ pub fn parse_gtfs_time(value: &str) -> Option<i32> {
     let minutes: i32 = parts.next()?.parse().ok()?;
     let seconds: i32 = parts.next().map_or(Some(0), |s| s.parse().ok())?;
     let valid = (0..60).contains(&minutes) && (0..60).contains(&seconds) && hours >= 0;
-    valid.then_some(hours * 3600 + minutes * 60 + seconds)
+    if !valid {
+        return None;
+    }
+    hours.checked_mul(3600)?.checked_add(minutes * 60 + seconds)
 }
 
 #[derive(Default)]
@@ -270,6 +273,8 @@ pub struct ScheduleBuilder {
     services: Vec<Service>,
     service_ids: FxHashMap<String, u32>,
     stop_time_rows: Vec<StopTimeRow>,
+    /// Rows naming something the schedule doesn't define, or with no usable location.
+    skipped_rows: usize,
     warnings: Vec<String>,
 }
 
@@ -374,6 +379,7 @@ impl ScheduleBuilder {
             return;
         }
         let Some(route) = self.route_ids.get(route_id).copied() else {
+            self.skipped_rows += 1;
             return;
         };
         let service = self.service_index(service_id);
@@ -403,8 +409,15 @@ impl ScheduleBuilder {
             self.trip_ids.get(trip_id).copied(),
             self.stop_ids.get(stop_id).copied(),
         ) else {
+            self.skipped_rows += 1;
             return;
         };
+        // A stop with no usable location can't be placed on the line.
+        let place = &self.stops[stop as usize];
+        if !crate::geo::valid_coordinate(place.lat, place.lon) {
+            self.skipped_rows += 1;
+            return;
+        }
         self.stop_time_rows.push(StopTimeRow {
             trip,
             stop,
@@ -413,6 +426,11 @@ impl ScheduleBuilder {
             departure: departure.or(arrival).unwrap_or(TIME_UNKNOWN),
             timepoint,
         });
+    }
+
+    /// Records a problem to show with every day using this schedule.
+    pub fn add_warning(&mut self, warning: String) {
+        self.warnings.push(warning);
     }
 
     /// Compiles everything added so far.
@@ -477,6 +495,12 @@ impl ScheduleBuilder {
                 has_timepoints: any_flag,
             });
             compiler.patterns[pattern as usize].trip_count += 1;
+        }
+        if self.skipped_rows > 0 {
+            self.warnings.push(format!(
+                "{} schedule rows refer to a route or stop the schedule doesn't define, or a stop with no location, and were left out.",
+                self.skipped_rows
+            ));
         }
         if dropped > 0 {
             self.warnings.push(format!(
@@ -989,6 +1013,50 @@ mod tests {
         let mut none = vec![TIME_UNKNOWN];
         let mut none_d = vec![TIME_UNKNOWN];
         assert!(!interpolate_times(&mut none, &mut none_d, &[0.0]));
+    }
+
+    #[test]
+    fn an_absurd_clock_time_is_rejected_not_wrapped() {
+        assert_eq!(parse_gtfs_time("99999999:00:00"), None);
+    }
+
+    #[test]
+    fn rows_naming_unknown_things_are_counted_in_a_warning() {
+        let mut builder = ScheduleBuilder::new("x");
+        builder.add_route(RouteMeta {
+            id: "R".into(),
+            short_name: "1".into(),
+            long_name: String::new(),
+            route_type: Some(3),
+            color: String::new(),
+            text_color: String::new(),
+        });
+        for (id, lat) in [("A", 43.0), ("B", 43.01), ("BAD", 0.0)] {
+            builder.add_stop(StopMeta {
+                id: id.into(),
+                code: String::new(),
+                name: id.into(),
+                lat,
+                lon: if lat == 0.0 { 0.0 } else { -89.0 },
+            });
+        }
+        builder.add_calendar("D", [true; 7], 20260101, 20261231);
+        builder.add_trip("T", "R", "D", Some(0), None, "");
+        builder.add_trip("NO_ROUTE", "MISSING", "D", Some(0), None, "");
+        builder.add_stop_time("T", "A", 1, Some(0), Some(0), None);
+        builder.add_stop_time("T", "BAD", 2, Some(60), Some(60), None);
+        builder.add_stop_time("T", "MISSING", 3, Some(120), Some(120), None);
+        builder.add_stop_time("T", "B", 4, Some(180), Some(180), None);
+        let schedule = builder.build().unwrap();
+        assert_eq!(schedule.patterns[0].stops.len(), 2);
+        assert!(
+            schedule
+                .warnings
+                .iter()
+                .any(|w| w.starts_with("3 schedule rows")),
+            "{:?}",
+            schedule.warnings
+        );
     }
 
     #[test]

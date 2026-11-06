@@ -223,7 +223,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let started = Instant::now();
-    let result = process_day(&schedule, &mut buffer, date, &clock, i64::MAX)?;
+    let result = process_day(
+        &schedule,
+        &mut buffer,
+        date,
+        &clock,
+        &cube::Coverage::complete(),
+        &[],
+    )?;
     println!("processed day in {:?}", started.elapsed());
     let cube = &result.cube;
     let q = cube.quality;

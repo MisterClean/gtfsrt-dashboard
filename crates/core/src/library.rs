@@ -210,24 +210,31 @@ impl Library {
         let Some(remap) = self.remaps.get(&cube.digest) else {
             return Err(format!("Day {} refers to an unknown schedule.", cube.date));
         };
+        // A cached day can be from any build, so bad references are an error, not a panic.
+        let date = cube.date;
+        let lookup = |table: &[u32], index: u32| {
+            table
+                .get(index as usize)
+                .copied()
+                .ok_or_else(|| format!("Day {date} refers to a row its schedule doesn't have."))
+        };
         for row in &mut cube.route_hours {
-            row.route = remap.routes[row.route as usize];
+            row.route = lookup(&remap.routes, row.route)?;
         }
         for row in &mut cube.seg_hours {
-            row.seg = remap.segs[row.seg as usize];
+            row.seg = lookup(&remap.segs, row.seg)?;
         }
         for row in &mut cube.stop_periods {
-            row.route = remap.routes[row.route as usize];
-            row.stop = remap.stops[row.stop as usize];
+            row.route = lookup(&remap.routes, row.route)?;
+            row.stop = lookup(&remap.stops, row.stop)?;
         }
         for row in &mut cube.trips {
-            row.route = remap.routes[row.route as usize];
-            row.pattern = remap.patterns[row.pattern as usize];
+            row.route = lookup(&remap.routes, row.route)?;
+            row.pattern = lookup(&remap.patterns, row.pattern)?;
         }
         for row in &mut cube.route_vehicles {
-            row.route = remap.routes[row.route as usize];
+            row.route = lookup(&remap.routes, row.route)?;
         }
-        let date = cube.date;
         self.days.insert(date, cube);
         if let Some(events) = events {
             self.events.insert(date, events);
@@ -293,6 +300,21 @@ mod tests {
             library.days[&1].route_hours[0].route,
             library.days[&2].route_hours[0].route
         );
+    }
+
+    #[test]
+    fn a_cached_day_with_bad_references_is_an_error_not_a_panic() {
+        let mut library = Library::default();
+        library.add_schedule(&line_route().meta());
+        let cube = DayCube {
+            digest: "v1:test".into(),
+            route_hours: vec![RouteHour {
+                route: 999,
+                ..RouteHour::default()
+            }],
+            ..DayCube::default()
+        };
+        assert!(library.add_day(cube, None).is_err());
     }
 
     #[test]

@@ -30,6 +30,29 @@ fn column(columns: &HashSet<&str>, name: &str, ty: &str) -> String {
     }
 }
 
+/// Which columns an object has, since older files lack some that newer ones carry.
+pub fn describe_query(alias: &str) -> Result<String, String> {
+    Ok(format!(
+        "DESCRIBE SELECT * FROM read_parquet({})",
+        checked_alias(alias)?
+    ))
+}
+
+/// A feed's schedule sources. The feed key is bound as a parameter.
+pub const FEED_METADATA_QUERY: &str = "SELECT schedule_urls, schedule_url FROM read_parquet('feeds.parquet') WHERE base64url = ? AND feed_type = 'vehicle_positions'";
+
+/// One longitude from a realtime object, to estimate the time zone of a feed with no
+/// schedule to state one.
+pub fn longitude_query(columns: &[String], alias: &str) -> Result<String, String> {
+    if !columns.iter().any(|column| column == "longitude") {
+        return Err("This archive object has no longitude column.".to_owned());
+    }
+    Ok(format!(
+        "SELECT longitude FROM read_parquet({}) WHERE longitude IS NOT NULL AND longitude <> 0 LIMIT 1",
+        checked_alias(alias)?
+    ))
+}
+
 /// Reads one realtime object inside a time window. The filter on the fetch time
 /// lets DuckDB skip row groups using their statistics, which is what keeps a
 /// window read from fetching the whole object.
@@ -126,7 +149,8 @@ pub fn schedule_query(table: &str, columns: &[String], alias: &str) -> Result<St
                 ("shape_pt_lat", "DOUBLE"),
                 ("shape_pt_lon", "DOUBLE"),
             ],
-            "",
+            // These go straight to typed arrays, where a null would read as a number.
+            " WHERE TRY_CAST(shape_pt_sequence AS INTEGER) IS NOT NULL AND TRY_CAST(shape_pt_lat AS DOUBLE) IS NOT NULL AND TRY_CAST(shape_pt_lon AS DOUBLE) IS NOT NULL",
         ),
         "trips" => table_query(
             columns,
@@ -242,6 +266,25 @@ mod tests {
         assert!(fixes_query(&cols, "x.parquet'); DROP TABLE t;--", 0, 1).is_err());
         assert!(fixes_query(&cols, "../x.parquet", 0, 1).is_err());
         assert!(schedule_query("routes", &cols, "a'.parquet").is_err());
+    }
+
+    #[test]
+    fn a_shape_row_with_blank_values_is_filtered_out() {
+        let names = columns(&[
+            "shape_id",
+            "shape_pt_sequence",
+            "shape_pt_lat",
+            "shape_pt_lon",
+        ]);
+        let sql = schedule_query("shapes", &names, "s.parquet").unwrap();
+        assert!(sql.contains("IS NOT NULL"), "{sql}");
+    }
+
+    #[test]
+    fn the_time_zone_probe_needs_a_longitude_column() {
+        assert!(longitude_query(&columns(&["trip_id"]), "a.parquet").is_err());
+        assert!(longitude_query(&columns(&["longitude"]), "a.parquet").is_ok());
+        assert!(describe_query("a'.parquet").is_err());
     }
 
     #[test]

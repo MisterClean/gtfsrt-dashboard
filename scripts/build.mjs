@@ -1,6 +1,6 @@
 // Compiles the Rust engine, gathers the pinned DuckDB extensions, then bundles.
 // `--wasm-only` stops before the bundle, for use with the Vite dev server.
-import {cp, mkdir, rm, writeFile} from 'node:fs/promises';
+import {cp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {prepareExtensions, extensions} from './extensions.mjs';
@@ -30,8 +30,10 @@ for (const {name} of extensions) {
 
 if (!process.argv.includes('--wasm-only')) {
   run(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), 'build', '--logLevel', 'warn']);
+  const cube = await readFile(resolve(root, 'crates/core/src/cube.rs'), 'utf8');
+  const metric = Number(cube.match(/METRIC_VERSION: u32 = (\d+)/)?.[1]);
   await writeFile(resolve(root, 'dist/release.json'), JSON.stringify({
-    app: '0.2.0', metric: 2, engine: 'v2.0.0', wrapper: '1.33.1-dev114.0', wasmBindgen: '0.2.105', builtAt: new Date().toISOString(),
+    app: '0.2.0', metric, engine: 'v2.0.0', wrapper: '1.33.1-dev114.0', wasmBindgen: '0.2.105', builtAt: new Date().toISOString(),
   }, null, 2));
   console.log('Built self-contained static release in dist/');
 }

@@ -1,8 +1,8 @@
 //! Turns one service day's fixes and schedule into rollups.
 
 use crate::cube::{
-    self, DayCube, Headways, METRIC_VERSION, Quality, RouteHour, RouteVehicles, SegHour, StopEvent,
-    StopPeriod, TripRow,
+    self, Coverage, DayCube, DayStatus, Headways, METRIC_VERSION, Quality, RouteHour,
+    RouteVehicles, SegHour, StopEvent, StopPeriod, TripRow,
 };
 use crate::rt::{Descriptor, Fix, NO_START_DATE, RtBuffer};
 use crate::schedule::{Pattern, Schedule, Trip};
@@ -85,14 +85,16 @@ impl Accumulator {
 
 /// Builds the rollups for `date` from whatever fixes are in the buffer.
 ///
-/// `complete_through` is the epoch up to which archive files have been read. A
-/// day with service past that point is flagged as partial.
+/// `coverage` says what could be read. A day whose service runs into a gap is marked
+/// partial, and one with no rows at all is marked as having no data. `notes` are
+/// carried with the day, so they are still there when it is restored from the cache.
 pub fn process_day(
     schedule: &Schedule,
     buffer: &mut RtBuffer,
     date: ServiceDate,
     clock: &Clock,
-    complete_through: i64,
+    coverage: &Coverage,
+    notes: &[String],
 ) -> Result<DayResult, String> {
     let origin = clock
         .service_origin(date)
@@ -101,6 +103,7 @@ pub fn process_day(
     let mut acc = Accumulator::default();
     let mut quality = Quality::default();
     let mut warnings = schedule.warnings.clone();
+    warnings.extend_from_slice(notes);
 
     let scheduled_at_stops = add_schedule_totals(schedule, date, &mut acc, &mut quality);
     add_input_counts(buffer, origin, &mut quality);
@@ -130,8 +133,13 @@ pub fn process_day(
             continue;
         };
         let trip = &schedule.trips[trip_index as usize];
-        if run_service_date(schedule, trip, descriptor, run, clock) != Some(date) {
-            continue;
+        match run_service_date(schedule, trip, descriptor, run, clock) {
+            Some(found) if found == date => {}
+            Some(_) => continue,
+            None => {
+                quality.fixes_no_service_date += run.iter().filter(|fix| owned(fix)).count() as u64;
+                continue;
+            }
         }
         quality.fixes_on_day += run.len() as u64;
         process_run(
@@ -164,13 +172,27 @@ pub fn process_day(
                 .to_owned(),
         );
     }
-    if let Some(last) = last_scheduled_time(schedule, date)
-        && origin + i64::from(last) > complete_through
-    {
-        warnings.push(
-            "The archive file covering the end of this service day is not published yet, so evening trips are missing."
-                .to_owned(),
-        );
+    // Judge completeness against the hours this day actually has service.
+    let gaps = scheduled_span(schedule, date).map_or_else(Vec::new, |(first, last)| {
+        coverage.gaps(
+            date,
+            origin,
+            origin + i64::from(first),
+            origin + i64::from(last),
+        )
+    });
+    let status = if quality.rows == 0 {
+        DayStatus::NoData
+    } else if gaps.is_empty() {
+        DayStatus::Complete
+    } else {
+        DayStatus::Partial
+    };
+    warnings.extend(gaps);
+    if status != DayStatus::NoData && quality.pairs_kept == 0 {
+        warnings.push(format!(
+            "{date}: the archive has position reports for this day, but none could be measured. See the funnel on Data & methods."
+        ));
     }
 
     let mut route_hours: Vec<RouteHour> = acc.route_hours.into_values().collect();
@@ -185,6 +207,7 @@ pub fn process_day(
             date: date.0,
             digest: schedule.digest.clone(),
             metric_version: METRIC_VERSION,
+            status,
             route_hours,
             seg_hours,
             stop_periods,
@@ -861,17 +884,6 @@ fn scheduled_span(schedule: &Schedule, date: ServiceDate) -> Option<(i32, i32)> 
     span
 }
 
-fn last_scheduled_time(schedule: &Schedule, date: ServiceDate) -> Option<i32> {
-    scheduled_span(schedule, date).map(|(_, end)| end)
-}
-
-/// The earliest and latest epochs a service day's fixes can fall in. Reads of
-/// archive files use this window so row groups outside it are skipped entirely.
-pub fn day_window(clock: &Clock, date: ServiceDate) -> Option<(i64, i64)> {
-    let origin = clock.service_origin(date)?;
-    Some((origin, origin + SERVICE_HOURS as i64 * 3600))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -919,7 +931,15 @@ mod tests {
 
     fn run_day(buffer: &mut RtBuffer) -> DayResult {
         let schedule = line_route();
-        process_day(&schedule, buffer, DATE, &clock(), i64::MAX).unwrap()
+        process_day(
+            &schedule,
+            buffer,
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+        )
+        .unwrap()
     }
 
     #[test]
@@ -1070,14 +1090,23 @@ mod tests {
 
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "T", "V", 19 * 3600, 0, 1.0);
-        let today = process_day(&schedule, &mut buffer, DATE, &clock(), i64::MAX).unwrap();
+        let today = process_day(
+            &schedule,
+            &mut buffer,
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+        )
+        .unwrap();
         assert_eq!(today.cube.trips.len(), 1);
         let tomorrow = process_day(
             &schedule,
             &mut buffer,
             ServiceDate(20261106),
             &clock(),
-            i64::MAX,
+            &Coverage::complete(),
+            &[],
         )
         .unwrap();
         assert!(
@@ -1244,6 +1273,109 @@ mod tests {
             .map(|row| row.sched_headway_count)
             .sum();
         assert_eq!(frequent, 0, "a 30 minute service has no frequent headways");
+    }
+
+    #[test]
+    fn a_day_with_no_rows_says_so_instead_of_reporting_zeros() {
+        let mut buffer = RtBuffer::default();
+        let result = run_day(&mut buffer);
+        assert_eq!(result.cube.status, DayStatus::NoData);
+    }
+
+    #[test]
+    fn a_missing_file_during_service_marks_the_day_partial_and_says_which_hours() {
+        let schedule = line_route();
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "T0", "V1", 7 * 3600, 0, 1.0);
+        let origin = clock().service_origin(DATE).unwrap();
+        let coverage = Coverage {
+            read_through: i64::MAX,
+            missing: vec![(origin + 8 * 3600, origin + 32 * 3600)],
+        };
+        let result = process_day(&schedule, &mut buffer, DATE, &clock(), &coverage, &[]).unwrap();
+        assert_eq!(result.cube.status, DayStatus::Partial);
+        assert!(
+            result.cube.warnings.iter().any(|w| w.contains("8:00 AM")),
+            "{:?}",
+            result.cube.warnings
+        );
+    }
+
+    #[test]
+    fn a_missing_file_outside_service_hours_leaves_the_day_complete() {
+        let schedule = line_route();
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "T0", "V1", 7 * 3600, 0, 1.0);
+        let origin = clock().service_origin(DATE).unwrap();
+        let coverage = Coverage {
+            read_through: i64::MAX,
+            missing: vec![(origin + 18 * 3600, origin + 42 * 3600)],
+        };
+        let result = process_day(&schedule, &mut buffer, DATE, &clock(), &coverage, &[]).unwrap();
+        assert_eq!(result.cube.status, DayStatus::Complete);
+    }
+
+    #[test]
+    fn notes_stay_with_the_day_so_they_survive_the_cache() {
+        let schedule = line_route();
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "T0", "V1", 7 * 3600, 0, 1.0);
+        let notes = ["Estimated time zone.".to_owned()];
+        let result = process_day(
+            &schedule,
+            &mut buffer,
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &notes,
+        )
+        .unwrap();
+        assert!(result.cube.warnings.contains(&notes[0]));
+    }
+
+    #[test]
+    fn a_run_with_no_operating_service_date_is_counted_not_lost() {
+        let schedule = line_route();
+        let mut buffer = RtBuffer::default();
+        // The fixture only runs on weekdays, and this Saturday is more than a day away
+        // from any of them in both directions once Sunday is also inactive.
+        let saturday_fix_day = ServiceDate(20261107);
+        let origin = clock().service_origin(saturday_fix_day).unwrap();
+        for i in 0..40_i64 {
+            let epoch = origin + 20 * 3600 + i * 20;
+            buffer.push(RawFix {
+                fetch: epoch as f64,
+                timestamp: epoch as f64,
+                lat: (43.0 + 0.001 * i as f64) as f32,
+                lon: -89.0,
+                trip_id: Some(b"T0"),
+                vehicle_id: Some(b"V1"),
+                route_id: Some(b"R1"),
+                start_date: None,
+                start_time: None,
+                occupancy: -1,
+                differential: false,
+            });
+        }
+        let result = process_day(
+            &schedule,
+            &mut buffer,
+            saturday_fix_day,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+        )
+        .unwrap();
+        assert!(result.cube.quality.fixes_no_service_date > 0);
+        assert!(
+            result
+                .cube
+                .warnings
+                .iter()
+                .any(|w| w.contains("none could be measured")),
+            "{:?}",
+            result.cube.warnings
+        );
     }
 
     #[test]

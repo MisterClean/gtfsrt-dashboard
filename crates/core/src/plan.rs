@@ -137,6 +137,17 @@ pub struct ScheduleCatalog {
     pub versions: Vec<ScheduleVersion>,
 }
 
+/// Parses the archive's schedule catalog. One malformed entry for any agency mustn't
+/// stop every other agency from being analysed, so bad entries are skipped.
+pub fn parse_catalogs(json: &str) -> Result<Vec<ScheduleCatalog>, String> {
+    let entries: Vec<serde_json::Value> =
+        serde_json::from_str(json).map_err(|e| format!("Invalid schedule catalog: {e}"))?;
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry| serde_json::from_value(entry).ok())
+        .collect())
+}
+
 /// The schedule tables to use for one service date, possibly from several
 /// sources when an agency publishes more than one.
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -377,6 +388,16 @@ mod tests {
         )])];
         let urls = ["https://example.test/gtfs.zip".to_owned()];
         assert!(choose_schedule(&urls, &expired, ServiceDate(20261105)).is_none());
+    }
+
+    #[test]
+    fn a_malformed_catalog_entry_does_not_stop_the_others() {
+        let json =
+            r#"[{"nonsense": true}, {"base64url": "a", "schedule_url": "u", "versions": []}]"#;
+        let catalogs = parse_catalogs(json).unwrap();
+        assert_eq!(catalogs.len(), 1);
+        assert_eq!(catalogs[0].schedule_url, "u");
+        assert!(parse_catalogs("not json").is_err());
     }
 
     #[test]

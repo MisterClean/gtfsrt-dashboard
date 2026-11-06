@@ -8,7 +8,9 @@
 //! rather than along the route, and layovers can only be guessed from a vehicle
 //! standing still, so these figures are clearly marked as less precise.
 
-use crate::cube::{DayCube, METRIC_VERSION, Quality, RouteHour, RouteVehicles, SegHour};
+use crate::cube::{
+    Coverage, DayCube, DayStatus, METRIC_VERSION, Quality, RouteHour, RouteVehicles, SegHour,
+};
 use crate::geo::chord_m;
 use crate::rt::{Fix, RtBuffer};
 use crate::schedule::{Grid, RouteMeta, ScheduleMeta, SegKey, SegMeta};
@@ -48,12 +50,14 @@ pub fn gps_digest(date: ServiceDate) -> String {
 
 /// Builds rollups for `date` from buffered fixes using position alone. Routes take
 /// their names from `known_routes` when the IDs match, and otherwise show the ID
-/// the feed reported.
+/// the feed reported. `coverage` and `notes` work as in [`crate::day::process_day`].
 pub fn process_gps_day(
     buffer: &mut RtBuffer,
     known_routes: &[RouteMeta],
     date: ServiceDate,
     clock: &Clock,
+    coverage: &Coverage,
+    notes: &[String],
 ) -> Result<GpsDay, String> {
     let origin = clock
         .service_origin(date)
@@ -74,6 +78,7 @@ pub fn process_gps_day(
     let mut quality = Quality {
         fixes_unique: fixes.len() as u64,
         fixes_trip_unmatched: fixes.len() as u64,
+        fixes_on_day: fixes.len() as u64,
         ..Quality::default()
     };
     add_hour_counts(buffer, window_start, window_end, &mut quality);
@@ -209,6 +214,26 @@ pub fn process_gps_day(
     let mut seg_rows: Vec<SegHour> = seg_hours.into_values().collect();
     seg_rows.sort_by_key(|row| (row.seg, row.hour));
 
+    // No schedule says when service runs, so judge against the daytime hours.
+    let gaps = coverage.gaps(date, origin, origin + 5 * 3600, origin + 25 * 3600);
+    let status = if quality.rows == 0 {
+        DayStatus::NoData
+    } else if gaps.is_empty() {
+        DayStatus::Complete
+    } else {
+        DayStatus::Partial
+    };
+    let mut warnings = vec![format!(
+        "{date}: this day could not be joined to a schedule, so it shows GPS speeds only, with no on-time performance, headways or run times. Speeds are measured between consecutive positions and can run a little low on winding routes."
+    )];
+    warnings.extend_from_slice(notes);
+    warnings.extend(gaps);
+    if status != DayStatus::NoData && quality.pairs_kept == 0 {
+        warnings.push(format!(
+            "{date}: the archive has position reports for this day, but none could be measured. See the funnel on Data & methods."
+        ));
+    }
+
     let digest = gps_digest(date);
     Ok(GpsDay {
         meta: ScheduleMeta {
@@ -224,15 +249,13 @@ pub fn process_gps_day(
             date: date.0,
             digest,
             metric_version: METRIC_VERSION,
+            status,
             route_hours: route_rows,
             seg_hours: seg_rows,
             route_vehicles,
             network_vehicles,
             quality,
-            warnings: vec![
-                "This day could not be joined to a schedule, so it shows GPS speeds only: no on-time performance, headways or run times. Speeds are measured between consecutive positions, and may run a little low on winding routes."
-                    .to_owned(),
-            ],
+            warnings,
             ..DayCube::default()
         },
     })
@@ -275,6 +298,7 @@ fn usable_pairs(fixes: &[Fix], buffer: &RtBuffer, quality: &mut Quality) -> Vec<
         if route != buffer.descriptors[b.descriptor as usize].route
             || buffer.routes.get(route).is_empty()
         {
+            quality.pairs_no_route += 1;
             continue;
         }
         if seconds > MAX_GAP_S {
@@ -394,7 +418,8 @@ mod tests {
         let mut buffer = RtBuffer::default();
         // 0.001 degrees is about 111 m, so 5.6 m/s.
         drive(&mut buffer, "V1", "26", 8, 60, 0.001);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         let row = &day.cube.route_hours[0];
         assert_eq!(row.hour, 8);
         let speed = row.meters / row.seconds;
@@ -407,7 +432,8 @@ mod tests {
     fn every_segment_has_a_drawable_line_and_valid_references() {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "V1", "26", 8, 60, 0.001);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         assert!(!day.meta.segs.is_empty());
         assert!(day.meta.segs.iter().all(|seg| seg.path.len() >= 2));
         assert!(
@@ -425,7 +451,8 @@ mod tests {
     fn a_long_stationary_run_is_treated_as_a_layover() {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "V1", "26", 8, 60, 0.0);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         assert!(day.cube.route_hours.is_empty());
         assert!(day.cube.quality.pairs_standstill > 0);
     }
@@ -452,7 +479,8 @@ mod tests {
                 differential: false,
             });
         }
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         let stopped: f64 = day.cube.route_hours.iter().map(|r| r.stopped_seconds).sum();
         assert!(stopped >= 40.0, "{stopped}");
     }
@@ -469,7 +497,15 @@ mod tests {
             color: String::new(),
             text_color: String::new(),
         }];
-        let day = process_gps_day(&mut buffer, &known, DATE, &clock()).unwrap();
+        let day = process_gps_day(
+            &mut buffer,
+            &known,
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+        )
+        .unwrap();
         assert_eq!(day.meta.routes[0].long_name, "Market Street");
     }
 
@@ -478,15 +514,53 @@ mod tests {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "V1", "26", 40, 60, 0.001);
         drive(&mut buffer, "V2", "", 8, 60, 0.001);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         assert!(day.cube.route_hours.is_empty());
+    }
+
+    #[test]
+    fn an_empty_day_is_marked_as_having_no_data() {
+        let mut buffer = RtBuffer::default();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
+        assert_eq!(day.cube.status, DayStatus::NoData);
+    }
+
+    #[test]
+    fn a_missing_file_marks_a_gps_day_partial() {
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "V1", "26", 8, 60, 0.001);
+        let origin = clock().service_origin(DATE).unwrap();
+        let coverage = Coverage {
+            read_through: i64::MAX,
+            missing: vec![(origin + 18 * 3600, origin + 42 * 3600)],
+        };
+        let day = process_gps_day(&mut buffer, &[], DATE, &clock(), &coverage, &[]).unwrap();
+        assert_eq!(day.cube.status, DayStatus::Partial);
+    }
+
+    #[test]
+    fn a_feed_with_no_route_ids_says_why_nothing_was_measured() {
+        let mut buffer = RtBuffer::default();
+        drive(&mut buffer, "V1", "", 8, 60, 0.001);
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
+        assert!(day.cube.quality.pairs_no_route > 0);
+        assert!(
+            day.cube
+                .warnings
+                .iter()
+                .any(|w| w.contains("none could be measured"))
+        );
     }
 
     #[test]
     fn impossible_jumps_are_dropped() {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "V1", "26", 8, 5, 0.1);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         assert!(day.cube.route_hours.is_empty());
         assert_eq!(day.cube.quality.pairs_too_fast, 4);
     }
@@ -495,7 +569,8 @@ mod tests {
     fn gps_only_days_merge_with_the_library_like_any_other_day() {
         let mut buffer = RtBuffer::default();
         drive(&mut buffer, "V1", "26", 8, 60, 0.001);
-        let day = process_gps_day(&mut buffer, &[], DATE, &clock()).unwrap();
+        let day =
+            process_gps_day(&mut buffer, &[], DATE, &clock(), &Coverage::complete(), &[]).unwrap();
         let mut library = crate::library::Library::default();
         library.add_schedule(&day.meta);
         library.add_day(day.cube, None).unwrap();
