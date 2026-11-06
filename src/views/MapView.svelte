@@ -86,7 +86,7 @@
     <aside class="side">
       {#if period === 'hour' && current}
         <dl class="facts">
-          <div><dt>Streets under 8 mph</dt><dd>{pct(current.slow_share)}</dd><span class="fine">of {int(current.cells)} measured segments, {hourRange(app.mapHour)}</span></div>
+          <div><dt>Streets under {app.units === 'imperial' ? '8 mph' : '13 km/h'}</dt><dd>{pct(current.slow_share)}</dd><span class="fine">of {int(current.cells)} measured segments, {hourRange(app.mapHour)}</span></div>
           <div><dt>Network speed</dt><dd>{speedWithUnit(current.speed, app.units)}</dd><span class="fine">pooled over every segment this hour</span></div>
         </dl>
       {/if}

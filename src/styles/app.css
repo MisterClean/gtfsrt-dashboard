@@ -245,8 +245,11 @@ table.data .dim { color: var(--faint); }
 .maplibregl-ctrl-group { background: var(--paper) !important; border: 1px solid var(--rule-strong); box-shadow: none !important; border-radius: 4px !important; }
 .maplibregl-ctrl-group button + button { border-top-color: var(--rule) !important; }
 .maplibregl-ctrl-attrib { background: color-mix(in srgb, var(--paper) 80%, transparent) !important; font-size: 10.5px; color: var(--muted); }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib-inner { color: var(--muted) !important; }
 .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
+.maplibregl-ctrl-scale { background: color-mix(in srgb, var(--paper) 80%, transparent) !important; color: var(--muted) !important; border-color: var(--muted) !important; font-size: 10.5px; }
 :root[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+:root[data-theme="dark"] .maplibregl-ctrl-attrib-button { filter: invert(1); }
 
 @media (max-width: 860px) {
   :root { --gutter: 16px; --rail: 0px; }
