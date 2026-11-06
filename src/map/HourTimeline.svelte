@@ -11,9 +11,11 @@
     hour: number;
     units: Units;
     height?: number;
+    /** What the speed readout covers: the network, or a single route. */
+    scope?: string;
     onchange: (hour: number) => void;
   }
-  let {hours, hour, units, height = 96, onchange}: Props = $props();
+  let {hours, hour, units, height = 96, scope = 'across the network', onchange}: Props = $props();
 
   let width = $state(600);
   let playing = $state(false);
@@ -68,7 +70,7 @@
     </button>
     <output class="clock" for="map-hour">{hourLabel(hour)}</output>
     <span class="now">
-      {#if byHour.get(hour)?.speed}<strong>{speed(byHour.get(hour)?.speed, units)} {speedUnit(units)}</strong> across the network, {hourRange(hour)}{:else}No measured service in this hour{/if}
+      {#if byHour.get(hour)?.speed}<strong>{speed(byHour.get(hour)?.speed, units)} {speedUnit(units)}</strong> {scope}, {hourRange(hour)}{:else}No measured service in this hour{/if}
     </span>
   </div>
   <div class="track" use:measure={w => (width = w)}>
