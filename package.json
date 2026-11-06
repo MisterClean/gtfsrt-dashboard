@@ -1,8 +1,12 @@
 {
-  "name": "gtfsrt-dashboard-feasibility",
+  "name": "gtfsrt-dashboard",
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "preview": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
     "probe": "node spike/run-browser-probe.mjs",
     "probe:serve": "node spike/serve.mjs"
   },
