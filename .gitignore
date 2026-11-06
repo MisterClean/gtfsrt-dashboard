@@ -1,3 +1,14 @@
 node_modules/
 .DS_Store
 spike/probe.bundle.mjs
+target/
+dist/
+.build/
+.cache/
+.impeccable/questions/
+.impeccable/review/
+.impeccable/mocks/
+test-results/
+.env
+.env.*
+!.env.example

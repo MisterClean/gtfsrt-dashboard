@@ -1,0 +1,552 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T19:55:15.258102Z",
+  "title": "Design System: Transit Notebook",
+  "extensions": {
+    "colorMeta": {
+      "copper": {
+        "role": "primary",
+        "displayName": "Copper",
+        "tonalRamp": [
+          "oklch(15% 0.0468 39.5)",
+          "oklch(26% 0.0735 39.5)",
+          "oklch(37% 0.1069 39.5)",
+          "oklch(49% 0.1337 39.5)",
+          "oklch(61% 0.1337 39.5)",
+          "oklch(73% 0.1136 39.5)",
+          "oklch(84% 0.0802 39.5)",
+          "oklch(95% 0.0334 39.5)"
+        ]
+      },
+      "copper-hover": {
+        "role": "primary",
+        "displayName": "Deep Copper",
+        "tonalRamp": [
+          "oklch(15% 0.0419 39.5)",
+          "oklch(26% 0.0659 39.5)",
+          "oklch(37% 0.0958 39.5)",
+          "oklch(49% 0.1198 39.5)",
+          "oklch(61% 0.1198 39.5)",
+          "oklch(73% 0.1018 39.5)",
+          "oklch(84% 0.0719 39.5)",
+          "oklch(95% 0.0299 39.5)"
+        ]
+      },
+      "copper-pale": {
+        "role": "primary",
+        "displayName": "Pale Copper",
+        "tonalRamp": [
+          "oklch(15% 0.0087 57.7)",
+          "oklch(26% 0.0136 57.7)",
+          "oklch(37% 0.0198 57.7)",
+          "oklch(49% 0.0247 57.7)",
+          "oklch(61% 0.0247 57.7)",
+          "oklch(73% 0.0210 57.7)",
+          "oklch(84% 0.0148 57.7)",
+          "oklch(95% 0.0062 57.7)"
+        ]
+      },
+      "blue": {
+        "role": "secondary",
+        "displayName": "Data Blue",
+        "tonalRamp": [
+          "oklch(15% 0.0264 231.8)",
+          "oklch(26% 0.0416 231.8)",
+          "oklch(37% 0.0604 231.8)",
+          "oklch(49% 0.0755 231.8)",
+          "oklch(61% 0.0755 231.8)",
+          "oklch(73% 0.0642 231.8)",
+          "oklch(84% 0.0453 231.8)",
+          "oklch(95% 0.0189 231.8)"
+        ]
+      },
+      "green": {
+        "role": "secondary",
+        "displayName": "Archive Green",
+        "tonalRamp": [
+          "oklch(15% 0.0238 162.0)",
+          "oklch(26% 0.0374 162.0)",
+          "oklch(37% 0.0545 162.0)",
+          "oklch(49% 0.0681 162.0)",
+          "oklch(61% 0.0681 162.0)",
+          "oklch(73% 0.0579 162.0)",
+          "oklch(84% 0.0408 162.0)",
+          "oklch(95% 0.0170 162.0)"
+        ]
+      },
+      "focus": {
+        "role": "secondary",
+        "displayName": "Focus Blue",
+        "tonalRamp": [
+          "oklch(15% 0.0322 236.6)",
+          "oklch(26% 0.0505 236.6)",
+          "oklch(37% 0.0735 236.6)",
+          "oklch(49% 0.0919 236.6)",
+          "oklch(61% 0.0919 236.6)",
+          "oklch(73% 0.0781 236.6)",
+          "oklch(84% 0.0551 236.6)",
+          "oklch(95% 0.0230 236.6)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "tonalRamp": [
+          "oklch(15% 0.0517 27.5)",
+          "oklch(26% 0.0812 27.5)",
+          "oklch(37% 0.1181 27.5)",
+          "oklch(49% 0.1477 27.5)",
+          "oklch(61% 0.1477 27.5)",
+          "oklch(73% 0.1255 27.5)",
+          "oklch(84% 0.0886 27.5)",
+          "oklch(95% 0.0369 27.5)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "tonalRamp": [
+          "oklch(15% 0.0014 91.4)",
+          "oklch(26% 0.0023 91.4)",
+          "oklch(37% 0.0033 91.4)",
+          "oklch(49% 0.0041 91.4)",
+          "oklch(61% 0.0041 91.4)",
+          "oklch(73% 0.0035 91.4)",
+          "oklch(84% 0.0025 91.4)",
+          "oklch(95% 0.0010 91.4)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Soft Surface",
+        "tonalRamp": [
+          "oklch(15% 0.0029 91.5)",
+          "oklch(26% 0.0045 91.5)",
+          "oklch(37% 0.0066 91.5)",
+          "oklch(49% 0.0083 91.5)",
+          "oklch(61% 0.0083 91.5)",
+          "oklch(73% 0.0070 91.5)",
+          "oklch(84% 0.0050 91.5)",
+          "oklch(95% 0.0021 91.5)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Charcoal Ink",
+        "tonalRamp": [
+          "oklch(15% 0.0039 167.8)",
+          "oklch(26% 0.0062 167.8)",
+          "oklch(37% 0.0090 167.8)",
+          "oklch(49% 0.0113 167.8)",
+          "oklch(61% 0.0113 167.8)",
+          "oklch(73% 0.0096 167.8)",
+          "oklch(84% 0.0068 167.8)",
+          "oklch(95% 0.0028 167.8)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "tonalRamp": [
+          "oklch(15% 0.0050 117.1)",
+          "oklch(26% 0.0078 117.1)",
+          "oklch(37% 0.0113 117.1)",
+          "oklch(49% 0.0142 117.1)",
+          "oklch(61% 0.0142 117.1)",
+          "oklch(73% 0.0121 117.1)",
+          "oklch(84% 0.0085 117.1)",
+          "oklch(95% 0.0035 117.1)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Fine Rule",
+        "tonalRamp": [
+          "oklch(15% 0.0043 116.8)",
+          "oklch(26% 0.0068 116.8)",
+          "oklch(37% 0.0098 116.8)",
+          "oklch(49% 0.0123 116.8)",
+          "oklch(61% 0.0123 116.8)",
+          "oklch(73% 0.0104 116.8)",
+          "oklch(84% 0.0074 116.8)",
+          "oklch(95% 0.0031 116.8)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "tonalRamp": [
+          "oklch(15% 0.0000 0.0)",
+          "oklch(26% 0.0000 0.0)",
+          "oklch(37% 0.0000 0.0)",
+          "oklch(49% 0.0000 0.0)",
+          "oklch(61% 0.0000 0.0)",
+          "oklch(73% 0.0000 0.0)",
+          "oklch(84% 0.0000 0.0)",
+          "oklch(95% 0.0000 0.0)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control Border",
+        "tonalRamp": [
+          "oklch(15% 0.0061 125.3)",
+          "oklch(26% 0.0096 125.3)",
+          "oklch(37% 0.0139 125.3)",
+          "oklch(49% 0.0174 125.3)",
+          "oklch(61% 0.0174 125.3)",
+          "oklch(73% 0.0148 125.3)",
+          "oklch(84% 0.0104 125.3)",
+          "oklch(95% 0.0044 125.3)"
+        ]
+      },
+      "control-border-hover": {
+        "role": "neutral",
+        "displayName": "Control Border Hover",
+        "tonalRamp": [
+          "oklch(15% 0.0077 128.8)",
+          "oklch(26% 0.0121 128.8)",
+          "oklch(37% 0.0176 128.8)",
+          "oklch(49% 0.0220 128.8)",
+          "oklch(61% 0.0220 128.8)",
+          "oklch(73% 0.0187 128.8)",
+          "oklch(84% 0.0132 128.8)",
+          "oklch(95% 0.0055 128.8)"
+        ]
+      },
+      "route-green": {
+        "role": "secondary",
+        "displayName": "Route Green",
+        "tonalRamp": [
+          "oklch(15% 0.0232 152.0)",
+          "oklch(26% 0.0365 152.0)",
+          "oklch(37% 0.0531 152.0)",
+          "oklch(49% 0.0664 152.0)",
+          "oklch(61% 0.0664 152.0)",
+          "oklch(73% 0.0564 152.0)",
+          "oklch(84% 0.0398 152.0)",
+          "oklch(95% 0.0166 152.0)"
+        ]
+      },
+      "route-plum": {
+        "role": "secondary",
+        "displayName": "Route Plum",
+        "tonalRamp": [
+          "oklch(15% 0.0202 349.1)",
+          "oklch(26% 0.0318 349.1)",
+          "oklch(37% 0.0462 349.1)",
+          "oklch(49% 0.0577 349.1)",
+          "oklch(61% 0.0577 349.1)",
+          "oklch(73% 0.0491 349.1)",
+          "oklch(84% 0.0346 349.1)",
+          "oklch(95% 0.0144 349.1)"
+        ]
+      },
+      "route-ochre": {
+        "role": "secondary",
+        "displayName": "Route Ochre",
+        "tonalRamp": [
+          "oklch(15% 0.0346 82.3)",
+          "oklch(26% 0.0543 82.3)",
+          "oklch(37% 0.0790 82.3)",
+          "oklch(49% 0.0987 82.3)",
+          "oklch(61% 0.0987 82.3)",
+          "oklch(73% 0.0839 82.3)",
+          "oklch(84% 0.0592 82.3)",
+          "oklch(95% 0.0247 82.3)"
+        ]
+      },
+      "route-violet": {
+        "role": "secondary",
+        "displayName": "Route Violet",
+        "tonalRamp": [
+          "oklch(15% 0.0263 286.5)",
+          "oklch(26% 0.0413 286.5)",
+          "oklch(37% 0.0601 286.5)",
+          "oklch(49% 0.0751 286.5)",
+          "oklch(61% 0.0751 286.5)",
+          "oklch(73% 0.0639 286.5)",
+          "oklch(84% 0.0451 286.5)",
+          "oklch(95% 0.0188 286.5)"
+        ]
+      },
+      "route-grey-green": {
+        "role": "secondary",
+        "displayName": "Route Grey Green",
+        "tonalRamp": [
+          "oklch(15% 0.0104 145.1)",
+          "oklch(26% 0.0164 145.1)",
+          "oklch(37% 0.0238 145.1)",
+          "oklch(49% 0.0297 145.1)",
+          "oklch(61% 0.0297 145.1)",
+          "oklch(73% 0.0253 145.1)",
+          "oklch(84% 0.0178 145.1)",
+          "oklch(95% 0.0074 145.1)"
+        ]
+      },
+      "heat-empty": {
+        "role": "neutral",
+        "displayName": "Heat Empty",
+        "tonalRamp": [
+          "oklch(15% 0.0038 118.0)",
+          "oklch(26% 0.0060 118.0)",
+          "oklch(37% 0.0087 118.0)",
+          "oklch(49% 0.0109 118.0)",
+          "oklch(61% 0.0109 118.0)",
+          "oklch(73% 0.0092 118.0)",
+          "oklch(84% 0.0065 118.0)",
+          "oklch(95% 0.0027 118.0)"
+        ]
+      },
+      "heat-low": {
+        "role": "secondary",
+        "displayName": "Heat Low",
+        "tonalRamp": [
+          "oklch(15% 0.0121 58.8)",
+          "oklch(26% 0.0190 58.8)",
+          "oklch(37% 0.0276 58.8)",
+          "oklch(49% 0.0345 58.8)",
+          "oklch(61% 0.0345 58.8)",
+          "oklch(73% 0.0293 58.8)",
+          "oklch(84% 0.0207 58.8)",
+          "oklch(95% 0.0086 58.8)"
+        ]
+      },
+      "heat-mid": {
+        "role": "secondary",
+        "displayName": "Heat Mid",
+        "tonalRamp": [
+          "oklch(15% 0.0298 51.7)",
+          "oklch(26% 0.0468 51.7)",
+          "oklch(37% 0.0681 51.7)",
+          "oklch(49% 0.0851 51.7)",
+          "oklch(61% 0.0851 51.7)",
+          "oklch(73% 0.0724 51.7)",
+          "oklch(84% 0.0511 51.7)",
+          "oklch(95% 0.0213 51.7)"
+        ]
+      },
+      "heat-high": {
+        "role": "secondary",
+        "displayName": "Heat High",
+        "tonalRamp": [
+          "oklch(15% 0.0397 45.7)",
+          "oklch(26% 0.0624 45.7)",
+          "oklch(37% 0.0907 45.7)",
+          "oklch(49% 0.1134 45.7)",
+          "oklch(61% 0.1134 45.7)",
+          "oklch(73% 0.0964 45.7)",
+          "oklch(84% 0.0681 45.7)",
+          "oklch(95% 0.0284 45.7)"
+        ]
+      },
+      "heat-peak": {
+        "role": "secondary",
+        "displayName": "Heat Peak",
+        "tonalRamp": [
+          "oklch(15% 0.0413 42.0)",
+          "oklch(26% 0.0649 42.0)",
+          "oklch(37% 0.0944 42.0)",
+          "oklch(49% 0.1180 42.0)",
+          "oklch(61% 0.1180 42.0)",
+          "oklch(73% 0.1003 42.0)",
+          "oklch(84% 0.0708 42.0)",
+          "oklch(95% 0.0295 42.0)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Uppercase page heading; the self-hosted 800 face."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Condensed report and empty-state headings."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "System-text section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base reading texture for working content."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Visible native-control labels."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Primary, cancel, and secondary action labels."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Tabular summary values."
+      },
+      "axis": {
+        "displayName": "Axis",
+        "purpose": "Chart labels retain 11px type inside scrollable plots."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Inspectable, independently scrollable SQL."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "button-state",
+        "value": "background-color .15s ease-out, color .15s ease-out",
+        "purpose": "Button state feedback; disabled by reduced-motion preferences."
+      },
+      {
+        "name": "working-pulse",
+        "value": "working 1.2s ease-in-out infinite",
+        "purpose": "The loading dot reaches opacity .3 at the midpoint; disabled by reduced-motion preferences."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "chart-scroll-hint-max",
+        "value": "1183px"
+      },
+      {
+        "name": "selection-reflow-max",
+        "value": "1050px"
+      },
+      {
+        "name": "compact-max",
+        "value": "760px"
+      },
+      {
+        "name": "narrow-max",
+        "value": "540px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Copper action for loading the selected archive.",
+      "html": "<button class=\"ds-primary\">Load archive<svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M4 10h12m-5-5 5 5-5 5\"/></svg></button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;background:var(--copper,#ac4d2b);color:#fff}.ds-primary:hover:not(:disabled){background:var(--copper-hover,#8b391b)}.ds-primary:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-primary:active:not(:disabled){filter:brightness(.93)}.ds-primary:disabled{opacity:.55;cursor:default}.ds-primary svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}}"
+    },
+    {
+      "name": "Cancel Action",
+      "kind": "button",
+      "refersTo": "button-cancel",
+      "description": "Visible while an archive load can be canceled.",
+      "html": "<button class=\"ds-cancel\">Cancel load</button>",
+      "css": ".ds-cancel{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;background:var(--danger,#a3342d);color:#fff}.ds-cancel:hover{background:#832620}.ds-cancel:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-cancel:active:not(:disabled){filter:brightness(.93)}.ds-cancel:disabled{opacity:.55;cursor:default}@media(prefers-reduced-motion:reduce){.ds-cancel{transition:none}}"
+    },
+    {
+      "name": "Secondary Action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Paper-filled recovery action with a thin border.",
+      "html": "<button class=\"ds-secondary\">Retry catalog</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:15px;min-height:44px;border:0;border-radius:4px;padding:10px 17px;font:650 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out;border:1px solid #acb3a5;background:var(--paper,#fbfaf7);color:var(--ink,#242b28)}.ds-secondary:hover:not(:disabled){background:var(--surface,#f2f0ea)}.ds-secondary:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-secondary:active:not(:disabled){filter:brightness(.93)}.ds-secondary:disabled{opacity:.55;cursor:default}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}}"
+    },
+    {
+      "name": "Text Action",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Quiet copper action for moving to methods or exporting evidence.",
+      "html": "<button class=\"ds-text-button\">Inspect data &amp; method<svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M4 10h12m-5-5 5 5-5 5\"/></svg></button>",
+      "css": ".ds-text-button{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:7px 0;color:var(--copper,#ac4d2b);font:600 12px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px;transition:background-color .15s ease-out,color .15s ease-out}.ds-text-button:hover:not(:disabled){color:var(--copper-hover,#8b391b);text-decoration-color:currentColor}.ds-text-button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-text-button:active:not(:disabled){filter:brightness(.93)}.ds-text-button:disabled{opacity:.55;cursor:default}.ds-text-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;width:16px;height:16px}@media(prefers-reduced-motion:reduce){.ds-text-button{transition:none}}"
+    },
+    {
+      "name": "Native Date Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A visible label and a native UTC date control.",
+      "html": "<label class=\"ds-field\">From · UTC<input aria-label=\"From date UTC\" type=\"date\" value=\"2026-11-05\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:7px;color:var(--muted,#62645b);font:650 12px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);min-width:0}.ds-field input{width:100%;height:44px;min-width:0;border:1px solid #bfc4b8;border-radius:4px;background:var(--paper,#fbfaf7);padding:8px 12px;color:var(--ink,#242b28);font:450 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);caret-color:var(--copper,#ac4d2b)}.ds-field input:hover:not(:disabled){border-color:#888f81}.ds-field input:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-field input:disabled{opacity:.55;cursor:default}@media(max-width:540px){.ds-field input{padding:7px;font-size:12px;height:42px}}"
+    },
+    {
+      "name": "View Navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Four working views share one rule and a copper selected indicator.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Dashboard views\"><button aria-pressed=\"true\">Overview</button><button aria-pressed=\"false\">Routes</button><button aria-pressed=\"false\">Positions</button><button aria-pressed=\"false\">Sources &amp; SQL</button></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:26px;min-height:46px;border-bottom:1px solid var(--rule,#dcded5)}.ds-nav button{align-self:stretch;border:0;border-bottom:2px solid transparent;background:none;padding:12px 0;color:var(--muted,#62645b);font:400 13px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);white-space:nowrap;cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-nav button[aria-pressed=\"true\"]{border-bottom-color:var(--copper,#ac4d2b);color:var(--copper,#ac4d2b);font-weight:650}.ds-nav button:hover{color:var(--ink,#242b28)}.ds-nav button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-nav button:active:not(:disabled){filter:brightness(.93)}@media(max-width:760px){.ds-nav{gap:25px}}@media(max-width:540px){.ds-nav{justify-content:space-between;gap:12px;min-height:50px}.ds-nav button{font-size:12px}}@media(prefers-reduced-motion:reduce){.ds-nav button{transition:none}}"
+    },
+    {
+      "name": "Chart Measure Segments",
+      "kind": "custom",
+      "refersTo": "segment",
+      "description": "Compact measure switch with an ink-filled selected segment.",
+      "html": "<div class=\"ds-segmented\" aria-label=\"Chart measure\"><button aria-pressed=\"true\">Vehicles</button><button aria-pressed=\"false\">Observations</button></div>",
+      "css": ".ds-segmented{display:inline-flex;gap:2px;border:1px solid #bfc4b8;border-radius:5px;padding:3px}.ds-segmented button{border:0;border-radius:3px;background:none;padding:6px 12px;color:var(--muted,#62645b);font:400 11px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-segmented button[aria-pressed=\"true\"]{background:var(--ink,#242b28);color:var(--paper,#fbfaf7)}.ds-segmented button:hover:not([aria-pressed=\"true\"]){background:var(--surface,#f2f0ea)}.ds-segmented button:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-segmented button:active:not(:disabled){filter:brightness(.93)}@media(prefers-reduced-motion:reduce){.ds-segmented button{transition:none}}"
+    },
+    {
+      "name": "Selection Panel",
+      "kind": "card",
+      "refersTo": "selection-panel",
+      "description": "A soft, flat grouping for archive controls and catalog metadata.",
+      "html": "<section class=\"ds-selection\" aria-label=\"Archive selection\"><label class=\"ds-selection-label\">Agency / feed<select aria-label=\"Agency / feed\"><option>Metro Transit - City of Madison</option></select></label><div class=\"ds-selection-meta\"><span>Catalog range: 2026-01-10 — 2026-11-05</span><span>1–6 UTC days · up to 128 MiB</span></div></section>",
+      "css": ".ds-selection{padding:18px 20px 12px;border-radius:8px;background:var(--surface,#f2f0ea);color:var(--ink,#242b28);font-family:var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-selection-label{display:flex;flex-direction:column;gap:7px;min-width:0;color:var(--muted,#62645b);font-size:12px;font-weight:650}.ds-selection select{height:44px;width:100%;min-width:0;border:1px solid #bfc4b8;border-radius:4px;background:var(--paper,#fbfaf7);padding:8px 28px 8px 12px;color:var(--ink,#242b28);font:450 14px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-selection select:hover:not(:disabled){border-color:#888f81}.ds-selection select:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-selection select:disabled{opacity:.55;cursor:default}.ds-selection-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:13px;color:var(--muted,#62645b);font-size:11px;line-height:1.5}@media(max-width:760px){.ds-selection{padding:18px}}@media(max-width:540px){.ds-selection{padding:16px}.ds-selection select{font-size:12px}.ds-selection-meta{font-size:10px;gap:5px;margin-top:12px}}"
+    },
+    {
+      "name": "Metric Strip",
+      "kind": "custom",
+      "refersTo": "metric-strip",
+      "description": "Tabular values sit between fine rules with compact explanatory labels.",
+      "html": "<dl class=\"ds-metrics\"><div><dt>Archived observations</dt><dd>296,588</dd><small>Includes repeated polls</small></div><div><dt>Reported vehicles</dt><dd>151</dd><small>Distinct nonempty vehicle IDs</small></div><div><dt>Routes observed</dt><dd>29</dd><small>Distinct nonempty route IDs</small></div><div><dt>Hours with records</dt><dd>23<span class=\"ds-denominator\"> / 24</span></dd><small>UTC hours, archive coverage</small></div></dl>",
+      "css": ".ds-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:16px 0;border-top:1px solid var(--rule,#dcded5);border-bottom:1px solid var(--rule,#dcded5);color:var(--ink,#242b28);font-family:var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif)}.ds-metrics>div{min-width:0;padding:0 24px;border-right:1px solid var(--rule,#dcded5)}.ds-metrics>div:first-child{padding-left:0}.ds-metrics>div:last-child{padding-right:0;border-right:0}.ds-metrics dt{color:var(--muted,#62645b);font-size:11px;font-weight:650;letter-spacing:.03em;text-transform:uppercase}.ds-metrics dd{margin:6px 0 0;font-size:34px;font-weight:650;letter-spacing:-.03em;line-height:1.2;font-variant-numeric:tabular-nums}.ds-metrics small{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:var(--muted,#62645b)}.ds-denominator{font-size:20px;font-weight:450;color:var(--muted,#62645b);letter-spacing:0}@media(max-width:1050px){.ds-metrics>div{padding:0 18px}}@media(max-width:760px){.ds-metrics{grid-template-columns:repeat(2,minmax(0,1fr));padding:0}.ds-metrics>div{padding:18px}.ds-metrics>div:nth-child(odd){padding-left:0}.ds-metrics>div:nth-child(even){border-right:0}.ds-metrics>div:nth-child(-n+2){border-bottom:1px solid var(--rule,#dcded5)}.ds-metrics dd{font-size:36px}}@media(max-width:540px){.ds-metrics dt{font-size:10px;letter-spacing:.01em}.ds-metrics dd{font-size:32px}.ds-denominator{font-size:18px}}"
+    },
+    {
+      "name": "Route Comparison Row",
+      "kind": "custom",
+      "refersTo": "route-row",
+      "description": "A locally interactive route identifier, name, observation bar, and aligned count.",
+      "html": "<button class=\"ds-route-row\"><span class=\"ds-route-id\">D</span><span class=\"ds-route-name\">Route D</span><svg viewBox=\"0 0 200 12\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><rect class=\"ds-bar-track\" width=\"200\" height=\"8\" y=\"2\"/><rect class=\"ds-bar-fill\" width=\"169.37\" height=\"8\" y=\"2\"/></svg><span class=\"ds-bar-number\">34,713</span></button>",
+      "css": ".ds-route-row{display:grid;grid-template-columns:35px minmax(20px,1fr) minmax(50px,160px) 65px;align-items:center;gap:12px;width:100%;border:0;border-top:1px solid var(--rule,#dcded5);border-bottom:1px solid var(--rule,#dcded5);background:none;padding:12px 0;text-align:left;color:var(--ink,#242b28);font:400 15px/1.5 var(--font,-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif);cursor:pointer;transition:background-color .15s ease-out,color .15s ease-out}.ds-route-row:hover{background:var(--surface,#f2f0ea)}.ds-route-row:focus-visible{outline:3px solid var(--focus,#1f678d);outline-offset:4px;}.ds-route-row:active:not(:disabled){filter:brightness(.93)}.ds-route-row:disabled{opacity:.55;cursor:default}.ds-route-id{font-size:13px;font-weight:650}.ds-route-name{font-size:11px;color:var(--muted,#62645b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-route-row svg{width:100%;height:12px}.ds-bar-track{fill:var(--surface,#f2f0ea)}.ds-bar-fill{fill:var(--copper,#ac4d2b)}.ds-bar-number{text-align:right;font-size:12px;font-variant-numeric:tabular-nums}@media(max-width:1050px){.ds-route-row{grid-template-columns:28px minmax(10px,1fr) minmax(45px,100px) 60px;gap:8px}}@media(max-width:760px){.ds-route-row{grid-template-columns:32px minmax(25px,1fr) minmax(100px,220px) 65px}.ds-route-name{font-size:12px}}@media(max-width:540px){.ds-route-row{grid-template-columns:28px minmax(25px,1fr) 90px 55px;gap:6px}.ds-route-name,.ds-bar-number{font-size:11px}}@media(prefers-reduced-motion:reduce){.ds-route-row{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Transit Notebook",
+    "overview": "A warm, restrained transit notebook pairs paper surfaces and charcoal ink with compact quantitative views. Copper identifies the main action and selected views; typography and fine rules organize the information. The supplied CTA Bus Speed Scorecard establishes this personal project's visual family.\n\nCondensed display headings give the notebook its identity. Familiar system text, native fields, tabular figures, and direct explanations carry the working interface. Flat surfaces leave charts, route comparisons, raw observations, and provenance easy to inspect. The implementation is code-led and ships no decorative raster imagery.",
+    "keyCharacteristics": [
+      "Warm paper and charcoal ink, with copper actions and blue secondary data.",
+      "Self-hosted condensed display headings above quiet system text.",
+      "Flat ruled sections, compact native controls, and aligned numerical comparisons.",
+      "Readable chart axes, contained horizontal scrolling, and inspectable source evidence."
+    ],
+    "rules": [
+      {
+        "name": "The Functional Accent Rule",
+        "body": "Copper marks actions, selection, and primary observations; green and blue retain their distinct status and data roles.",
+        "section": "colors"
+      },
+      {
+        "name": "The Heading Face Rule",
+        "body": "Reserve Big Shoulders Display for headings; controls, metric values, tables, and prose use the system stack.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled Surface Rule",
+        "body": "Keep data sections flat and separate them with fine rules; use a toned panel for grouped controls or contextual information.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the self-hosted display face for headings and the system stack for working text.",
+      "Do preserve copper actions, distinct data and status colors, and tabular numerical alignment.",
+      "Do keep report sections flat, with fine rules and restrained tonal groupings.",
+      "Do retain readable chart axes, contained scrolling, visible narrow-screen instructions, and inspectable values.",
+      "Do let long provenance and schedule identifiers wrap within their text columns.",
+      "Do preserve visible keyboard focus, native field behavior, and reduced-motion support."
+    ],
+    "donts": [
+      "Don't apply Trusted Health branding to this personal transit project.",
+      "Don't shrink whole quantitative plots to fit a narrow viewport and make their axes unreadable.",
+      "Don't replace the inline SVG controls with text glyph icons.",
+      "Don't add decorative imagery or raised card treatments to the confirmed notebook world.",
+      "Don't style archive observation counts as inferred service, speed, ridership, or on-time performance."
+    ]
+  }
+}
