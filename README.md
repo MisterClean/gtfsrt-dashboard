@@ -23,6 +23,17 @@ The method comes from the [CTA Bus Speed Scorecard](https://michaelmclean.me/cta
 
 Every table exports to CSV. Links carry the selection, and whoever opens one analyzes the same days on their own device.
 
+<table>
+  <tr>
+    <td><img src="docs/images/hotspots.png" alt="Delay hotspots for Madison: a map with the ten stretches losing the most time outlined and numbered, beside the ranked list"></td>
+    <td><img src="docs/images/speed-map-dark.png" alt="The speed map in dark theme, with slow streets drawn wider and a time control built on the network's speed curve"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/string-line.png" alt="A string-line diagram of every trip on one route between 10 AM and 3 PM, with bunched vehicles in orange"></td>
+    <td><img src="docs/images/routes.png" alt="The route scorecard, sorted slowest at peak first, with hourly sparklines and the slowest half mile on each route"></td>
+  </tr>
+</table>
+
 ## How it works
 
 ```mermaid
@@ -103,7 +114,7 @@ Rust analytics tests drive simulated vehicles through a real schedule and assert
 
 ## Can I trust the numbers?
 
-The [metrics reference](docs/metrics.md) gives every definition, formula and threshold. [Validation](docs/validation.md) records independent checks against raw data and results for every agency in the archive. The short version of the limits:
+The [metrics reference](docs/metrics.md) gives every definition, formula and threshold. [Validation](docs/validation.md) records what was checked and what wasn't. A second implementation, written by a separate AI review agent over the same raw data, agrees with the app to within 0.02 mph network-wide in Madison and King County, and every one of the archive's 21 vehicle-position feeds runs without error. That's agreement between methods, not ground truth, and no person has audited it yet. The short version of the limits:
 
 - **Stop passes are inferred from GPS.** At 20-second polling, single events are approximate and aggregates are solid. Stop-zone time in particular only means something in aggregate.
 - **An absent trip isn't proof of a cancellation.** It may be a reporting gap. The app reports what it observed and shows the share of scheduled trips it saw.
