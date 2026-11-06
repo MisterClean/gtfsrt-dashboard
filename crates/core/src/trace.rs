@@ -4,7 +4,7 @@
 //! forward with the vehicle, which keeps the match on the correct pass of a loop
 //! or out-and-back shape. Progress then only ever goes forward.
 
-use crate::geo::{Polyline, chord_m};
+use crate::geo::{Polyline, Projection, chord_m};
 
 /// The rules applied before an interval counts toward speed. The tags match the
 /// thresholds documented in the CTA scorecard and `docs/metrics.md`.
@@ -68,60 +68,130 @@ pub struct Trace {
     pub backward: u32,
 }
 
+/// How much worse an earlier pass of a loop can fit a fix and still be preferred.
+const EARLIER_PASS_SLACK_M: f32 = 25.0;
+/// A vehicle must move at least this far before its direction of travel counts.
+const MIN_HEADING_MOVE_M: f32 = 30.0;
+/// Two traces progressing within this distance are equally good explanations.
+const PROGRESS_TIE_M: f32 = 50.0;
+
 /// Fixes must already be sorted by time and unique per time.
 ///
-/// `expected_s` estimates progress from the schedule. It only breaks ties on the
-/// very first fix, when a line passes the same point more than once.
+/// A line can pass the first fix's position more than once, on a loop or an
+/// out-and-back. Each pass is tried in full, and the one that best explains the whole
+/// run wins. Choosing by the schedule alone would send a late vehicle to the wrong
+/// pass, which would lose the worst trips and flatter on-time performance. `expected_s`
+/// estimates progress from the schedule and only settles real ties.
 pub fn match_fixes(
     line: &Polyline,
     fixes: &[(i64, f32, f32)],
     rules: &TraceRules,
     expected_s: impl Fn(i64) -> Option<f32>,
 ) -> Trace {
-    let mut trace = Trace::default();
-    let mut previous: Option<(i64, f32)> = None;
-    for &(t, lat, lon) in fixes {
+    for (index, &(t, lat, lon)) in fixes.iter().enumerate() {
         let point = line.frame.to_xy(f64::from(lat), f64::from(lon));
-        let found = match previous {
-            None => first_match(line, point, rules, expected_s(t)),
-            Some((previous_t, previous_s)) => {
-                let elapsed = (t - previous_t).max(0) as f32;
-                let reach = rules.max_speed_mps * elapsed + 200.0;
-                line.nearest_in_window(point, previous_s - 60.0, previous_s + reach)
+        let passes: Vec<Projection> = line
+            .candidates(point, rules.max_offset_m)
+            .into_iter()
+            .filter(|pass| pass.offset <= rules.max_offset_m)
+            .collect();
+        if passes.is_empty() {
+            continue;
+        }
+        let expected = expected_s(t);
+        let settled_by_schedule =
+            |pass: Projection| expected.map_or(pass.s, |s| (pass.s - s).abs());
+        let mut best: Option<(Trace, Projection)> = None;
+        for pass in passes {
+            let candidate = follow_from(line, &fixes[index..], pass, rules);
+            let better = best.as_ref().is_none_or(|(current, current_pass)| {
+                match candidate.off_route.cmp(&current.off_route) {
+                    std::cmp::Ordering::Less => true,
+                    std::cmp::Ordering::Greater => false,
+                    std::cmp::Ordering::Equal => {
+                        let gained = progress(&candidate) - progress(current);
+                        if gained.abs() > PROGRESS_TIE_M {
+                            gained > 0.0
+                        } else {
+                            settled_by_schedule(pass) < settled_by_schedule(*current_pass)
+                        }
+                    }
+                }
+            });
+            if better {
+                best = Some((candidate, pass));
             }
-        };
-        let Some(found) = found.filter(|f| f.offset <= rules.max_offset_m) else {
+        }
+        if let Some((mut trace, _)) = best {
+            trace.off_route += index as u32;
+            return trace;
+        }
+    }
+    Trace {
+        off_route: fixes.len() as u32,
+        ..Trace::default()
+    }
+}
+
+fn progress(trace: &Trace) -> f32 {
+    match (trace.points.first(), trace.points.last()) {
+        (Some(first), Some(last)) => last.s - first.s,
+        _ => 0.0,
+    }
+}
+
+/// Walks the fixes forward from a known position on the line. The first fix is the
+/// one `start` was projected from.
+fn follow_from(
+    line: &Polyline,
+    fixes: &[(i64, f32, f32)],
+    start: Projection,
+    rules: &TraceRules,
+) -> Trace {
+    let mut trace = Trace::default();
+    let &(t0, lat0, lon0) = &fixes[0];
+    trace.points.push(TracePoint {
+        t: t0,
+        s: start.s,
+        lat: lat0,
+        lon: lon0,
+    });
+    let mut previous = (
+        t0,
+        start.s,
+        line.frame.to_xy(f64::from(lat0), f64::from(lon0)),
+    );
+    for &(t, lat, lon) in &fixes[1..] {
+        // A frozen GPS unit can repeat an old fix. Time must also move forward.
+        if t < previous.0 {
+            continue;
+        }
+        let point = line.frame.to_xy(f64::from(lat), f64::from(lon));
+        let elapsed = (t - previous.0) as f32;
+        let reach = rules.max_speed_mps * elapsed + 200.0;
+        let moved = [point[0] - previous.2[0], point[1] - previous.2[1]];
+        let heading = (moved[0].hypot(moved[1]) >= MIN_HEADING_MOVE_M).then_some(moved);
+        let found = line
+            .earliest_pass_in_window(
+                point,
+                previous.1 - 60.0,
+                previous.1 + reach,
+                EARLIER_PASS_SLACK_M,
+                heading,
+            )
+            .filter(|fit| fit.offset <= rules.max_offset_m);
+        let Some(found) = found else {
             trace.off_route += 1;
             continue;
         };
-        let (t_prev, s_prev) = previous.unwrap_or((t, found.s));
-        if found.s < s_prev - 30.0 {
+        if found.s < previous.1 - 30.0 {
             trace.backward += 1;
         }
-        let s = found.s.max(s_prev);
-        // A frozen GPS unit can repeat an old fix. Time must also move forward.
-        if t < t_prev {
-            continue;
-        }
+        let s = found.s.max(previous.1);
         trace.points.push(TracePoint { t, s, lat, lon });
-        previous = Some((t, s));
+        previous = (t, s, point);
     }
     trace
-}
-
-fn first_match(
-    line: &Polyline,
-    point: [f32; 2],
-    rules: &TraceRules,
-    expected: Option<f32>,
-) -> Option<crate::geo::Projection> {
-    let candidates = line.candidates(point, rules.max_offset_m);
-    match expected {
-        Some(s) => candidates
-            .into_iter()
-            .min_by(|a, b| (a.s - s).abs().total_cmp(&(b.s - s).abs())),
-        None => candidates.into_iter().next(),
-    }
 }
 
 /// One interval that passed every rule.
@@ -346,6 +416,57 @@ mod tests {
         let late = match_fixes(&line, &fixes, &rules(), |_| Some(3900.0));
         assert!(early.points[0].s < 1000.0);
         assert!(late.points[0].s > 3000.0);
+    }
+
+    #[test]
+    fn a_late_vehicle_on_a_loop_starts_at_the_beginning_not_the_end() {
+        // A closed loop: start and end are the same place. The vehicle is so late that
+        // the schedule expects it near the end of the line while it is at the start.
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.02, -89.0),
+            (43.02, -88.97),
+            (43.0, -88.97),
+            (43.0, -89.0),
+        ])
+        .unwrap();
+        let fixes: Vec<(i64, f32, f32)> = (0..30)
+            .map(|i| (i64::from(i) * 20, 43.0 + 0.0005 * i as f32, -89.0))
+            .collect();
+        let trace = match_fixes(&line, &fixes, &rules(), |_| Some(line.length() * 0.9));
+        assert_eq!(trace.off_route, 0, "every fix fits when started correctly");
+        assert_eq!(trace.points.len(), 30);
+        assert!(trace.points[0].s < 100.0, "{}", trace.points[0].s);
+        assert!(trace.points[29].s > 1000.0, "{}", trace.points[29].s);
+    }
+
+    #[test]
+    fn with_nothing_else_to_go_on_the_schedule_settles_which_pass() {
+        let line = Polyline::from_lat_lon(&[(43.0, -89.0), (43.02, -89.0), (43.0, -89.0)]).unwrap();
+        let fixes = [(0, 43.005, -89.0)];
+        let early = match_fixes(&line, &fixes, &rules(), |_| Some(0.0));
+        let late = match_fixes(&line, &fixes, &rules(), |_| Some(line.length()));
+        assert!(early.points[0].s < line.length() / 2.0);
+        assert!(late.points[0].s > line.length() / 2.0);
+    }
+
+    #[test]
+    fn a_vehicle_returning_along_the_same_street_follows_the_return_leg() {
+        // An out-and-back along one street, reporting every 20 seconds.
+        let line = Polyline::from_lat_lon(&[(43.0, -89.0), (43.02, -89.0), (43.0, -89.0)]).unwrap();
+        let mut fixes: Vec<(i64, f32, f32)> = Vec::new();
+        for i in 0..=40 {
+            let lat = if i <= 20 {
+                43.0 + 0.001 * i as f32
+            } else {
+                43.04 - 0.001 * i as f32
+            };
+            fixes.push((i64::from(i) * 20, lat, -89.0));
+        }
+        let trace = match_fixes(&line, &fixes, &rules(), |_| None);
+        assert_eq!(trace.off_route, 0);
+        let last = trace.points.last().unwrap().s;
+        assert!(last > line.length() * 0.95, "{last} of {}", line.length());
     }
 
     #[test]

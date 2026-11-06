@@ -40,6 +40,8 @@ struct Pass {
     route: u32,
     dir: u8,
     stop: u32,
+    vehicle: u32,
+    trip: u32,
     time: f64,
     scheduled: i32,
 }
@@ -281,8 +283,10 @@ fn run_service_date(
         .map(|(_, date)| date)
 }
 
-/// Scheduled stop times per route, direction and stop, sorted.
-type ScheduledAtStops = FxHashMap<(u32, u8, u32), Vec<i32>>;
+/// Scheduled departures per route, direction and stop, sorted, with the trip each
+/// belongs to. Terminal arrivals are left out: on a loop the last stop is also the
+/// first, and the gap between one trip arriving and the next leaving is a layover.
+type ScheduledAtStops = FxHashMap<(u32, u8, u32), Vec<(i32, u32)>>;
 
 fn add_schedule_totals(
     schedule: &Schedule,
@@ -291,7 +295,7 @@ fn add_schedule_totals(
     quality: &mut Quality,
 ) -> ScheduledAtStops {
     let mut by_stop: ScheduledAtStops = FxHashMap::default();
-    for trip in &schedule.trips {
+    for (trip_index, trip) in schedule.trips.iter().enumerate() {
         if !schedule.service_active(trip, date) {
             continue;
         }
@@ -312,10 +316,12 @@ fn add_schedule_totals(
             let hour = service_hour(i64::from(time));
             acc.stop_period(trip.route, pattern.dir, pattern.stops[i], hour)
                 .scheduled += 1;
-            by_stop
-                .entry((trip.route, pattern.dir, pattern.stops[i]))
-                .or_default()
-                .push(time);
+            if i + 1 < pattern.stops.len() {
+                by_stop
+                    .entry((trip.route, pattern.dir, pattern.stops[i]))
+                    .or_default()
+                    .push((time, trip_index as u32));
+            }
             if i + 1 < pattern.stops.len() {
                 let seconds = (arrivals[i + 1] - departures[i]).max(0);
                 let meters = pattern.stop_s[i + 1] - pattern.stop_s[i];
@@ -329,11 +335,15 @@ fn add_schedule_totals(
     for ((route, dir, _), times) in &mut by_stop {
         times.sort_unstable();
         for pair in times.windows(2) {
-            let headway = f64::from(pair[1] - pair[0]);
+            // A trip passing the same stop twice isn't a headway.
+            if pair[0].1 == pair[1].1 {
+                continue;
+            }
+            let headway = f64::from(pair[1].0 - pair[0].0);
             if headway <= 0.0 || headway > cube::FREQUENT_HEADWAY_S {
                 continue;
             }
-            let row = acc.route_hour(*route, *dir, service_hour(i64::from(pair[1])));
+            let row = acc.route_hour(*route, *dir, service_hour(i64::from(pair[1].0)));
             row.sched_headway_count += 1;
             row.sched_headway_sum += headway;
             row.sched_headway_squares += headway * headway;
@@ -437,7 +447,8 @@ fn process_run(
     let stop_row = stop_passes(
         &trace.points,
         schedule,
-        trip,
+        (trip_index, trip),
+        vehicle,
         pattern,
         origin,
         trip_row_index,
@@ -619,7 +630,8 @@ struct StopSummary {
 fn stop_passes(
     points: &[TracePoint],
     schedule: &Schedule,
-    trip: &Trip,
+    (trip_index, trip): (u32, &Trip),
+    vehicle: u32,
     pattern: &Pattern,
     origin: i64,
     trip_row: u32,
@@ -707,13 +719,18 @@ fn stop_passes(
             observed: seconds_from_origin.round() as i32,
             scheduled,
         });
-        passes.push(Pass {
-            route: trip.route,
-            dir: pattern.dir,
-            stop,
-            time: seconds_from_origin,
-            scheduled,
-        });
+        // An arrival at the last stop isn't a departure anyone can board.
+        if !is_last {
+            passes.push(Pass {
+                route: trip.route,
+                dir: pattern.dir,
+                stop,
+                vehicle,
+                trip: trip_index,
+                time: seconds_from_origin,
+                scheduled,
+            });
+        }
         if first_seen.is_none() {
             first_seen = Some((i, observed));
         }
@@ -757,10 +774,11 @@ fn add_headways(passes: &mut [Pass], scheduled_at_stops: &ScheduledAtStops, acc:
         };
         for pair in group.windows(2) {
             let observed = pair[1].time - pair[0].time;
-            if observed <= 0.0 {
+            // The same vehicle coming back is a cycle or a layover, not a headway.
+            if observed <= 0.0 || pair[0].vehicle == pair[1].vehicle {
                 continue;
             }
-            let Some(scheduled) = scheduled_gap(times, pair[1].scheduled) else {
+            let Some(scheduled) = scheduled_gap(times, pair[1].scheduled, pair[1].trip) else {
                 continue;
             };
             if scheduled > cube::FREQUENT_HEADWAY_S {
@@ -784,10 +802,14 @@ fn add_headways(passes: &mut [Pass], scheduled_at_stops: &ScheduledAtStops, acc:
     }
 }
 
-/// The scheduled gap before `time` in a sorted list of scheduled stop times.
-fn scheduled_gap(times: &[i32], time: i32) -> Option<f64> {
-    let index = times.partition_point(|t| *t < time);
-    let previous = *times.get(index.checked_sub(1)?)?;
+/// The scheduled gap before `time` at a stop, back to the previous departure at an
+/// earlier time by a different trip.
+fn scheduled_gap(times: &[(i32, u32)], time: i32, trip: u32) -> Option<f64> {
+    let index = times.partition_point(|(t, _)| *t < time);
+    let (previous, _) = times[..index]
+        .iter()
+        .rev()
+        .find(|(_, other)| *other != trip)?;
     let gap = f64::from(time - previous);
     (gap > 0.0).then_some(gap)
 }
@@ -993,14 +1015,14 @@ mod tests {
             .map(|r| r.trips_scheduled)
             .sum();
         assert_eq!(scheduled, 12);
-        // 11 headways at each of 5 stops, all ten minutes.
+        // 11 headways at each of 4 stops, all ten minutes. The last stop is an arrival.
         let count: u32 = result
             .cube
             .route_hours
             .iter()
             .map(|r| r.sched_headway_count)
             .sum();
-        assert_eq!(count, 55);
+        assert_eq!(count, 44);
     }
 
     #[test]
@@ -1094,59 +1116,134 @@ mod tests {
         assert_eq!(headways.gapped, headways.count, "{headways:?}");
     }
 
-    #[test]
-    fn an_hours_long_silence_is_not_counted_as_a_headway() {
-        // The fixture runs every ten minutes, 7:00 to 8:50.
-        let mut passes = vec![
-            Pass {
-                route: 0,
-                dir: 0,
-                stop: 0,
-                time: 7.0 * 3600.0,
-                scheduled: 7 * 3600,
-            },
-            Pass {
-                route: 0,
-                dir: 0,
-                stop: 0,
-                time: 8.5 * 3600.0,
-                scheduled: 8 * 3600 + 1800,
-            },
-        ];
+    fn pass(vehicle: u32, trip: u32, time: f64, scheduled: i32) -> Pass {
+        Pass {
+            route: 0,
+            dir: 0,
+            stop: 0,
+            vehicle,
+            trip,
+            time,
+            scheduled,
+        }
+    }
+
+    /// Ten-minute service from 7:00 to 8:50, one trip per departure.
+    fn ten_minute_schedule() -> ScheduledAtStops {
         let mut scheduled = FxHashMap::default();
         scheduled.insert(
             (0, 0, 0),
-            (0..12).map(|i| 7 * 3600 + i * 600).collect::<Vec<i32>>(),
+            (0..12)
+                .map(|i| (7 * 3600 + i * 600, i as u32))
+                .collect::<Vec<(i32, u32)>>(),
         );
+        scheduled
+    }
+
+    fn headway_totals(acc: &Accumulator) -> Headways {
+        acc.route_hours
+            .values()
+            .fold(Headways::default(), |mut sum, row| {
+                sum.add(&row.headways);
+                sum
+            })
+    }
+
+    #[test]
+    fn an_hours_long_silence_is_not_counted_as_a_headway() {
+        let mut passes = vec![
+            pass(1, 0, 7.0 * 3600.0, 7 * 3600),
+            pass(2, 9, 8.5 * 3600.0, 8 * 3600 + 1800),
+        ];
         let mut acc = Accumulator::default();
-        add_headways(&mut passes, &scheduled, &mut acc);
-        let total: u32 = acc.route_hours.values().map(|r| r.headways.count).sum();
+        add_headways(&mut passes, &ten_minute_schedule(), &mut acc);
         assert_eq!(
-            total, 0,
+            headway_totals(&acc).count,
+            0,
             "90 minutes against a 10 minute schedule is missing evidence"
         );
 
         // Twenty minutes against a ten minute schedule is a real gap.
         let mut passes = vec![
-            Pass {
-                route: 0,
-                dir: 0,
-                stop: 0,
-                time: 7.0 * 3600.0,
-                scheduled: 7 * 3600,
-            },
-            Pass {
-                route: 0,
-                dir: 0,
-                stop: 0,
-                time: 7.0 * 3600.0 + 1200.0,
-                scheduled: 7 * 3600 + 1200,
-            },
+            pass(1, 0, 7.0 * 3600.0, 7 * 3600),
+            pass(2, 2, 7.0 * 3600.0 + 1200.0, 7 * 3600 + 1200),
         ];
         let mut acc = Accumulator::default();
-        add_headways(&mut passes, &scheduled, &mut acc);
-        let gapped: u32 = acc.route_hours.values().map(|r| r.headways.gapped).sum();
-        assert_eq!(gapped, 1);
+        add_headways(&mut passes, &ten_minute_schedule(), &mut acc);
+        assert_eq!(headway_totals(&acc).gapped, 1);
+    }
+
+    #[test]
+    fn the_same_vehicle_returning_is_not_a_headway() {
+        let mut passes = vec![
+            pass(1, 0, 7.0 * 3600.0, 7 * 3600),
+            pass(1, 1, 7.0 * 3600.0 + 600.0, 7 * 3600 + 600),
+        ];
+        let mut acc = Accumulator::default();
+        add_headways(&mut passes, &ten_minute_schedule(), &mut acc);
+        assert_eq!(headway_totals(&acc).count, 0);
+    }
+
+    #[test]
+    fn a_trip_passing_a_stop_twice_does_not_set_its_own_scheduled_headway() {
+        // Thirty-minute service where each trip passes the stop twice, 400 s apart.
+        let times = [
+            (7 * 3600, 0),
+            (7 * 3600 + 400, 0),
+            (7 * 3600 + 1800, 1),
+            (7 * 3600 + 2200, 1),
+        ];
+        // The second pass of trip 1 looks back past its own first pass to trip 0.
+        assert_eq!(scheduled_gap(&times, 7 * 3600 + 2200, 1), Some(1800.0));
+        assert_eq!(scheduled_gap(&times, 7 * 3600, 0), None);
+    }
+
+    #[test]
+    fn a_layover_on_a_loop_never_reads_as_frequent_service() {
+        // On a loop the last stop is also the first. A bus arrives, waits four minutes
+        // and leaves on the next trip, thirty minutes after the previous departure.
+        let mut builder = crate::schedule::ScheduleBuilder::new("loop");
+        builder.add_route(crate::schedule::RouteMeta {
+            id: "R".into(),
+            short_name: "1".into(),
+            long_name: String::new(),
+            route_type: Some(3),
+            color: String::new(),
+            text_color: String::new(),
+        });
+        for (id, lat) in [("A", 43.0), ("B", 43.02)] {
+            builder.add_stop(crate::schedule::StopMeta {
+                id: id.into(),
+                code: String::new(),
+                name: id.into(),
+                lat,
+                lon: -89.0,
+            });
+        }
+        builder.add_shape_point("S", 0, 43.0, -89.0);
+        builder.add_shape_point("S", 1, 43.02, -89.0);
+        builder.add_shape_point("S", 2, 43.02, -88.97);
+        builder.add_shape_point("S", 3, 43.0, -88.97);
+        builder.add_shape_point("S", 4, 43.0, -89.0);
+        builder.add_calendar("D", [true; 7], 20260101, 20261231);
+        for trip in 0..4 {
+            let id = format!("T{trip}");
+            let start = 7 * 3600 + trip * 1800;
+            builder.add_trip(&id, "R", "D", Some(0), Some("S"), "");
+            builder.add_stop_time(&id, "A", 1, Some(start), Some(start), None);
+            builder.add_stop_time(&id, "B", 2, Some(start + 600), Some(start + 600), None);
+            builder.add_stop_time(&id, "A", 3, Some(start + 1560), Some(start + 1560), None);
+        }
+        let schedule = builder.build().unwrap();
+        let mut acc = Accumulator::default();
+        let mut quality = Quality::default();
+        add_schedule_totals(&schedule, DATE, &mut acc, &mut quality);
+        let frequent: u32 = acc
+            .route_hours
+            .values()
+            .map(|row| row.sched_headway_count)
+            .sum();
+        assert_eq!(frequent, 0, "a 30 minute service has no frequent headways");
     }
 
     #[test]

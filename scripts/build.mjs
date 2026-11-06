@@ -31,7 +31,7 @@ for (const {name} of extensions) {
 if (!process.argv.includes('--wasm-only')) {
   run(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), 'build', '--logLevel', 'warn']);
   await writeFile(resolve(root, 'dist/release.json'), JSON.stringify({
-    app: '0.2.0', metric: 1, engine: 'v2.0.0', wrapper: '1.33.1-dev114.0', wasmBindgen: '0.2.105', builtAt: new Date().toISOString(),
+    app: '0.2.0', metric: 2, engine: 'v2.0.0', wrapper: '1.33.1-dev114.0', wasmBindgen: '0.2.105', builtAt: new Date().toISOString(),
   }, null, 2));
   console.log('Built self-contained static release in dist/');
 }

@@ -86,6 +86,8 @@
     <summary>Placing vehicles on the route</summary>
     <div class="body">
       <p>A trip ID leads to a route line and stop list in that day’s schedule. Each report is projected onto the line inside a window that moves with the vehicle: from 60 m behind its last position to as far ahead as the speed backstop allows, plus 200 m. This keeps a match on the correct pass of a loop or an out-and-back line. Reports more than 120 m from the line count as off route and are skipped.</p>
+      <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used, and once a vehicle has moved 30 m, legs running against its direction are ruled out.</p>
+      <p>Some agencies draw their lines out to each stop's curb and back. A vehicle doesn't drive those detours, so they are removed before measuring distance: a turn of 75° or more between two segments of up to 45 m, where the road carries on in about the same direction beyond it.</p>
       <p>Stops are placed along the line so that their order is preserved, choosing the combination that keeps stops closest to the line.</p>
     </div>
   </details>
@@ -118,7 +120,7 @@
         <li><strong>Average wait:</strong> Σh² ÷ 2Σh, the wait for a rider arriving at random. Long gaps count for more because more riders arrive during them.</li>
         <li><strong>Excess wait:</strong> the observed average wait minus the same figure for the schedule.</li>
       </ul>
-      <p>A trip missing from the feed lengthens observed headways, so read these beside the share of trips observed. A gap longer than both an hour and four scheduled headways isn't counted, because it means passes went unobserved. Fewer than ten headways shows nothing.</p>
+      <p>A trip missing from the feed lengthens observed headways, so read these beside the share of trips observed. The same vehicle coming back isn't a headway, and neither is an arrival at the last stop, since on a loop that gap is a layover. A gap longer than both an hour and four scheduled headways isn't counted either, because it usually means passes went unobserved, so read gap shares as a floor. Fewer than ten headways shows nothing.</p>
     </div>
   </details>
 

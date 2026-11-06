@@ -53,6 +53,81 @@ pub fn valid_coordinate(lat: f64, lon: f64) -> bool {
         && !(lat == 0.0 && lon == 0.0)
 }
 
+/// Longest segment on either side of a vertex that can be a stop spike.
+const SPIKE_MAX_SEGMENT_M: f64 = 45.0;
+/// How sharply the line must turn at a spike's tip.
+const SPIKE_MIN_TURN_DEG: f64 = 75.0;
+/// How far the road may change direction across a spike and still count as one road.
+const SPIKE_MAX_ROAD_TURN_DEG: f64 = 45.0;
+
+/// Removes the short detours some agencies draw from the road to each stop's curb.
+///
+/// A vehicle doesn't drive these, but their length adds up: in Madison they make the
+/// line about 2% longer than the road, and over 5% on routes with many stops. A spike
+/// is a sharp turn between two short segments where the road carries on in the same
+/// direction beyond it. That last test is what keeps real corners and U-turns, where
+/// the road comes out heading somewhere else.
+pub fn remove_spikes(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut kept: Vec<(f64, f64)> = points.to_vec();
+    loop {
+        let mut removed = false;
+        let mut index = 2;
+        while index + 2 < kept.len() {
+            if is_spike(
+                kept[index - 2],
+                kept[index - 1],
+                kept[index],
+                kept[index + 1],
+                kept[index + 2],
+            ) {
+                kept.remove(index);
+                removed = true;
+            } else {
+                index += 1;
+            }
+        }
+        if !removed {
+            return kept;
+        }
+    }
+}
+
+/// `tip` is the suspect vertex, between `a` and `b`. `before` and `after` show which
+/// way the road runs on each side.
+fn is_spike(
+    before: (f64, f64),
+    a: (f64, f64),
+    tip: (f64, f64),
+    b: (f64, f64),
+    after: (f64, f64),
+) -> bool {
+    let local = |from: (f64, f64), to: (f64, f64)| {
+        let k = ((from.0 + to.0) / 2.0).to_radians().cos();
+        (
+            (to.1 - from.1) * k * METERS_PER_DEGREE,
+            (to.0 - from.0) * METERS_PER_DEGREE,
+        )
+    };
+    let turn = |u: (f64, f64), v: (f64, f64)| {
+        let cross = u.0 * v.1 - u.1 * v.0;
+        let dot = u.0 * v.0 + u.1 * v.1;
+        cross.atan2(dot).abs().to_degrees()
+    };
+    let length = |v: (f64, f64)| v.0.hypot(v.1);
+    let (into_tip, out_of_tip) = (local(a, tip), local(tip, b));
+    let (road_in, road_out) = (local(before, a), local(b, after));
+    let short = |v: (f64, f64)| {
+        let meters = length(v);
+        meters > 0.0 && meters <= SPIKE_MAX_SEGMENT_M
+    };
+    short(into_tip)
+        && short(out_of_tip)
+        && length(road_in) > 0.0
+        && length(road_out) > 0.0
+        && turn(into_tip, out_of_tip) >= SPIKE_MIN_TURN_DEG
+        && turn(road_in, road_out) <= SPIKE_MAX_ROAD_TURN_DEG
+}
+
 /// A point projected onto a polyline.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Projection {
@@ -131,6 +206,74 @@ impl Polyline {
             }
         }
         best
+    }
+
+    /// Where a fix sits within the along-line window `[s_lo, s_hi]`, preferring the
+    /// earliest pass whose fit is within `slack` meters of the best fit.
+    ///
+    /// A window can span the return leg of a loop, and GPS noise can make that leg
+    /// look a little closer. Taking it would be permanent, since progress only goes
+    /// forward, so the earlier pass wins unless it's clearly worse. When the vehicle
+    /// has moved far enough for `heading` to mean something, legs running the other
+    /// way are ruled out as long as any leg runs the right way.
+    pub fn earliest_pass_in_window(
+        &self,
+        point: [f32; 2],
+        s_lo: f32,
+        s_hi: f32,
+        slack: f32,
+        heading: Option<[f32; 2]>,
+    ) -> Option<Projection> {
+        let fit = |segment: usize| {
+            let candidate = self.project_on_segment(point, segment);
+            let s = candidate.s.clamp(s_lo.max(0.0), s_hi.min(self.length()));
+            if (s - candidate.s).abs() < 0.01 {
+                candidate
+            } else {
+                Projection {
+                    s,
+                    offset: distance(point, self.point_at(s)),
+                }
+            }
+        };
+        let agrees = |segment: usize| {
+            heading.is_none_or(|h| {
+                let (a, b) = (self.xy[segment], self.xy[segment + 1]);
+                (b[0] - a[0]) * h[0] + (b[1] - a[1]) * h[1] >= 0.0
+            })
+        };
+        let range = self.segments_between(s_lo, s_hi);
+        let best_with = |only_agreeing: bool| {
+            range
+                .clone()
+                .filter(|segment| !only_agreeing || agrees(*segment))
+                .map(|segment| fit(segment).offset)
+                .min_by(f32::total_cmp)
+        };
+        // Fall back to any direction, so a vehicle turning around isn't lost.
+        let (best, only_agreeing) = match best_with(true) {
+            Some(best) => (best, true),
+            None => (best_with(false)?, false),
+        };
+        let limit = best + slack;
+        let mut chosen: Option<Projection> = None;
+        for segment in range {
+            if only_agreeing && !agrees(segment) {
+                if chosen.is_some() {
+                    break;
+                }
+                continue;
+            }
+            let candidate = fit(segment);
+            if candidate.offset <= limit {
+                if chosen.is_none_or(|c| candidate.offset < c.offset) {
+                    chosen = Some(candidate);
+                }
+            } else if chosen.is_some() {
+                break;
+            }
+        }
+        chosen
     }
 
     /// Every local minimum of distance within `max_offset`, in along-line order.
@@ -338,6 +481,109 @@ mod tests {
             positions[0] < 300.0 && positions[3] > 1900.0,
             "{positions:?}"
         );
+    }
+
+    /// Runs north from 43.0, with points every `step` degrees of latitude.
+    fn road(count: usize, step: f64) -> Vec<(f64, f64)> {
+        (0..count)
+            .map(|i| (43.0 + step * i as f64, -89.0))
+            .collect()
+    }
+
+    #[test]
+    fn a_detour_to_a_stop_is_removed_and_the_line_keeps_its_true_length() {
+        let mut points = road(6, 0.0005); // about 55 m apart
+        // Road, then 14 m sideways to the curb, then back to the road 20 m on.
+        points.insert(3, (43.0011, -88.99983));
+        points.insert(4, (43.0012, -89.0));
+        let with_spike = Polyline::from_lat_lon(&points).unwrap();
+        let cleaned = remove_spikes(&points);
+        let without = Polyline::from_lat_lon(&cleaned).unwrap();
+        assert_eq!(cleaned.len(), points.len() - 1);
+        assert!(with_spike.length() > without.length() + 10.0);
+        let straight = Polyline::from_lat_lon(&road(6, 0.0005)).unwrap();
+        assert!((without.length() - straight.length()).abs() < 1.0);
+    }
+
+    #[test]
+    fn a_detour_that_returns_to_the_same_point_on_the_road_is_removed() {
+        let mut points = road(5, 0.0005);
+        points.insert(3, (43.001, -88.99983));
+        points.insert(4, (43.001, -89.0));
+        assert_eq!(remove_spikes(&points).len(), points.len() - 1);
+    }
+
+    #[test]
+    fn a_real_street_corner_with_short_blocks_is_kept() {
+        // North, then a right-angle turn east, with short segments at the corner.
+        let points = vec![
+            (43.0, -89.0),
+            (43.001, -89.0),
+            (43.0013, -89.0),
+            (43.0013, -88.9996),
+            (43.0013, -88.9986),
+        ];
+        assert_eq!(remove_spikes(&points), points);
+    }
+
+    #[test]
+    fn a_u_turn_at_the_end_of_a_line_is_kept() {
+        let points = vec![
+            (43.0, -89.0),
+            (43.001, -89.0),
+            (43.0013, -89.0),
+            (43.0010, -89.00002),
+            (43.0, -89.00002),
+        ];
+        assert_eq!(remove_spikes(&points), points);
+    }
+
+    #[test]
+    fn the_earlier_pass_wins_unless_it_is_clearly_worse() {
+        // North along one street, around a block, and back south 20 m away.
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.02, -89.0),
+            (43.02, -88.99975),
+            (43.0, -88.99975),
+        ])
+        .unwrap();
+        // Right on the return leg, and 20 m from the outbound leg.
+        let point = line.frame.to_xy(43.01, -88.99975);
+        let plain = line.nearest_in_window(point, 0.0, line.length()).unwrap();
+        assert!(
+            plain.s > line.length() / 2.0,
+            "the nearest point is on the way back"
+        );
+        let earliest = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, None)
+            .unwrap();
+        assert!(earliest.s < line.length() / 2.0, "{}", earliest.s);
+        // Clearly nearer the return leg, so that is where the vehicle is.
+        let earliest = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 10.0, None)
+            .unwrap();
+        assert!(earliest.s > line.length() / 2.0, "{}", earliest.s);
+    }
+
+    #[test]
+    fn a_vehicle_heading_south_cant_match_a_northbound_leg() {
+        let line = Polyline::from_lat_lon(&[
+            (43.0, -89.0),
+            (43.02, -89.0),
+            (43.02, -88.99975),
+            (43.0, -88.99975),
+        ])
+        .unwrap();
+        let point = line.frame.to_xy(43.01, -89.0);
+        let south = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, Some([0.0, -100.0]))
+            .unwrap();
+        assert!(south.s > line.length() / 2.0, "{}", south.s);
+        let north = line
+            .earliest_pass_in_window(point, 0.0, line.length(), 25.0, Some([0.0, 100.0]))
+            .unwrap();
+        assert!(north.s < line.length() / 2.0, "{}", north.s);
     }
 
     #[test]

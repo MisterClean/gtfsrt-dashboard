@@ -5,7 +5,7 @@
 //! street segments ([`SegKey`]) defined by a geographic grid rather than by
 //! shape IDs, which lets results merge across schedule versions.
 
-use crate::geo::{Polyline, assign_stop_positions};
+use crate::geo::{Polyline, assign_stop_positions, remove_spikes};
 use crate::time::ServiceDate;
 use chrono::Weekday;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -432,7 +432,7 @@ impl ScheduleBuilder {
         for points in &mut self.shape_points {
             points.sort_unstable_by_key(|p| p.0);
             let latlon: Vec<(f64, f64)> = points.iter().map(|p| (p.1, p.2)).collect();
-            lines.push(Polyline::from_lat_lon(&latlon));
+            lines.push(Polyline::from_lat_lon(&remove_spikes(&latlon)));
         }
 
         let mut compiler = PatternCompiler::new(&self.stops, grid, &lines, &self.shape_names);

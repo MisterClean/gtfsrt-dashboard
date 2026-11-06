@@ -59,12 +59,14 @@ Each position report is projected onto the pattern's line.
 
 | Step | Rule |
 | --- | --- |
-| First report | Any point on the line within 120 m. When the line passes there more than once, the pass closest to where the schedule expects the vehicle. |
-| Later reports | The nearest point between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). This keeps a match on the correct pass of a loop. |
+| First report | Any point on the line within 120 m. When the line passes there more than once, each pass is followed through the whole run. The one with the fewest off-route reports wins, then the most progress, and only a real tie goes to where the schedule expects the vehicle. Choosing by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. |
+| Later reports | The best fit between 60 m behind the last position and `80 mph × elapsed + 200 m` ahead (150 mph on rail and ferry routes). The earliest pass within 25 m of the best fit wins, so GPS noise can't jump a vehicle to a return leg. Once a vehicle has moved 30 m, legs running against its direction of travel are ruled out, if any leg runs with it. |
 | Off route | A report more than 120 m from the line is skipped and counted. |
 | Forward only | Progress never decreases. A report landing behind the furthest point is held there, and one landing more than 30 m behind is counted. |
 
 Distances use a local flat projection for each line, which is accurate well within one percent over the length of a route.
+
+Line length is measured after removing **stop spikes**. Some agencies draw each shape out to the stop's curb position and back, and a vehicle doesn't drive those detours. A spike is a turn of 75° or more between two segments of up to 45 m, where the road carries on within 45° of the same direction beyond it. That last test keeps real corners and U-turns. In Madison, leaving spikes in read 1.8% fast overall and over 5% on routes with many stops. An independent check against straight-line GPS distance on straight roads confirmed the cleaned line in the validation.
 
 ### Stop positions
 
@@ -176,7 +178,13 @@ These measures apply only where the schedule runs every 15 minutes or better at 
 
 An **observed headway** is the time between consecutive vehicles passing a stop, assigned to the hour of the second vehicle. It is compared with the **scheduled headway at that point**: the gap between that trip's scheduled time and the previous one in the full schedule for the day. Comparing with the two observed trips' own spacing would hide a missing trip, which is exactly the wait riders notice.
 
-A gap longer than both an hour and four scheduled headways isn't counted as a headway. It means several passes went unobserved or the feed lost the route for a while, and because average wait grows with the square of a gap, one such value would dominate the result.
+Three things aren't counted as headways:
+
+- **The same vehicle coming back.** On a loop, that's a cycle or a layover.
+- **Arrivals at the last stop**, in both the observed and the scheduled figures. On a loop the last stop is also the first, and the gap between one trip arriving and the next leaving is a layover. Left in, a 30-minute service reads as a 4-minute one.
+- **A gap longer than both an hour and four scheduled headways.** It usually means several passes went unobserved or the feed lost the route for a while, and because average wait grows with the square of a gap, one such value would dominate the result. This does remove the longest waits a rider could actually have seen, so read gap shares as a floor.
+
+A trip that passes a stop twice doesn't set its own scheduled headway.
 
 | Measure | Formula |
 | --- | --- |
@@ -228,7 +236,7 @@ Passes per day, average stop-zone time, daily stop-zone hours, mean deviation an
 
 - **Definition:** Runs that moved over at least half of the pattern's length, by the hour they were scheduled to start.
 - **Compared with:** Trips active that date under `calendar` and `calendar_dates`.
-- **Known limits:** A share below 100% may mean cancellations, missing trip IDs or feed gaps. Trips split into separate runs can count more than once, so the share can slightly exceed 100%. A trip whose vehicle changed partway counts for each vehicle that covered at least half.
+- **Known limits:** A share below 100% may mean cancellations, missing trip IDs or feed gaps. A trip counts once, even when a vehicle change splits it into two runs.
 
 ### Vehicles in service
 
