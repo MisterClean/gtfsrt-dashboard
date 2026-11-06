@@ -93,7 +93,9 @@ impl Engine {
     pub fn set_clock(&mut self, samples: &Float64Array) {
         let values = samples.to_vec();
         let pairs = values
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| (pair[0] as i64, pair[1] as i32))
             .collect();
         self.clock = Clock::from_samples(pairs);

@@ -15,8 +15,10 @@ use crate::time::{SERVICE_HOURS, ServiceDate};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
-/// A hour needs this many measured intervals before its speed is shown.
-const MIN_CELL_PAIRS: u32 = 3;
+/// A cell needs at least this many measured intervals, and at least one for each
+/// day selected, before its speed is shown. The CTA scorecard's map used the same
+/// one-a-day rule. With 20 s polling a bus crossing a 200 m cell gives about two.
+const MIN_CELL_PAIRS: u32 = 2;
 /// Slowest-stretch window and how far it keeps from the ends of a line.
 const STRETCH_M: f32 = 800.0;
 const STRETCH_END_MARGIN_M: f32 = 1609.0;
@@ -85,8 +87,8 @@ impl Cell {
         self.pairs += other.pairs;
     }
 
-    fn speed(&self) -> Option<f32> {
-        (self.seconds > 0.0 && self.pairs >= MIN_CELL_PAIRS).then(|| self.meters / self.seconds)
+    fn speed(&self, min_pairs: u32) -> Option<f32> {
+        (self.seconds > 0.0 && self.pairs >= min_pairs).then(|| self.meters / self.seconds)
     }
 }
 
@@ -188,6 +190,11 @@ impl Merged {
 
     fn day_count(&self) -> f64 {
         self.dates.len().max(1) as f64
+    }
+
+    /// How many measurements a cell needs before its speed is shown.
+    fn min_pairs(&self) -> u32 {
+        (self.dates.len() as u32).max(MIN_CELL_PAIRS)
     }
 
     fn cell(&self, seg: u32, hour: usize) -> &Cell {
@@ -671,7 +678,8 @@ fn fixed_speeds(library: &Library, merged: &Merged, segs: &[u32]) -> FixedSpeeds
         let a = sum_cells(seg, &|h| in_period(h, periods.am));
         let m = sum_cells(seg, &|h| in_period(h, periods.mid));
         let p = sum_cells(seg, &|h| in_period(h, periods.pm));
-        let usable = |c: &Cell| c.pairs >= MIN_CELL_PAIRS && c.meters > 0.0;
+        let min_pairs = merged.min_pairs();
+        let usable = |c: &Cell| c.pairs >= min_pairs && c.meters > 0.0;
         if !(usable(&a) && usable(&m) && usable(&p)) {
             continue;
         }
@@ -801,7 +809,8 @@ fn slowest_stretch(
             window.pairs -= sums[start].pairs;
             start += 1;
         }
-        if bins[end].s1 - bins[start].s0 < STRETCH_M * 0.75 || window.pairs < MIN_CELL_PAIRS * 3 {
+        if bins[end].s1 - bins[start].s0 < STRETCH_M * 0.75 || window.pairs < merged.min_pairs() * 3
+        {
             continue;
         }
         if window.seconds <= 0.0 || window.meters <= 0.0 {
@@ -1058,6 +1067,7 @@ pub fn network_map(library: &Library, merged: &Merged, route: Option<&str>) -> N
     let days = merged.day_count() as f32;
     let periods = merged.selection.periods;
     let only = route.and_then(|id| library.route_index(id));
+    let min_pairs = merged.min_pairs();
     let mut features = Vec::new();
     let mut hour_sums = vec![(Cell::default(), 0_u32, 0_u32); SERVICE_HOURS];
     let mut bounds: Option<[f32; 4]> = None;
@@ -1079,7 +1089,7 @@ pub fn network_map(library: &Library, merged: &Merged, route: Option<&str>) -> N
             }
         }
         let measurements: u32 = hours.iter().map(|c| c.pairs).sum();
-        if measurements < MIN_CELL_PAIRS {
+        if measurements < min_pairs {
             continue;
         }
         let total = hours.iter().fold(Cell::default(), |mut sum, cell| {
@@ -1093,16 +1103,16 @@ pub fn network_map(library: &Library, merged: &Merged, route: Option<&str>) -> N
                     sum.add(cell);
                 }
             }
-            sum.speed().map(|s| round3(f64::from(s)))
+            sum.speed(min_pairs).map(|s| round3(f64::from(s)))
         };
         let speeds: Vec<Option<f32>> = hours
             .iter()
-            .map(|cell| cell.speed().map(|s| round3(f64::from(s))))
+            .map(|cell| cell.speed(min_pairs).map(|s| round3(f64::from(s))))
             .collect();
         for (hour, cell) in hours.iter().enumerate() {
             let slot = &mut hour_sums[hour];
             slot.0.add(cell);
-            if let Some(speed) = cell.speed() {
+            if let Some(speed) = cell.speed(min_pairs) {
                 slot.1 += 1;
                 if speed < SLOW_MPS {
                     slot.2 += 1;
@@ -1143,7 +1153,7 @@ pub fn network_map(library: &Library, merged: &Merged, route: Option<&str>) -> N
             length_m: meta.length_m,
             routes: route_labels,
             speeds,
-            all_day: total.speed().map(|s| round3(f64::from(s))),
+            all_day: total.speed(min_pairs).map(|s| round3(f64::from(s))),
             am: period_speed(periods.am),
             mid: period_speed(periods.mid),
             pm: period_speed(periods.pm),
@@ -1157,7 +1167,7 @@ pub fn network_map(library: &Library, merged: &Merged, route: Option<&str>) -> N
         .filter(|(_, slot)| slot.1 > 0)
         .map(|(hour, slot)| MapHour {
             hour: hour as u8,
-            speed: slot.0.speed(),
+            speed: slot.0.speed(min_pairs),
             cells: slot.1,
             slow_share: ratio(f64::from(slot.2), f64::from(slot.1)),
         })
@@ -1221,7 +1231,8 @@ pub fn hotspots(library: &Library, merged: &Merged) -> HotspotReport {
                     sum.add(merged.cell(*seg, hour));
                 }
             }
-            let mut speeds: Vec<f32> = hours.iter().filter_map(Cell::speed).collect();
+            let min_pairs = merged.min_pairs();
+            let mut speeds: Vec<f32> = hours.iter().filter_map(|c| c.speed(min_pairs)).collect();
             speeds.sort_by(f32::total_cmp);
             let reference = (speeds.len() >= 3)
                 .then(|| percentile(&speeds, 0.85))
@@ -1342,6 +1353,7 @@ fn build_hotspot(
     length: f32,
     days: f32,
 ) -> Hotspot {
+    let min_pairs = merged.min_pairs();
     let mut hours = [Cell::default(); SERVICE_HOURS];
     let mut delay = 0.0_f32;
     let mut routes: Vec<String> = Vec::new();
@@ -1372,7 +1384,7 @@ fn build_hotspot(
     let (worst_hour, worst_speed) = hours
         .iter()
         .enumerate()
-        .filter_map(|(hour, cell)| cell.speed().map(|speed| (hour, speed)))
+        .filter_map(|(hour, cell)| cell.speed(min_pairs).map(|speed| (hour, speed)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .unwrap_or((0, 0.0));
     let periods = merged.selection.periods;
@@ -1396,11 +1408,11 @@ fn build_hotspot(
         reference_speed: round3(f64::from(reference_weighted / length.max(1.0))),
         worst_speed: round3(f64::from(worst_speed)),
         worst_hour: worst_hour as u8,
-        peak_speed: peak.speed().map(|s| round3(f64::from(s))),
+        peak_speed: peak.speed(min_pairs).map(|s| round3(f64::from(s))),
         stopped_share: ratio(f64::from(total.stopped), f64::from(total.seconds)),
         hourly: hours
             .iter()
-            .map(|cell| cell.speed().map(|s| round3(f64::from(s))))
+            .map(|cell| cell.speed(min_pairs).map(|s| round3(f64::from(s))))
             .collect(),
         path,
     }
@@ -1560,7 +1572,7 @@ fn direction_detail(
             for hour in 0..SERVICE_HOURS {
                 let cell = merged.cell(bin.seg, hour);
                 measurements += cell.pairs;
-                speeds.push(cell.speed().map(|s| round3(f64::from(s))));
+                speeds.push(cell.speed(merged.min_pairs()).map(|s| round3(f64::from(s))));
             }
             ProfileBin {
                 s0: bin.s0,

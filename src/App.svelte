@@ -1,0 +1,95 @@
+<script lang="ts">
+  import {onMount} from 'svelte';
+  import NavRail from './components/NavRail.svelte';
+  import Tooltip from './components/Tooltip.svelte';
+  import TopBar from './components/TopBar.svelte';
+  import {app, feedLabel} from './lib/state.svelte';
+  import {plural} from './lib/format';
+  import Overview from './views/Overview.svelte';
+  import MapView from './views/MapView.svelte';
+  import Routes from './views/Routes.svelte';
+  import RouteDetailView from './views/RouteDetail.svelte';
+  import Reliability from './views/Reliability.svelte';
+  import Stops from './views/Stops.svelte';
+  import Hotspots from './views/Hotspots.svelte';
+  import DataView from './views/Data.svelte';
+
+  onMount(() => {
+    app.start();
+    (window as any).__transit = app;
+  });
+
+  const label = $derived(app.feed ? feedLabel(app.feed) : '');
+</script>
+
+<svelte:head>
+  <title>{label ? `${label} · Transit Notebook` : 'Transit Notebook'}</title>
+</svelte:head>
+
+<div class="shell">
+  <TopBar />
+  <NavRail />
+  <main id="main">
+    {#if app.catalogError}
+      <div class="page"><div class="banner error" role="alert"><strong>The archive catalog could not be loaded.</strong> {app.catalogError} <button class="btn small" onclick={() => { app.catalogError = null; app.start(); }}>Try again</button></div></div>
+    {/if}
+    {#if app.error}
+      <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error}</div></div>
+    {/if}
+    {#each app.warnings as warning}
+      <div class="notice"><div class="banner caution" role="status">{warning}</div></div>
+    {/each}
+
+    {#if app.view === 'data'}
+      <DataView />
+    {:else if !app.hasResults}
+      <div class="page start">
+        <div class="start-copy">
+          <h1>{label || 'Transit performance, on your device'}</h1>
+          {#if app.running}
+            <p class="lede">The first results appear as soon as the first day is finished, and they refine as each day is added. You can keep reading while it works.</p>
+          {:else if app.feed}
+            <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
+            <p class="lede">Your browser reads the public archive directly and does the analysis itself. There is no account, no upload and no query server. Results stay on this device, so a day only has to be analyzed once.</p>
+            <div class="tools">
+              <button class="btn primary big" disabled={!app.dates.length} onclick={() => app.analyze()}>Analyze {plural(app.pendingDates.length, 'day')}</button>
+              <span class="fine">Choose another agency or other days above.</span>
+            </div>
+          {:else}
+            <p class="lede">Loading the archive catalog…</p>
+          {/if}
+        </div>
+      </div>
+    {:else if app.view === 'overview'}
+      <Overview />
+    {:else if app.view === 'map'}
+      <MapView />
+    {:else if app.view === 'routes'}
+      <Routes />
+    {:else if app.view === 'route'}
+      <RouteDetailView />
+    {:else if app.view === 'reliability'}
+      <Reliability />
+    {:else if app.view === 'stops'}
+      <Stops />
+    {:else if app.view === 'hotspots'}
+      <Hotspots />
+    {/if}
+  </main>
+</div>
+<Tooltip />
+
+<style>
+  .shell { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100dvh; }
+  main { min-width: 0; }
+  .notice { padding: 12px var(--gutter) 0; }
+  .start { max-width: 760px; padding-top: 72px; }
+  .start-copy { display: grid; gap: 14px; }
+  .start h1 { font-size: 44px; }
+  .big { min-height: 44px; padding: 8px 20px; font-size: 14px; }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .start { padding-top: 32px; }
+    .start h1 { font-size: 34px; }
+  }
+</style>
