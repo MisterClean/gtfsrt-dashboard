@@ -269,6 +269,20 @@ A frozen GPS unit repeats one report time across polls, so only the first is kep
 
 A feed that reports differential updates gets a warning, because the archive doesn't keep every deletion and vehicle state can be incomplete. When fewer than one in ten trip-bearing reports match the schedule, the feed and schedule don't belong together, and the day falls back to GPS speeds. Between one in ten and four in five, the app keeps the schedule join and notes that some trips were left out, which is normal for a feed shared with other agencies.
 
+## Known limits
+
+These came out of independent validation against raw data, and each is small enough on the agencies tested to leave as it is. See [validation](validation.md) for the measurements.
+
+- **Terminal repositioning can read as a departure.** The first-stop departure is the first time a vehicle crosses the stop, so a bus creeping forward during layover can read as leaving early. Treat single first-stop events with care.
+- **A vehicle reporting its trip long before starting can lock on mid-line.** Only the first fix on the line seeds the match, so its first position decides which pass it starts from.
+- **One trip ID run by two vehicles counts twice in on-time performance.** This is rare: 26 events on 3 trips in a day of King County Metro service.
+- **Buses that leave the shape stay noisy.** Where vehicles regularly run a different path from the published shape, stop events and some hourly speeds on that route are unreliable. The route's off-route count in Data & methods is the signal.
+- **Corners are measured at the vertex.** A vehicle rounds a corner rather than turning on the centerline, so true distance is slightly shorter. On Madison this bounds the network figure between about 15.17 and 15.23 mph.
+
+### GPS-only speeds
+
+When a day can't be joined to a schedule, speed comes from straight lines between consecutive reports. Compared with schedule-joined speeds on the same reports, that read 10.2% low in Madison and 5.2% low in King County, and up to 22% low on single winding routes. A few routes read high, up to 9%, so no single correction factor works. Ranking between routes holds up well (rank correlation 0.96 and 0.99). Use these speeds to compare routes and times of day, not as absolute figures.
+
 ## Not calculated
 
 These would need data the archive doesn't have, or a method not yet validated:

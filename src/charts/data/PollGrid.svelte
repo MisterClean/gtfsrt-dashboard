@@ -3,7 +3,7 @@
   // pale or empty runs, which is the first thing to check before trusting a day.
   import type {QualityDay} from '../../engine/types';
   import {measure} from '../../lib/actions';
-  import {dateLabel, hourRange, hourShort, int} from '../../lib/format';
+  import {DASH, dateLabel, hourRange, hourShort, int} from '../../lib/format';
   import {HOURS} from '../../lib/scale';
   import {tooltip} from '../../lib/tooltip.svelte';
 
@@ -36,6 +36,8 @@
   const shortfall = (hour: number, polls: number) => days.length >= 2 && polls < 0.5 * (usual.get(hour) ?? 0);
 
   function gapText(day: QualityDay) {
+    // Without a schedule there's no service span to find gaps in.
+    if (day.quality.service_buckets === 0) return DASH;
     const minutes = day.quality.empty_buckets * 5;
     if (!minutes) return 'None';
     return minutes >= 120 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;

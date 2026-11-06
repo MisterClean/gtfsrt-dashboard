@@ -108,7 +108,7 @@ The [metrics reference](docs/metrics.md) gives every definition, formula and thr
 - **Stop passes are inferred from GPS.** At 20-second polling, single events are approximate and aggregates are solid. Stop-zone time in particular only means something in aggregate.
 - **An absent trip isn't proof of a cancellation.** It may be a reporting gap. The app reports what it observed and shows the share of scheduled trips it saw.
 - **The archive has no ridership.** Hotspots report vehicle hours, not rider hours.
-- **Some agencies can't be joined to a schedule.** When realtime trip IDs match no archived schedule, or no schedule exists, the app shows GPS speeds only and says so. On-time performance and headways need the join.
+- **Some agencies can't be joined to a schedule.** When realtime trip IDs match no archived schedule, or no schedule exists, the app shows GPS speeds only and says so. Those speeds read about 5-10% below schedule-joined speeds network-wide, and up to about 20% below on winding routes, so use them to compare routes and times of day. On-time performance and headways need the join.
 - **The newest day is incomplete.** Evening service spills into the next UTC file, so the default selection stops one day short of the archive's newest file.
 - **It has been tested in Chromium.** Safari, Firefox, Edge and low-memory devices still need testing before claiming support.
 
