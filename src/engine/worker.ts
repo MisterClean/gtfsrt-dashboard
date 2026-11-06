@@ -12,8 +12,13 @@ import {
 } from './cache';
 import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord} from './types';
 
-/** Below this share of matching trip IDs, schedule-based metrics would mislead. */
-const MIN_TRIP_MATCH = 0.5;
+/**
+ * Below this share of matching trip IDs the feed and schedule don't belong together,
+ * so the day falls back to GPS speeds. It is low on purpose: a feed shared by several
+ * agencies matches well under half its trips and still measures its own perfectly.
+ */
+const MIN_TRIP_MATCH = 0.1;
+const NOTE_TRIP_MATCH = 0.8;
 const SCHEDULE_TABLES = ['agency', 'routes', 'stops', 'shapes', 'calendar', 'calendar_dates', 'trips', 'stop_times'] as const;
 
 let engineReady: Promise<unknown> | undefined;
@@ -394,6 +399,9 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
       if (choice) await loadSchedule(feedKey, choice, formatDate(date));
       emit({event: 'stage', message: `Analysing ${formatDate(date)}`, fraction: progress(1), dayIndex, dayCount: dayDates.length});
       const match = choice ? engine!.tripMatchRate(choice.key) : 0;
+      if (choice && engine!.fixCount() > 0 && match >= MIN_TRIP_MATCH && match < NOTE_TRIP_MATCH) {
+        emit({event: 'warning', message: `${(match * 100).toFixed(0)}% of realtime trip IDs on ${formatDate(date)} match the schedule, and the rest are left out. This is normal for a feed shared with other agencies, but check the share of scheduled trips observed.`});
+      }
       if (choice && (engine!.fixCount() === 0 || match >= MIN_TRIP_MATCH)) {
         const output = engine!.processDay(date, choice.key, file.ends_at) as {cube: Uint8Array; events: Uint8Array};
         await putEntry('days', dayKey(feedKey, date, version), {cube: output.cube, digest: choice.key, savedAt: new Date().toISOString()} satisfies DayEntry);
