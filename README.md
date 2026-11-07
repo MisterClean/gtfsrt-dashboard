@@ -1,4 +1,4 @@
-# Transit Notebook
+# Transit Almanac
 
 **The performance reporting a transit planner would spend weeks building, for any agency in the [GTFS-RT archive](https://gtfsrt.io), running entirely in your browser.**
 

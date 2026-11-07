@@ -37,7 +37,7 @@
 </script>
 
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Transit Notebook home">Transit Notebook</a>
+  <a class="brand" href="./" aria-label="Transit Almanac home">Transit Almanac</a>
   <div class="selectors">
     <label class="agency">
       <span class="sr-only">Transit agency</span>

@@ -1,5 +1,5 @@
 {
-  "name": "gtfsrt-dashboard",
+  "name": "transit-almanac",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-11-06T23:31:40Z",
-  "title": "Design System: Transit Notebook",
+  "title": "Design System: Transit Almanac",
   "extensions": {
     "colorMeta": {
       "copper": {
@@ -1008,8 +1008,8 @@
     }
   ],
   "narrative": {
-    "northStar": "The Transit Notebook",
-    "overview": "A planner's working notebook: warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.\n\nColor carries meaning. Copper is the one interface accent, the speed classes run warm to cool, and midday blue stands against rush orange. Dark is a chosen theme for working late or presenting, not an inversion: the speed classes are re-tuned so that the slowest streets are the brightest warm marks on dark paper. There is no decorative imagery.",
+    "northStar": "The Transit Almanac",
+    "overview": "A planner's reference for how transit ran, with warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.\n\nColor carries meaning. Copper is the one interface accent, the speed classes run warm to cool, and midday blue stands against rush orange. Dark is a chosen theme for working late or presenting, not an inversion: the speed classes are re-tuned so that the slowest streets are the brightest warm marks on dark paper. There is no decorative imagery.",
     "keyCharacteristics": [
       "Warm paper and charcoal ink in two tuned themes, following the system setting unless the visitor chooses.",
       "Big Shoulders Display for headings; the system stack for everything read or compared.",

@@ -30,7 +30,7 @@ Put the reporting a seasoned planner would build for themselves at their fingert
 
 ## Brand Commitments
 
-Use the user's CTA Bus Speed Scorecard as the reference: a warm, restrained transit notebook, readable quantitative comparisons, and clear methods. This is a personal transit project, not a Trusted Health or Hex dashboard.
+Use the CTA Bus Speed Scorecard as the reference for a warm, restrained visual style, readable comparisons, and clear methods. This is a personal transit project, not a Trusted Health or Hex dashboard.
 
 ## Evidence on Hand
 

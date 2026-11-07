@@ -1,6 +1,7 @@
 // The visitor's own results, kept in their browser so a day is only ever
 // analysed once. Holds derived rollups, never raw vehicle data. Every read and write
 // tolerates storage being unavailable: the app then simply re-analyses.
+// Keep the original database name so analyzed days survive the rename.
 const DB_NAME = 'transit-notebook';
 const STORES = ['schedules', 'days', 'events', 'feeds', 'dayIndex'] as const;
 type Store = (typeof STORES)[number];
