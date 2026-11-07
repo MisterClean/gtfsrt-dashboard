@@ -5,6 +5,8 @@ target/
 dist/
 .build/
 .cache/
+public/engine/
+.svelte-kit/
 .impeccable/questions/
 .impeccable/review/
 .impeccable/mocks/
@@ -12,3 +14,4 @@ test-results/
 .env
 .env.*
 !.env.example
+.playwright-mcp/

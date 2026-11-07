@@ -4,17 +4,27 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "node scripts/serve.mjs",
+    "dev": "vite",
     "preview": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify:release": "node scripts/verify-release.mjs",
     "package": "node scripts/package.mjs",
     "probe": "node spike/run-browser-probe.mjs",
-    "probe:serve": "node spike/serve.mjs"
+    "probe:serve": "node spike/serve.mjs",
+    "build:wasm": "node scripts/build.mjs --wasm-only",
+    "check": "svelte-check --tsconfig ./tsconfig.json --output human",
+    "test:e2e": "node tests/e2e.mjs"
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev114.0",
-    "esbuild": "0.25.12",
-    "playwright": "1.58.2"
-  }
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "esbuild": "0.28.2",
+    "maplibre-gl": "6.16.0",
+    "playwright": "1.58.2",
+    "svelte": "5.57.3",
+    "svelte-check": "4.7.8",
+    "typescript": "6.0.3",
+    "vite": "8.3.6"
+  },
+  "version": "0.2.0"
 }

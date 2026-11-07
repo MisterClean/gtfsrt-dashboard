@@ -1,173 +1,159 @@
-# Browser GTFS-RT dashboard architecture
+# Architecture
 
-Status: bounded Rust/WASM explorer implemented and tested in Chromium on 2026-11-06. This document retains the broader architecture and future gates. See [MVP validation](mvp-validation.md) for implemented scope and remaining checks, and [the feasibility decision](feasibility.md) for the original experiment.
+Transit Notebook is a static web application. The website host serves files and nothing else. Each visitor's browser downloads the app, reads the public archive directly, and does all of the analysis on their own device.
 
-The Rust implementation, self-contained release packaging and user-security requirements are detailed in [Rust packaging and browser security](packaging-security.md). The MVP implements the browser interface, bounded worker queries, self-hosted signed extensions and an enforced local preview policy; production HTTPS and broader browser validation remain open.
-
-The initial product is a static web application that queries a bounded selection of archived transit data on the user's device. A successful direct-read experiment permits a city explorer; it does not establish that arbitrary national comparisons will fit a browser. Broad benchmarking should use small, reproducible aggregate Parquet datasets when raw scans exceed the measured limits.
-
-## Decision and evidence boundary
-
-| Item | Status |
-| --- | --- |
-| Canonical archive endpoint | Use `https://storage.googleapis.com/parquet.gtfsrt.io/`. |
-| Transport checks | Browser confirmed public HEAD 200, byte-range GET 206, Parquet `PAR1` bytes, and CORS `*` on a Madison vehicle-position file. |
-| Example object size | Madison vehicle positions, UTC date 2026-11-05: 34,180,170 bytes. This is one object's size, not a performance benchmark. |
-| Direct DuckDB-Wasm query | Passed: counted 296,588 rows and grouped real route/vehicle/timestamp columns without a proxy. |
-| Verified version | `@duckdb/duckdb-wasm` package `1.33.1-dev114.0`; SQL `version()` returned `v2.0.0`. The wrapper is a prerelease; package and engine versions are separate. |
-| Historical schedules | Live `schedules.json` and `feeds.parquet` availability confirmed; applicability and join quality remain to be tested. |
-| Capacity and performance | One sequence completed in 8.4 seconds; ranged GET lengths totalled 36.5 MB for the 34.2 MB object. All limits below remain proposed starting budgets. |
-
-Do not use the homepage's `http://parquet.gtfsrt.io` examples in an HTTPS application. The transport check found a certificate mismatch on the custom HTTPS hostname. Retain the working Google Storage hostname in all catalog and query URLs.
-
-The observed CORS response exposes `Content-Length` but not `Content-Range` or `ETag`. Do not make application code depend on reading unexposed headers. Ranged reads worked, but their combined ranges covered the entire object; this experiment does not establish efficient column or predicate pruning.
-
-## System shape
-
-The website host serves application files. Each visitor's browser runs the interface and database queries, and requests transit data directly from the archive.
+That decoupling is the central design constraint. No transit data passes through the website, and the app keeps working however many people use it, because every visitor brings their own compute.
 
 ```mermaid
 flowchart TB
-    subgraph Host[Your website host]
-        Files[Static HTML, CSS, JavaScript, Rust WASM and DuckDB WASM]
+    subgraph Host["Website host (static files only)"]
+        Files["HTML, CSS, JS, Rust WASM, DuckDB WASM, extensions"]
     end
-    subgraph Browser[Visitor browser]
-        UI[Main thread: dashboard, Rust application logic and JavaScript bridge]
-        DB[Background worker: DuckDB-Wasm executes SQL]
-        Charts[Browser renders charts and tables]
-        UI -->|Selected city, dates and filters| DB
-        DB -->|Small result tables| UI
-        UI --> Charts
+    subgraph Browser["Visitor's browser"]
+        UI["Main thread: Svelte interface, charts, MapLibre"]
+        subgraph Engine["Engine worker"]
+            Orchestrator["TypeScript orchestration"]
+            Rust["Rust analytics (WASM)"]
+        end
+        Duck["DuckDB worker (WASM)"]
+        Cache[("IndexedDB: per-day rollups")]
+        UI <-->|"selection, reports (JSON)"| Orchestrator
+        Orchestrator -->|"Arrow columns, zero decoding"| Rust
+        Orchestrator <-->|SQL| Duck
+        Orchestrator <--> Cache
     end
-    subgraph Archive[gtfsrt.io storage]
-        Data[Public catalogs and Parquet files]
+    subgraph Archive["gtfsrt.io public bucket"]
+        Parquet["Vehicle positions, schedules, catalogs"]
     end
-    Files -->|Download interface files| UI
-    Files -->|Download engine and worker files| DB
-    DB -->|Direct HTTPS data requests| Data
-    Data -->|Parquet byte ranges| DB
+    Tiles["OpenFreeMap basemap tiles (optional)"]
+    Files -->|"download once"| UI
+    Duck -->|"HTTPS range requests"| Parquet
+    Orchestrator -->|catalog| Parquet
+    UI -.->|"streets only, no transit data"| Tiles
 ```
 
-Rust source is compiled on the development machine or in CI before deployment. Visitors download the resulting WASM modules; they do not install Rust or DuckDB. The website host needs static file delivery, not a Rust process, database process or query API. Each visitor has an independent DuckDB instance and working memory. A Web Worker is a browser execution context, not a process on the website host.
+## Why these technologies
 
-The component-level design is:
+| Layer | Choice | Why |
+| --- | --- | --- |
+| Analytics | **Rust, compiled to WASM** | Map-matching and stop-event detection walk every GPS fix. A typical day takes about 120 ms natively and well under a second in the browser. This is where Rust's speed matters. |
+| Parquet I/O | **DuckDB-WASM** | Reads Parquet over HTTP with range requests and row-group pruning. Nothing else in a browser does this as well. |
+| Interface | **TypeScript, Svelte 5, Vite** | Rust would not be faster here. Every DOM change crosses into JavaScript anyway, while Svelte compiles to small, direct DOM updates, and hand-built SVG charts are simple to write. The bundle is modest and the build takes under two seconds. |
+| Map | **MapLibre GL** | WebGL handles tens of thousands of line segments. Hour changes only swap a paint expression, so the slider stays smooth on large networks. |
+| Charts | **Hand-built SVG and canvas** | The charts follow the CTA scorecard's conventions exactly, with no chart library to fight or audit. |
+
+The earlier MVP used Leptos, which is Rust all the way to the DOM. It proved the concept, but it made the interface slower to change without making anything faster for visitors. The rewrite keeps Rust for all analytical logic, SQL generation and planning, and moves only the interface to TypeScript.
+
+## The pipeline
+
+A service day overlaps two UTC archive files in most time zones, because evening service runs past midnight UTC. Each object is read once and fixes wait in a buffer until the day they belong to is complete.
 
 ```mermaid
 flowchart LR
-    UI[Static SPA: filters, charts, map] --> Planner[Catalog and bounded query planner]
-    Planner --> Worker[Web Worker: DuckDB-Wasm]
-    Catalog[Archive inventory and schedules] --> Planner
-    Worker --> RT[Archive HTTPS Parquet]
-    Worker --> Schedule[Versioned schedule Parquet]
-    Worker --> Aggregates[Optional published aggregate Parquet]
-    Worker --> Results[Small Arrow results]
-    Results --> UI
-    Batch[Optional reproducible batch build] --> Aggregates
+    A["Plan: which UTC objects<br/>and time windows"] --> B["DuckDB reads each object<br/>inside its window"]
+    B --> C["Rust buffer: intern IDs,<br/>count quality"]
+    C --> D{"Day<br/>complete?"}
+    D -- no --> B
+    D -- yes --> E["Map-match fixes to shapes<br/>stop passes, headways"]
+    E --> F["Additive day rollup"]
+    F --> G["IndexedDB"]
+    F --> H["Library: merge across<br/>schedule versions"]
+    H --> I["Merged sums for<br/>the selected days"]
+    I --> J["Reports (JSON)"]
+    J --> K["Interface"]
 ```
 
-- Ship the interface, worker, WASM binaries and pinned dependencies as static assets. A JavaScript/TypeScript interface can use WASM for its analytical engine; the entire interface need not be compiled to WASM.
-- Run analytical work in a dedicated worker so queries cannot block interaction. Serialize queries initially; expose cancellation and terminate/recreate the worker if cancellation cannot recover it.
-- Use one browser DuckDB instance with a short-lived working set. Return aggregates or bounded samples to the interface, not complete daily tables.
-- Begin with the pinned package's base bundle: `duckdb-base.wasm` and `duckdb-browser-base.worker.js`. Treat its optional threads bundle, cross-origin isolation and persistent browser storage as separate compatibility decisions; older examples using `eh`/`coi` filenames do not describe this package's assets.
-- Register remote HTTPS URLs with `DuckDBDataProtocol.HTTP`; explicitly set `allowFullHTTPReads: false`, `forceFullHTTPReads: false` and `reliableHeadRequests: true`. These settings passed the probe; the pinned package's omitted forced-read default caused a reproducible failure.
-- Host on a static HTTPS service. No query server, API key, user account or user-data upload is required for the initial direct mode. Requests go directly to the public archive.
-- Use parameterized values and an allowlist of source URL prefixes and metric SQL templates. Render producer text as text, never as trusted HTML.
+1. **Plan.** `plan.rs` works out which UTC objects cover the requested service days, and which time window each one needs. Five consecutive weekdays need six objects, not ten.
+2. **Choose the schedule.** For each service day, `plan.rs` picks the schedule version in force: the most recently captured one that covers the date and was already published. Results are labelled when only a later capture exists. A day with no usable schedule, or whose trip IDs match less than a tenth of the realtime feed, falls back to GPS speeds and says so.
+3. **Read.** DuckDB reads the object with a filter on `fetch_timestamp`. Files have one row group per poll, each with its own statistics, so rows outside the window are skipped without downloading their data pages. Columns are projected, so about a quarter of the data pages go unread.
+4. **Ingest.** Batches reach Rust as Arrow's own typed arrays and text offsets, with no per-value decoding in JavaScript. IDs are interned, so a fix takes 24 bytes.
+5. **Analyse.** `day.rs` splits fixes into runs per trip and vehicle, works out each run's service date, map-matches it to the trip's shape (`trace.rs`), applies the filtering rules, and derives stop passes, schedule deviation, headways and segment speeds.
+6. **Roll up.** Everything goes into additive sums keyed by route, direction, hour, stop and street segment (`cube.rs`). Rates are never stored. They are always computed from merged sums, so averaging averages cannot happen.
+7. **Merge.** `library.rs` rewrites each day's references onto shared indexes, keyed by stable IDs and geography, so days analysed under different schedule versions combine cleanly.
+8. **Report.** `report.rs` adds up the selected days once. Changing a view or a filter reads those sums in milliseconds and never touches the source data.
+
+Results appear as soon as the first day finishes, and they refine as each day is added.
+
+## Street segments
+
+A route line is cut into directional segments by a roughly 200 m geographic grid and an eight-sector compass bearing, rather than by shape ID or stop pair. Segment keys don't depend on anything in a schedule version, which has three useful consequences:
+
+- Days analysed under different schedule versions merge without translation.
+- Every route on a street pools into one corridor, which is what a bus lane decision needs. The map and the hotspots report both use this.
+- Opposite directions on a street stay separate, and the map offsets them when zoomed in.
+
+The grid derives its longitude step from a whole-degree latitude, so every schedule version of an agency lands on identical cells.
+
+## Local storage
+
+Finished days are stored in IndexedDB as compact binary rollups, about 2 MB per day for Madison and 13 MB for SEPTA, plus stop events for string-line charts and schedule metadata. Raw vehicle data is never stored. The next visit restores the same days in about a second, without a download.
+
+Cached entries are keyed by feed, date and `METRIC_VERSION`, so changing a calculation invalidates old results rather than mixing them with new ones. Visitors can clear everything from Data & methods. If storage is unavailable, as in some private windows, the app still works and simply analyses again next time.
+
+## Resource bounds
+
+| Control | Value | Notes |
+| --- | --- | --- |
+| Days in one analysis | 62 | Raw fixes are freed as each day finishes, so this mainly bounds waiting. Rollups for selected days stay in memory, and stop events are kept for only three days at a time and read back on demand. A very long selection on the largest feeds can still run short of memory. |
+| Single daily object | 600 MiB | The largest feed today is about 190 MB a day. |
+| Single schedule table | 64 MiB | Bounds a bad catalog entry. |
+| Metadata files | 8 MiB | Catalogs, checked once read. |
+| DuckDB memory target | 768 MB | Total tab memory can be higher. |
+| Fix buffer | about 1.25 days | Older fixes are evicted after each day. |
+
+The interface shows the expected download before anything starts, and nothing is fetched until the visitor clicks Analyze. Days already on the device load without asking. Stop terminates the DuckDB worker at once, and every finished day is kept. The app flags an analysis that has made no progress for two minutes.
+
+## Runs and incomplete days
+
+Each analysis is one `Run` in the worker, holding its own engine reference. DuckDB never settles calls in flight when its worker is terminated, so every wait races a stop signal, and a stopped run unwinds at once rather than resuming later. A new run or a change of agency waits for the old run to finish unwinding, and every event carries its run's number, so nothing from an old run can land in a new one.
+
+Only complete days are saved. A day whose scheduled service runs into a missing or unpublished archive file is marked partial, shows which hours are absent, and is read again next time, because the archive may have them by then. A day with no rows at all isn't a result: it says so and stays out of every average. Saving writes the day's index entry last, so a partly saved day can't be restored as if it were whole. Unreadable saved results are removed and analyzed again.
+
+The merged sums are recomputed on demand, and anything that changes the library clears them, so a report can't read sums from before a day or schedule arrived.
 
 ## Source contracts
 
 The archive's [published-artifact contract](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/specs/behaviors/published-artifacts.md) defines these resources:
 
-| Resource | Purpose and constraints |
+| Resource | Use here |
 | --- | --- |
-| `inventory.json` | Feed catalog with agency/system, URL/base64url, minimum/maximum date, total bytes and records. It is not a day-by-day availability manifest. |
-| `feeds.parquet` | Feed metadata including polling interval and `schedule_url`/JSON `schedule_urls`. Use it to map realtime feeds to schedule sources. |
-| `{type}/date={YYYY-MM-DD}/base64url={encoded}/data.parquet` | One realtime table per feed and fetch UTC day. Zstd compressed; may be replaced by recompaction. Zero-record output has no object. |
-| `schedules.json` | Schedule sources and versions with digest, retrieval date and advertised coverage dates. |
-| `schedules/base64url={encoded}/_feed_digest={digest}/` | Immutable schedule version directory containing metadata and per-table Parquet. Discover and verify the actual table paths before depending on them. |
+| `inventory.json` | Feed catalog with agency, base64url key and date range. It is not a day-by-day availability list, so a missing object is treated as unknown coverage, not as no service. |
+| `feeds.parquet` | Maps a realtime feed to its schedule URLs and polling interval. |
+| `vehicle_positions/date={UTC}/base64url={key}/data.parquet` | One table per feed and UTC fetch day. Optional columns vary by file, so missing columns become typed nulls. |
+| `schedules.json` | Schedule versions with digest, retrieval date and advertised coverage. |
+| `schedules/base64url={key}/_feed_digest={digest}/{table}.parquet` | Immutable schedule tables. Every column is text. |
 
-Use the catalog's supplied base64url key. It encodes the base feed URL without authentication parameters; it is not an agency identifier. The public inventory lists three primary realtime types. Newer `trip_modifications`, `shapes` and `stops` tables exist in the source contract but are outside the initial scope.
+Use the Google Storage hostname in all URLs. The custom `parquet.gtfsrt.io` hostname fails HTTPS validation. [The feasibility decision](feasibility.md) records this and the DuckDB settings the pinned build needs.
 
-The source contract marks raw protobuf private and the Parquet bucket public. The initial application therefore depends only on published Parquet and metadata, despite broader public-access wording on the landing page.
+## Code map
 
-## Catalog, availability and query planning
+```
+crates/core/src/
+  time.rs       service dates and the local clock
+  geo.rs        projection onto route lines, stop placement
+  schedule.rs   GTFS tables compiled into patterns and street segments
+  rt.rs         buffered realtime fixes and quality counts
+  gps.rs        speeds from position alone, when a feed can't join a schedule
+  mode.rs       transit modes from route types
+  trace.rs      map-matching and the interval rules
+  day.rs        one service day into rollups
+  cube.rs       the additive rollup types and cache encoding
+  library.rs    merging days across schedule versions
+  report.rs     every report the interface reads
+  plan.rs       which objects to read, which schedule applies
+  sql.rs        the SQL templates
+crates/wasm/    browser bindings
+src/engine/     worker, cache, client, network contracts
+src/components/ shell, table, date picker and other shared pieces
+src/lib/        state, formatting, scales, downloads
+src/charts/     SVG and canvas charts
+src/map/        MapLibre map, basemap style, time control
+src/views/      one file per report
+```
 
-1. Fetch and validate inventory and feed metadata; preserve retrieval time and the last successful result. Display source freshness.
-2. Resolve a city through an explicit mapping to archive agency/system/feed IDs. A city can have several operators; an archive agency can span several cities.
-3. Translate the selected local interval into the required UTC partitions, including adjacent dates when needed. Enumerate exact object URLs; do not rely on remote HTTP glob expansion.
-4. Check candidate objects with bounded-concurrency HEAD requests and record content lengths. Distinguish 404, authorization failures and transient errors. An absent object is unknown/empty archive coverage, not proof of no transit service.
-5. Apply the file/byte budget before issuing SQL. Project required columns and aggregate early. `LIMIT` on an aggregate result does not bound the underlying scan.
-6. Read compatible files with Hive partitioning and `union_by_name`; inspect the available schema and supply typed nulls for required optional columns absent from every selected file.
-7. Return result data together with queried files, excluded files, period, metric version, source versions and quality indicators.
+## What is deliberately not here
 
-Start with an ephemeral per-query object manifest. Add a small published manifest only if per-object checking becomes costly: exact URL, feed/table/date, bytes, schema fingerprint, row count where available, and verified availability time. Upstream daily files can change, so persisted cache entries need expiry/revalidation; URL alone is not an immutable identity. Schedule digests are immutable identities.
-
-## Analytical model
-
-The [compaction contract](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/specs/behaviors/compaction.md) is mechanical extraction, not an event or performance model. Keep three distinct layers:
-
-| Layer | Meaning |
-| --- | --- |
-| Archive observations | Preserve source file, feed, entity, fetch time, feed time and entity time. Vehicle positions have entity/snapshot grain; trip updates expand stop updates; alerts expand informed entities. |
-| Normalized observations/events | Normalize identity and nulls, remove repeated identical observations according to an explicit rule, match schedule versions, and distinguish predictions from independently supported observed events. |
-| Metric results | One declared unit per metric, with numerator, denominator, exclusions, coverage, method version and uncertainty. |
-
-Use feed/system namespaces for trip, vehicle, route, stop and entity IDs. A trip ID alone does not identify a journey: retain service date and start time where necessary; retain stop sequence because a trip can visit the same stop repeatedly. Define deterministic tie-breaking using entity time, feed time, fetch time and source identity. Do not collapse a day's changing observations into one vehicle row except for an explicitly requested snapshot view.
-
-`fetch_timestamp` is a UTC timestamp; `feed_timestamp`, vehicle `timestamp` and `trip_timestamp` are Unix seconds in the current [schema registry](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/src/dagster_pipeline/defs/assets/schemas.py). Keep their meanings separate. Freshness uses available timestamps with a disclosed fallback; it must not silently treat missing event time as current.
-
-Select historical schedules by service applicability and retrieval history, then validate trip/stop match rates. Record the selected digest and do not silently substitute today's schedule for historical data. Support multiple schedule sources per realtime feed. Missing or ambiguous mappings disable schedule-relative metrics.
-
-Compute service dates using the appropriate schedule timezone and calendar/calendar exceptions. Handle GTFS times above 24:00:00 and daylight-saving transitions. UTC partition date, local calendar date and service date are different concepts. See the [GTFS Schedule reference](https://gtfs.org/documentation/schedule/reference/).
-
-Schema additions are not guaranteed to exist in old partitions. Normalize empty IDs to missing where appropriate and interpret enum defaults field by field. Exclude unsupported differential feeds from state reconstruction: the archive captures `incrementality`, but payload-free deletion tombstones are not represented. Producer-specific protobuf extensions may also be absent from Parquet.
-
-## Metrics and comparability
-
-GTFS-RT trip updates describe predictions and may remove past stops. An absent update means unavailable information, not an on-time trip. These distinctions are required by the [GTFS Trip Updates documentation](https://gtfs.org/documentation/realtime/feed-entities/trip-updates/).
-
-| Capability | Initial treatment |
-| --- | --- |
-| Archive freshness, days available, schema/field completeness | Supported after profiling; report archive coverage separately from service coverage. |
-| Vehicle locations, distinct reported vehicles/trips, route activity | Bounded exploration; label as reported activity, not fleet size or completed service. |
-| Reported/predicted delay distribution | Exploratory only; define observation selection/horizon, use eligible trip-stop units, report missingness, avoid snapshot-frequency weighting. |
-| Active alerts | Deduplicate feed/entity across expanded rows; evaluate complete active-period arrays. Alert count is not a comparable disruption score across agencies. |
-| On-time arrivals/departures, headway regularity, bunching | Later gate: validated stop-event reconstruction, historically matched schedules where required, declared thresholds and comparable route/mode groups. |
-| Service delivered, cancellations, missed trips | Later gate: explicit published statuses or validated observations and a scheduled-service denominator. Missing realtime records never imply cancellation. |
-| Passenger delay, ridership, operating efficiency | Outside scope without additional passenger and operating-cost data. |
-
-Before a comparative metric appears, require a declared peer group, comparable modes and service windows, a consistent observation/event definition, sufficient coverage, schedule-match quality where applicable, and a published weighting rule. Show exclusions and denominators beside results. Distinguish zero, unavailable and ineligible. Do not present an overall agency league table by averaging unrelated measures.
-
-Thresholds for metric eligibility must be selected after profiling representative agencies. They are part of the versioned metric definition, not undisclosed UI heuristics. Validate individual agency results before enabling comparisons.
-
-## Proposed resource budgets
-
-These conservative starting values require calibration against actual browsers and data. The object-size limit is an upper bound on selected compressed files, not a prediction of range-read traffic.
-
-| Control | Proposed initial value |
-| --- | --- |
-| Default raw selection | One vehicle-position feed, one UTC day; disclose the local interval actually covered. |
-| Maximum raw working set | Six daily objects and 128 MiB summed object sizes; both limits apply. |
-| Object metadata concurrency | Four requests. |
-| DuckDB configured memory target | 512 MiB, with observed total tab/worker memory measured separately. |
-| Interactive query deadline | Request cancellation at 15 seconds; worker reset if still unresponsive at 30 seconds. |
-| Result transfer | At most 20,000 table/chart rows; at most 10,000 map points with an explicit sampling/aggregation label. |
-
-If a selection exceeds the budget, explain its estimated size and offer a smaller supported selection or a prepared aggregate dataset. A tighter time predicate alone may not reduce required I/O enough: measure Parquet row-group statistics and pruning rather than assuming it will. Never silently truncate the underlying population while reporting complete-service metrics.
-
-## Broad benchmarking without a query server
-
-An optional scheduled or manually invoked batch build can read the archive outside the browser, apply reviewed normalization and metric definitions, and publish aggregate Parquet plus a manifest to static object storage. This is a separate future component, not required for the first explorer.
-
-Use a declared grain such as agency/system, route/mode, local service date, time band and metric version. Publish additive numerators/denominators and quality counts; use explicitly documented mergeable summaries where needed. Do not average precomputed percentiles or rates to create larger-period results. Include schedule digests, source coverage, exclusions and build provenance. Partition files so common comparisons fit the browser budget.
-
-The same DuckDB-Wasm worker can read these datasets directly. Raw exploration remains available for evidence inspection. This approach preserves static hosting while moving expensive repeated computation to publication time.
-
-## Delivery and acceptance gates
-
-1. **Feasibility:** From an ordinary browser origin, with normal security settings and no data proxy, instantiate the pinned package, verify engine version, read archive metadata and query real Parquet columns. Observe range requests and record transferred bytes, timings, selected file, browser and errors. A native DuckDB or curl success does not pass this gate.
-2. **Bounded explorer:** Demonstrate one complete supported selection with responsive cancellation, schema mismatch handling, missing-object handling and visible provenance. Validate results against an independent reference calculation. Test a cold and warm load.
-3. **Browser support:** Exercise intended Chrome/Edge, Firefox and Safari versions and a constrained-memory device. Publish the supported matrix and limits; unsupported configurations get an actionable message.
-4. **Analytical validity:** Profile representative vehicle, trip and alert feeds; test namespace collisions, repeated snapshots, absent timestamps, repeated stops, UTC boundaries, overnight service and DST. Validate historical schedule joins and source gaps before releasing affected metrics.
-5. **Benchmarking:** Require the metric eligibility contract and resource budget to pass for the intended peer group and time range. Introduce prepared aggregates if direct queries cannot pass reliably.
-
-The first implementation after feasibility is limited to a feed/city selector, date selection, coverage summary, bounded vehicle-position exploration and inspectable query/provenance results. Live operations monitoring, national rankings, route-performance claims, differential-feed reconstruction and a large persistent browser warehouse remain future work.
+- **No query server, account, analytics or upload.** See [packaging and security](packaging-security.md).
+- **No trip updates.** Predictions describe what a feed expected, not what happened. Stop passes come from observed positions instead, which also avoids reading files several times larger.
+- **No ridership.** The archive has none, so hotspots report vehicle hours rather than rider hours. Where a feed reports occupancy, the rollups keep it for later use.
+- **No multi-agency league table.** Agencies differ too much for one comparable score. The speed scale is absolute so a color means the same thing everywhere, but the app doesn't rank agencies.

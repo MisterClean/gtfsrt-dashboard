@@ -1,17 +1,17 @@
-# Archive explorer surface
+# Planner dashboard surface
 
-Operate mode. The user confirmed the architecture's bounded explorer and supplied the CTA scorecard as the reference. Build directly in code; this dashboard does not require raster assets.
+Operate mode. The brief is a reporting tool a seasoned transit planner would otherwise spend weeks building, with the CTA Bus Speed Scorecard as the reference for charting and mapping.
 
 ## Direction contract
 
-THESIS: A transit notebook that lets the visitor choose a small real archive, inspect its observations, and follow every result back to its source.
+THESIS: A transit notebook that leads with the finding, lets a planner drill down from network to route to a single trip, and follows every number back to its evidence.
 
-OWN-WORLD: Retain the reference's warm paper, charcoal ink, copper selection, blue secondary data, condensed display headings, plain controls, and ruled quantitative tables. Reserve display type for headings. No decorative imagery.
+OWN-WORLD: Retain the reference's warm paper, charcoal ink, copper selection, condensed display headings, plain controls and ruled quantitative tables. Keep the scorecard's warm-to-cool speed classes and its midday blue against rush orange. Reserve display type for headings. Selected dark theme, for a planner working late or presenting. No decorative imagery.
 
-STORY: Select agency/feed and UTC dates, load a bounded archive locally, inspect activity and positions, then inspect or download the calculation evidence.
+STORY: Choose an agency and days, see the first results within seconds as the rest refine, read what the data shows, then open the map, a hotspot or a route to find out why.
 
-FIRST VIEWPORT: A compact identity bar, a heading with a local-processing explanation, agency and date controls, an explicit load action, view navigation, and a ruled summary above the first real chart. On mobile the controls stack and the data remains readable.
+FIRST VIEWPORT: A top bar with agency, days and analysis status. A rail of reports. A ruled strip of key figures above the hour-by-hour speed map, with its line-chart time control visible without scrolling, and computed findings beside it. On a phone the rail becomes a scrolling row and the figures become two columns.
 
-FORM: The supplied scorecard's visual system adapted to familiar dashboard controls. The brief-pinned reference takes precedence over alternate compositions; concept probe seed:caa9da635ab593c1 ran without external challengers. The signature interaction is selecting a route to update the local views without reading the remote archive again.
+FORM: A familiar reporting application with the scorecard's visual system. The signature interaction is dragging across the network's own speed curve to move the whole map through the day. The second is the string-line diagram, where bunching is visible at a glance. No concept seed was rolled for this surface: its form follows the user's named reference, the CTA Bus Speed Scorecard, and the design review noted that.
 
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, DESIGN.md, and tested production behavior under the real security policy.

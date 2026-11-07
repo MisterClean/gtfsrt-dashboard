@@ -1,72 +1,158 @@
 # Transit Notebook
 
-A Rust-first, browser-local GTFS-RT archive explorer. Select an agency/feed and up to six UTC days, then inspect vehicle activity, routes, hourly coverage, and vehicle positions. DuckDB runs in a browser worker; the website serves static application assets. Transit files are requested directly from gtfsrt.io’s public Google Storage bucket.
+**The performance reporting a transit planner would spend weeks building, for any agency in the [GTFS-RT archive](https://gtfsrt.io), running entirely in your browser.**
 
-The MVP includes agency/date selection, historical GTFS route-type mode filters, hourly charts, a searchable and sortable route table, a route heatmap, a geographic coordinate plot, inspectable SQL, CSV export, downloadable provenance, and selection links. Raw observations include repeated polls; they do not measure completed journeys, scheduled service, ridership, speed, or on-time performance. UTC dates differ from local and GTFS service days.
+Pick an agency and some days. Your browser reads the public archive directly and works out how service really ran: speeds street by street and hour by hour, on-time performance, headways and bunching, run times, delay hotspots and stop spacing. There is no account, no upload and no query server, and the site hosting the app never sees the data.
 
-## Build and preview
+![The overview for Metro Transit in Madison: key figures, an hour-by-hour speed map with a line-chart time control, and a plain-language summary of the findings](docs/images/overview.png)
 
-Development requires Node.js 22+ and a rustup-managed Rust installation. Visitors need only a browser. The pinned toolchain in `rust-toolchain.toml` includes the WASM target; a Homebrew-only Rust installation needs that target added separately.
+The method comes from the [CTA Bus Speed Scorecard](https://michaelmclean.me/cta-bus-speed-scorecard), generalized from one city's bus tracker to any agency publishing GTFS-RT and GTFS.
+
+## What it answers
+
+| Report | Questions it answers |
+| --- | --- |
+| **Overview** | How fast is the system, how reliable is it, and when is it worst? Key figures, an hour-by-hour speed map, computed findings, four linked charts through the day, the slowest routes and a day-by-day check. |
+| **Speed map** | Where do vehicles crawl, and when? Average speed on every street for every hour, with a slider built on the network's own speed curve. Compare any hour against midday, filter to one route, select a street for its hourly profile, and download GeoJSON for GIS. |
+| **Delay hotspots** | Where is the most time lost? Ranked stretches by vehicle hours lost per day against each street's own freest conditions, pooled across every route, on a map. This is the starting list for bus lanes and signal priority. |
+| **Routes** | Which routes need attention? A sortable scorecard with midday and peak speed on the same street segments, bootstrap intervals, on-time performance, excess wait, run time, the slowest half mile and an hourly sparkline, plus a route-by-hour heatmap. |
+| **Route detail** | What is going wrong on this route? Speed by distance and hour, a string-line (Marey) diagram of every trip against the schedule, run time distributions by hour, delay building along the route, headways against the schedule, and a stop table. |
+| **Reliability** | Is service on time and evenly spaced? An adjustable on-time window, on-time by hour, the deviation distribution, route rankings, bunching and gaps. |
+| **Stops** | Are stops too close together? Spacing distribution, spacing by route, a map of closely spaced stops, and time spent around each stop. This is the groundwork for stop consolidation. |
+| **Data & methods** | Can I trust this? Feed coverage by day and hour, the funnel from raw rows to measurements, the schedule versions used, every definition and threshold, the exact SQL, and a provenance download. |
+
+Every table exports to CSV. Links carry the selection, and whoever opens one analyzes the same days on their own device.
+
+<table>
+  <tr>
+    <td><img src="docs/images/hotspots.png" alt="Delay hotspots for Madison: a map with the ten stretches losing the most time outlined and numbered, beside the ranked list"></td>
+    <td><img src="docs/images/speed-map-dark.png" alt="The speed map in dark theme, with slow streets drawn wider and a time control built on the network's speed curve"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/string-line.png" alt="A string-line diagram of every trip on one route between 10 AM and 3 PM, with bunched vehicles in orange"></td>
+    <td><img src="docs/images/routes.png" alt="The route scorecard, sorted slowest at peak first, with hourly sparklines and the slowest half mile on each route"></td>
+  </tr>
+</table>
+
+## How it works
+
+```mermaid
+flowchart LR
+    Host["Your web host<br/>static files only"] -- "app, once" --> Browser
+    subgraph Browser["The visitor's browser"]
+        direction TB
+        UI["Svelte interface<br/>charts and map"]
+        Engine["Rust engine (WASM)<br/>map-matching and metrics"]
+        Duck["DuckDB (WASM)<br/>reads Parquet"]
+        Cache[("IndexedDB<br/>daily results")]
+        UI <--> Engine
+        Duck --> Engine
+        Engine <--> Cache
+    end
+    Archive["gtfsrt.io public archive"] -- "byte ranges over HTTPS" --> Duck
+```
+
+For each service day, DuckDB reads only the time window it needs from each archive file, and hands the columns straight to Rust. Rust map-matches every GPS fix to the trip's GTFS shape, works out when each stop was passed, and rolls everything into sums per route, hour, stop and street segment. Because those sums are additive, any set of days merges without loss, so filters and new views take milliseconds and never go back to the source.
+
+Finished days are stored in your browser. Reopening a report takes about a second, and studying more days means analyzing only the new ones.
+
+**Why Rust and TypeScript?** Rust does what it's fastest at: walking millions of positions. A typical day takes about 120 ms natively and well under a second in the browser, so most of the waiting is the download. The interface is Svelte and TypeScript, because Rust can't make the DOM faster and hand-built SVG charts are simple to write there. [The architecture document](docs/architecture.md) covers this in full.
+
+## Getting started
+
+Development needs Node.js 22 or newer and a rustup-managed Rust install. Visitors need only a browser.
 
 ```sh
 npm ci --ignore-scripts
 cargo install wasm-bindgen-cli --version 0.2.105 --locked
-npm run build
-npm run dev
+
+npm run build:wasm    # compile the Rust engine
+npm run dev           # Vite dev server with hot reload
 ```
 
-Open [the local dashboard](http://127.0.0.1:4173/gtfsrt-dashboard/). Use `PORT=4174 npm run dev` if the feasibility probe occupies port 4173. Rebuild and reload after source changes; the server serves the completed `dist/` release. `CARGO` and `WASM_BINDGEN` can override build-tool paths.
+Open the URL Vite prints. Rerun `npm run build:wasm` after changing Rust. The pinned toolchain in `rust-toolchain.toml` includes the WASM target. `CARGO` and `WASM_BINDGEN` can override tool paths.
 
-The build downloads official signed Parquet and ICU extensions into ignored `.cache/` files and verifies pinned SHA-256 hashes. The release self-hosts all application JS/WASM, DuckDB JS/WASM and extensions, CSS, font, and icon. Visitors need no runtime CDN, Rust compiler, credentials, account, data upload, or query server.
+To build and preview the release under its real security policy:
 
 ```sh
-npm run verify:release
-npm run package
+npm run build            # dist/ is the deployable site
+npm run verify:release   # check the release contents
+PORT=4173 npm run preview
 ```
 
-`dist/` is the deployable static directory. The package command verifies and archives it under `.build/`. It contains no transit working data. Relative asset URLs work beneath `/gtfsrt-dashboard/`.
+Then open <http://127.0.0.1:4173/gtfsrt-dashboard/>. The build downloads the official signed DuckDB extensions once, checks them against pinned SHA-256 hashes, and packages them into `dist/`. See [hosting](docs/hosting.md) to deploy.
 
-## Validate
+## Project layout
+
+```
+crates/core/    Rust analytics, with no browser dependencies, tested natively
+crates/wasm/    Browser bindings for the engine
+src/engine/     Worker that drives DuckDB and Rust, local cache, network rules
+src/views/      One file per report
+src/charts/     SVG and canvas charts
+src/map/        MapLibre map, basemap style, hour slider
+src/lib/        Application state, formatting, scales
+scripts/        Build, release checks, preview server, security headers
+tests/          Contract and end-to-end tests
+docs/           Architecture, metrics, validation, hosting, security
+spike/          The original feasibility probe, kept for reference
+```
+
+## Testing
 
 ```sh
-cargo fmt --all --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
-cargo test --locked
-npm test
-npm run build
-npm run verify:release
+cargo test -p transit-core                                    # analytics, on simulated vehicles
+cargo test -p transit-core --test sql_contract -- --ignored   # generated SQL in a real DuckDB
+npm test                                                      # URL rules, dates, CSV safety, security policy
+npm run check                                                 # TypeScript and Svelte
+npm run test:e2e                                              # the built release against the live archive
 ```
 
-An independent analytical-contract test executes the generated SQL in an installed native DuckDB CLI, without a live archive connection:
+The end-to-end test runs the production build under its real security policy and renders every report. It fails if the browser contacts any host other than the app, the archive and the basemap, or reads archive data before being asked. Set `CHROME_PATH` to use a specific browser.
 
-```sh
-cargo test --locked --test analytical_contract -- --ignored
-```
+Rust analytics tests drive simulated vehicles through a real schedule and assert the outcomes: a late trip lands in the late bins, a missing trip reads as a gap, a vehicle swap counts as one trip, service past midnight UTC stays on one service date, and so on. `crates/core/examples/replay.rs` replays a real day from CSV exports for checking against raw data.
 
-Set `DUCKDB_BIN` when the CLI is not on `PATH`. These tests cover repeated fixes, null IDs, mode separation, injected filter values, latest-invalid-position exclusion, timestamp fallback, and differential-feed gating.
+## Can I trust the numbers?
 
-The MVP was exercised in the visible Chromium browser with Madison bus and SEPTA regional rail archives for November 5, 2026. Madison’s 296,588 observations, 151 vehicle IDs, 29 route IDs, and 1,664 trip IDs matched an independent native calculation. See [validation evidence and remaining browser limits](docs/mvp-validation.md). Safari, Firefox, Edge, constrained devices, and actual peak tab memory still require testing before claiming support.
+The [metrics reference](docs/metrics.md) gives every definition, formula and threshold. [Validation](docs/validation.md) records what was checked and what wasn't. A second implementation, written by a separate AI review agent over the same raw data, agrees with the app to within 0.02 mph network-wide in Madison and King County, and every one of the archive's 21 vehicle-position feeds runs without error. That's agreement between methods, not ground truth, and no person has audited it yet. The short version of the limits:
 
-## Hosting and architecture
+- **Stop passes are inferred from GPS.** At 20-second polling, single events are approximate and aggregates are solid. Stop-zone time in particular only means something in aggregate.
+- **An absent trip isn't proof of a cancellation.** It may be a reporting gap. The app reports what it observed and shows the share of scheduled trips it saw.
+- **The archive has no ridership.** Hotspots report vehicle hours, not rider hours.
+- **Some agencies can't be joined to a schedule.** When realtime trip IDs match no archived schedule, or no schedule exists, the app shows GPS speeds only and says so. Those speeds read about 5-10% below schedule-joined speeds network-wide, and up to 20-25% below on winding routes, so use them to compare routes and times of day. On-time performance and headways need the join.
+- **The newest day is incomplete.** Evening service spills into the next UTC file, so the default selection stops one day short of the archive's newest file.
+- **It has been tested in Chromium.** Safari, Firefox, Edge and low-memory devices still need testing before claiming support.
 
-- [Integration into michaelmclean.me and Railway](docs/hosting.md)
-- [Architecture and analytical boundaries](docs/architecture.md)
-- [Rust packaging and browser security](docs/packaging-security.md)
-- [Original feasibility experiment](docs/feasibility.md)
-- [Product scope](PRODUCT.md)
+## Privacy and security
 
-Rust handles planning, validation, mode classification, SQL templates, the Leptos interface, rendering, and export content. `web/bridge.js` handles browser I/O, DuckDB lifecycle, and bounded Arrow-result conversion. `scripts/` builds and serves static files; it does not process transit data.
+The website serves static files and receives no transit data. Your browser fetches data directly from Google Cloud Storage, which hosts the archive and sees your network address and which files you request. The optional street basemap comes from OpenFreeMap, which sees your network address and the area on screen, and you can turn it off. There is no analytics.
 
-The preview enforces CSP on both page and worker responses. Production needs the same headers; copying files alone does not install a policy. The only allowed external connection destination is the public `parquet.gtfsrt.io` Google Storage bucket. The temporary database clears on reload/cancel, but ordinary browser HTTP caches may retain responses. Direct archive requests disclose requested objects and the visitor’s network address to the archive host.
+Results stay in your browser until you clear them from Data & methods. Raw vehicle data is never stored.
 
-The tested npm wrapper is `@duckdb/duckdb-wasm@1.33.1-dev114.0`, a pinned prerelease. The SQL engine reports `v2.0.0`; the wrapper and engine use separate version numbers.
+The production policy allows scripts and workers only from the app itself, with WASM but no JavaScript evaluation, and connections only to the archive bucket and basemap. All SQL comes from fixed templates. [Packaging and security](docs/packaging-security.md) has the details.
 
-## Original experiment
+## Documentation
 
-```sh
-npm run probe:serve
-npm run probe
-```
+- [Metrics reference](docs/metrics.md): every number, how it's calculated, and its limits
+- [Architecture](docs/architecture.md): the pipeline and why it's built this way
+- [Validation](docs/validation.md): independent checks and agency coverage
+- [Hosting](docs/hosting.md): deploying to michaelmclean.me or anywhere else
+- [Packaging and security](docs/packaging-security.md): release contents and the security model
+- [Feasibility decision](docs/feasibility.md): the original proof that this could work
+- [Design system](DESIGN.md) and [product brief](PRODUCT.md)
 
-The retained probe serves `/spike/index.html` and records feasibility evidence. Its executable-dependency policy is less strict than the packaged application. It is a research tool, not the deployable dashboard.
+## Where this is heading
+
+These reports exist to change something on the street. The natural next steps build on the same daily rollups:
+
+- **Before and after comparison:** two date ranges side by side, to evaluate a bus lane or a service change.
+- **Scenario tools:** estimate the time saved by consolidating these stops or giving this stretch a bus lane, using the measured stop and delay data.
+- **Rider weighting:** join agency ridership where it's published, to turn vehicle hours into rider hours.
+- **Crowding:** the rollups already keep occupancy where feeds report it, and it needs a report.
+- **Published aggregates:** a static set of prebuilt rollups for instant national comparisons, with no server.
+
+## Credits
+
+Data from the [GTFS-RT archive at gtfsrt.io](https://gtfsrt.io), built on [Jarvus's archiver](https://github.com/JarvusInnovations/gtfs-realtime-archiver). Built with [DuckDB](https://duckdb.org), [MapLibre](https://maplibre.org), [OpenFreeMap](https://openfreemap.org), [OpenStreetMap](https://www.openstreetmap.org/copyright) data and [Svelte](https://svelte.dev). Display type is [Big Shoulders](https://github.com/xotypeco/big_shoulders).
+
+Built by [Michael McLean](https://michaelmclean.me).
