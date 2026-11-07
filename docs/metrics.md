@@ -1,6 +1,6 @@
 # Metric reference
 
-This is the definition of every number in Transit Notebook: what it measures, how it is calculated, what it needs, and where it can mislead. It is written for transit planners and matches the code in `crates/core/src`. When a calculation changes, `METRIC_VERSION` in `cube.rs` goes up and browsers re-analyze their saved days.
+This reference explains what each number in Transit Almanac measures, how to calculate it, what data it needs, and where it can mislead. It is written for transit planners and matches the code in `crates/core/src`. When a calculation changes, `METRIC_VERSION` in `cube.rs` goes up and browsers re-analyze their saved days.
 
 The speed method comes from the [CTA Bus Speed Scorecard](https://michaelmclean.me/cta-bus-speed-scorecard). Its thresholds are carried over and tagged `[T1]` to `[T8]`. The scorecard could use CTA Bus Tracker's own distance along a pattern. GTFS-RT feeds don't have that, so this app adds map-matching and generalizes the method to any feed in the [gtfsrt.io](https://gtfsrt.io/) archive.
 

@@ -10,6 +10,7 @@ import {dateNumber, plural, type Units} from './format.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
 
+// Keep the original key so saved preferences survive the rename.
 const STORAGE_KEY = 'transit-notebook-preferences';
 /** With streaming reads, this long without a sign of progress means something is stuck. */
 const STALL_MS = 120_000;

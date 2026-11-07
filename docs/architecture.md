@@ -1,6 +1,6 @@
 # Architecture
 
-Transit Notebook is a static web application. The website host serves files and nothing else. Each visitor's browser downloads the app, reads the public archive directly, and does all of the analysis on their own device.
+Transit Almanac is a static web application. The website host serves files and nothing else. Each visitor's browser downloads the app, reads the public archive directly, and does all of the analysis on their own device.
 
 That decoupling is the central design constraint. No transit data passes through the website, and the app keeps working however many people use it, because every visitor brings their own compute.
 

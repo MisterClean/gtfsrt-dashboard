@@ -1,4 +1,4 @@
-// A quiet basemap in the notebook's palette: enough streets and names to locate
+// A quiet basemap in the app's palette: enough streets and names to locate
 // a stretch, with the data as the loudest thing on the page. Tiles come from
 // OpenFreeMap, which needs no key or account. See docs/packaging-security.md.
 import type {StyleSpecification} from 'maplibre-gl';

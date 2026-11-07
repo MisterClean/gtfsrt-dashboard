@@ -4,7 +4,7 @@ Operate mode. The brief is a reporting tool a seasoned transit planner would oth
 
 ## Direction contract
 
-THESIS: A transit notebook that leads with the finding, lets a planner drill down from network to route to a single trip, and follows every number back to its evidence.
+THESIS: Transit Almanac leads with the finding, lets a planner drill down from network to route to a single trip, and follows every number back to its evidence.
 
 OWN-WORLD: Retain the reference's warm paper, charcoal ink, copper selection, condensed display headings, plain controls and ruled quantitative tables. Keep the scorecard's warm-to-cool speed classes and its midday blue against rush orange. Reserve display type for headings. Selected dark theme, for a planner working late or presenting. No decorative imagery.
 

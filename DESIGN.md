@@ -1,5 +1,5 @@
 ---
-name: Transit Notebook
+name: Transit Almanac
 description: A warm, ruled reporting system that leads with the finding and traces every number back to its method.
 colors:
   copper: "#ac4d2b"
@@ -195,15 +195,15 @@ components:
     padding: "8px 10px"
 ---
 
-# Design System: Transit Notebook
+# Design System: Transit Almanac
 
 Source of truth: `src/styles/app.css` holds the tokens and shared classes; components scope anything local. `-dark` keys in the frontmatter are the values of the same CSS variable under `:root[data-theme="dark"]` (for example `paper-dark` is `--paper` in dark), so components always read the bare variable and never branch on theme.
 
 ## Overview
 
-**Creative North Star: "The Transit Notebook"**
+**Creative North Star: "The Transit Almanac"**
 
-A planner's working notebook: warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.
+A planner's reference for how transit ran, with warm paper, charcoal ink, fine rules, and condensed uppercase headings. Each report leads with a finding in plain language, then a ruled strip of figures, then the map or chart that explains it, then a table with the evidence. Density is high and the surface stays flat, so the data is the loudest thing on the page.
 
 Color carries meaning. Copper is the one interface accent, the speed classes run warm to cool, and midday blue stands against rush orange. Dark is a chosen theme for working late or presenting, not an inversion: the speed classes are re-tuned so that the slowest streets are the brightest warm marks on dark paper. There is no decorative imagery.
 
@@ -273,7 +273,7 @@ The basemap has its own quiet palette for each theme in `src/map/style.ts`, held
 
 **Mono Font:** the system monospace stack, for SQL and code.
 
-**Character:** Tall condensed headings give the notebook its voice; a familiar system face carries the reading and the comparing.
+**Character:** Tall condensed headings give the almanac its voice. A familiar system font makes reading and comparing figures easier.
 
 ### Hierarchy
 

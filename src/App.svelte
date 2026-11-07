@@ -36,7 +36,7 @@
 </script>
 
 <svelte:head>
-  <title>{label ? `${label} · Transit Notebook` : 'Transit Notebook'}</title>
+  <title>{label ? `${label} · Transit Almanac` : 'Transit Almanac'}</title>
 </svelte:head>
 
 <div class="shell">
