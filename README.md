@@ -129,7 +129,7 @@ The website serves static files and receives no transit data. Your browser fetch
 
 Results stay in your browser until you clear them from Data & methods. Raw vehicle data is never stored.
 
-The production policy allows scripts and workers only from the app itself, with WASM but no JavaScript evaluation, and connections only to the archive bucket and basemap. All SQL comes from fixed templates. [Packaging and security](docs/packaging-security.md) has the details.
+The production policy allows scripts and workers only from the app itself, with WASM but no JavaScript evaluation, and connections only to the archive bucket, Chicago Transit Alerts positions, and basemap. All SQL comes from fixed templates. [Packaging and security](docs/packaging-security.md) has the details.
 
 ## Documentation
 
@@ -156,3 +156,9 @@ These reports exist to change something on the street. The natural next steps bu
 Data from the [GTFS-RT archive at gtfsrt.io](https://gtfsrt.io), built on [Jarvus's archiver](https://github.com/JarvusInnovations/gtfs-realtime-archiver). Built with [DuckDB](https://duckdb.org), [MapLibre](https://maplibre.org), [OpenFreeMap](https://openfreemap.org), [OpenStreetMap](https://www.openstreetmap.org/copyright) data and [Svelte](https://svelte.dev). Display type is [Big Shoulders](https://github.com/xotypeco/big_shoulders).
 
 Built by [Michael McLean](https://michaelmclean.me).
+
+### Chicago Transit Alerts positions
+
+Choose CTA Bus or Rail (Chicago Transit Alerts) in the agency picker. These feeds provide GPS speeds and coverage, with known polling gaps and station estimates accounted for. The browser verifies daily Parquet files against an immutable manifest. Data & methods includes the manifest, file revisions, and a link that pins the selection. Schedule comparisons require a trip match. The default selection is one weekday.
+
+Run the live archive checks with `npm run test:e2e`. Run the local-file browser fixture with `node tests/e2e-local.mjs` after building WASM. Both accept `CHROME_PATH` for an installed Chrome executable. The local fixture makes no position-file network requests.

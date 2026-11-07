@@ -57,6 +57,7 @@
     {key: 'stopped', label: 'Stopped', title: 'Share of measured time moving under 2 mph', descending: true, value: r => r.stopped_share, format: r => pct(r.stopped_share)},
     {key: 'veh', label: 'Vehicles', title: 'Peak vehicles in an hour', descending: true, value: r => r.peak_vehicles, format: r => r.peak_vehicles.toFixed(1)},
   ]);
+  const scheduledColumns = new Set(['otp', 'late', 'bunched', 'ewt', 'slowest', 'trips', 'observed', 'sched', 'run', 'p90']);
 </script>
 
 {#snippet routeCell(r: RouteScore)}<RouteBadge label={r.label} color={r.color} textColor={r.text_color} />{/snippet}
@@ -83,7 +84,7 @@
 
   <section class="section">
     <DataTable
-      {columns}
+      columns={app.feed?.positions ? columns.filter(column => !scheduledColumns.has(column.key)) : columns}
       {rows}
       caption="Route performance. Choose a route to open it."
       defaultSort="peak"

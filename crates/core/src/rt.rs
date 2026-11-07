@@ -60,6 +60,13 @@ pub struct Fix {
     pub descriptor: u32,
     pub vehicle: u32,
     pub occupancy: i8,
+    pub approximate: bool,
+}
+
+#[derive(Clone, Copy)]
+enum Ingestion {
+    Trip,
+    Position { approximate: bool },
 }
 
 /// One row of realtime input, already decoded from its source columns.
@@ -108,6 +115,16 @@ impl RtBuffer {
     /// Adds one row, recording why it was unusable when it is. Rows without a
     /// trip are out-of-service moves and layovers, which the metrics exclude.
     pub fn push(&mut self, raw: RawFix<'_>) {
+        self.push_with_policy(raw, Ingestion::Trip);
+    }
+
+    /// Retains observations from a position feed, including station estimates
+    /// that break a trajectory without contributing to its speed.
+    pub fn push_position(&mut self, raw: RawFix<'_>, approximate: bool) {
+        self.push_with_policy(raw, Ingestion::Position { approximate });
+    }
+
+    fn push_with_policy(&mut self, raw: RawFix<'_>, ingestion: Ingestion) {
         if !raw.fetch.is_finite() || raw.fetch <= 0.0 {
             return;
         }
@@ -126,14 +143,20 @@ impl RtBuffer {
             counts.no_vehicle += 1;
             return;
         };
+        let approximate = matches!(ingestion, Ingestion::Position { approximate: true });
         if !crate::geo::valid_coordinate(f64::from(raw.lat), f64::from(raw.lon)) {
             counts.bad_coordinate += 1;
-            return;
+            if !approximate {
+                return;
+            }
         }
-        let Some(trip_id) = raw.trip_id.filter(|t| !t.is_empty()) else {
+        let trip_id = raw.trip_id.unwrap_or_default();
+        if trip_id.is_empty() {
             counts.no_trip += 1;
-            return;
-        };
+            if matches!(ingestion, Ingestion::Trip) {
+                return;
+            }
+        }
         // A report time a day from when it was fetched is bad data, such as milliseconds.
         let plausible = raw.timestamp.is_finite()
             && raw.timestamp > raw.fetch - MAX_REPORT_AGE_S
@@ -174,6 +197,7 @@ impl RtBuffer {
             descriptor,
             vehicle,
             occupancy: raw.occupancy,
+            approximate,
         });
     }
 

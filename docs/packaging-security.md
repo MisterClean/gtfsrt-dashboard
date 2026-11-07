@@ -1,6 +1,6 @@
 # Packaging and browser security
 
-One versioned static release contains every executable dependency. A visitor opens an HTTPS URL and installs nothing. The public archive remains an external data source, and the optional basemap is the only other outside connection.
+One versioned static release contains every executable dependency. A visitor opens an HTTPS URL and installs nothing. The public archives and optional basemap are external data sources.
 
 | Part | Release artifact |
 | --- | --- |
@@ -52,6 +52,7 @@ Production requirements:
 
 - **The website host** serves static files and sees ordinary page requests. It receives no transit data and no analysis results.
 - **The archive host (Google Cloud Storage)** sees the visitor's network address and which objects they request, because the browser fetches them directly.
+- **Chicago Transit Alerts** sees the requested position archive objects and network address. Requests omit credentials and reject redirects. Manifest and full-file checksums are verified before use.
 - **OpenFreeMap** sees the visitor's network address and the map area on screen when the street basemap is on. It needs no key or account, and the visitor can turn it off. Transit data never goes there.
 
 The app runs no analytics. Results stay in the visitor's browser until they clear them.

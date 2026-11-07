@@ -5,6 +5,7 @@
   import PollGrid from '../charts/data/PollGrid.svelte';
   import QualityTable from '../charts/data/QualityTable.svelte';
   import {THRESHOLDS} from '../charts/data/thresholds';
+  import {CHICAGO_POSITIONS} from '../engine/contracts.js';
   import type {ReadRecord} from '../engine/types';
   import {downloadFile} from '../lib/download';
   import {bytes, dateLabel, dateNumber, datesLabel, int, isoDate, plural} from '../lib/format';
@@ -12,6 +13,15 @@
 
   const days = $derived(app.quality?.days ?? []);
   const feed = $derived(app.feed);
+  const positions = $derived(app.dates.flatMap(date => app.positionDays[date] ? [app.positionDays[date]] : []));
+  const manifestURL = (digest: string) => `${CHICAGO_POSITIONS}manifests/${digest}.json`;
+  const replayURL = $derived.by(() => {
+    const manifest = positions[0]?.manifest;
+    if (!manifest || positions.length !== app.dates.length || positions.some(day => day.manifest !== manifest)) return null;
+    const url = new URL(location.href);
+    url.searchParams.set('manifest', manifest);
+    return url.href;
+  });
 
   const shortDigest = (key: string) => key.split('+').map(part => part.replace(/^v1:/, '').slice(0, 12)).join(' + ');
   const retrievedDate = (value: string) => dateLabel(value.slice(0, 10), {month: 'short', day: 'numeric', year: 'numeric'});
@@ -20,6 +30,7 @@
   const versions = $derived.by(() => {
     const byKey = new Map<string, number[]>();
     for (const day of days) {
+      if (day.digest.startsWith('gps|')) continue;
       const list = byKey.get(day.digest) ?? [];
       list.push(dateNumber(day.date));
       byKey.set(day.digest, list);
@@ -82,6 +93,8 @@
         system_id: feed.system_id,
         system_name: feed.system_name,
         catalog_range: [feed.date_min, feed.date_max],
+        source: feed.positions?.source ?? 'gtfsrt.io',
+        timezone: feed.positions?.timezone,
       },
       service_days: app.loadedDates.map(isoDate),
       metric_version: app.quality?.metric_version ?? null,
@@ -97,6 +110,7 @@
         sources: version.record?.bases ?? null,
       })),
       archive_reads_this_session: reads,
+      position_archive: positions.length ? {analysis: 'gps', days: positions, pinned_link: replayURL} : undefined,
       warnings: app.warnings,
       quality: app.quality,
     };
@@ -122,7 +136,13 @@
         <div><dt>Agency and feed</dt><dd>{feedLabel(feed)}</dd></div>
         <div><dt>Service days</dt><dd>{app.loadedDates.length ? `${datesLabel(app.loadedDates)} · ${plural(app.loadedDates.length, 'day')}` : 'None analyzed yet'}{#if app.pendingDates.length}<span class="dim">{' · '}{plural(app.pendingDates.length, app.loadedDates.length ? 'more day' : 'day')} chosen, not analyzed</span>{/if}</dd></div>
         <div><dt>In the archive</dt><dd>{dateLabel(feed.date_min, {month: 'short', day: 'numeric', year: 'numeric'})} to {dateLabel(feed.date_max, {month: 'short', day: 'numeric', year: 'numeric'})} · {int(feed.total_records)} rows · {bytes(feed.total_bytes)}</dd></div>
-        <div><dt>Source</dt><dd><a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io</a> public GTFS-RT archive, vehicle positions</dd></div>
+        <div><dt>Source</dt><dd>
+          {#if feed.positions}
+            <a href={feed.positions.url} target="_blank" rel="noopener noreferrer">{feed.positions.source}</a> · GPS positions · {feed.positions.timezone}
+          {:else}
+            <a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io</a> public GTFS-RT archive, vehicle positions
+          {/if}
+        </dd></div>
         {#if app.quality}<div><dt>Calculation version</dt><dd>{app.quality.metric_version}</dd></div>{/if}
         {#if app.result?.engineVersion}<div><dt>Query engine</dt><dd>DuckDB {app.result.engineVersion} in this browser</dd></div>{/if}
       </dl>
@@ -131,7 +151,9 @@
     {/if}
 
     <h3>Schedule versions</h3>
-    {#if versions.length}
+    {#if feed?.positions}
+      <p class="note">This archive contains vehicle positions. The dashboard uses them for GPS speeds and coverage. Schedule comparisons need a trip match.</p>
+    {:else if versions.length}
       <div class="table-wrap">
         <table class="data">
           <caption class="sr-only">Schedule versions used for each service day</caption>
@@ -164,6 +186,26 @@
       <p class="empty">No schedule has been used yet. Analyze a day to see which version applied.</p>
     {/if}
 
+    {#if positions.length}
+      <h3>Position archive revisions</h3>
+      {#if replayURL}<p class="note"><a href={replayURL}>Open this selection with the manifest pinned</a>.</p>{/if}
+      {#each positions as day}
+        <details>
+          <summary>{dateLabel(isoDate(day.date))}{day.manifest ? ` · manifest ${shortDigest(day.manifest)}` : ''}</summary>
+          {#if day.manifest}<p class="note"><a href={manifestURL(day.manifest)} target="_blank" rel="noopener noreferrer">Published manifest</a></p>{/if}
+          <ul>
+            {#each day.files as file}
+              <li>
+                {file.date}{#if file.url} · <a href={file.url} target="_blank" rel="noopener noreferrer">Parquet object</a>{/if}
+                {#if file.sha256} · <code title={file.sha256}>{shortDigest(file.sha256)}</code>{/if}
+                {#if file.missing} · File unavailable{:else if file.approximateRows} · {int(file.approximateRows)} station estimates in the file{/if}
+              </li>
+            {/each}
+          </ul>
+        </details>
+      {/each}
+    {/if}
+
     <h3>Archive files read in this session</h3>
     {#if reads.length}
       <div class="table-wrap">
@@ -171,7 +213,7 @@
           <caption class="sr-only">Archive files read in this session</caption>
           <thead>
             <tr>
-              <th class="left" scope="col">UTC file</th>
+              <th class="left" scope="col">{feed?.positions ? 'Local file date' : 'UTC file'}</th>
               <th class="left" scope="col">Status</th>
               <th scope="col">Object size</th>
               <th scope="col">Rows read</th>
@@ -187,13 +229,18 @@
                 <td>{read.status === 'read' ? bytes(read.bytes) : '—'}</td>
                 <td>{int(read.rows)}</td>
                 <td>{read.seconds.toFixed(1)}</td>
-                <td class="left"><a href={read.url} target="_blank" rel="noopener noreferrer">Parquet object</a></td>
+                <td class="left">{#if read.url}<a href={read.url} target="_blank" rel="noopener noreferrer">Parquet object</a>{:else}—{/if}</td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
-      <p class="note">{bytes(totalRead)} of objects in total. Downloads are usually smaller, because only the footer and the needed columns and hours are requested. A missing file means the archive has nothing for that date, not that no service ran.</p>
+      <p class="note">
+        {bytes(totalRead)} of objects in total.
+        {#if feed?.positions}The browser verifies each downloaded file against the published checksum.
+        {:else}Downloads are usually smaller, because only the footer and the needed columns and hours are requested.{/if}
+        Missing files leave gaps in what the dashboard can measure.
+      </p>
     {:else if app.hasResults}
       <p class="note">None. These days were restored from results already saved on this device, so nothing was downloaded this time.</p>
     {:else}
@@ -205,12 +252,15 @@
     <div class="section-head">
       <div>
         <h2 id="coverage-heading">Coverage</h2>
-        <p class="note">How often the archive captured this feed, hour by hour. A 20 second feed gives about 180 captures an hour. A pale run during the day points to an archive outage, which depresses trip counts and lengthens headways. Overnight hours can be empty simply because nothing is running.</p>
+        <p class="note">How often the archive captured this feed, hour by hour.
+          {#if feed?.positions}Capture rates vary by mode and date. See the notes below for known outages and periods of reduced polling.
+          {:else}A 20 second feed gives about 180 captures an hour. A pale run during the day points to an archive outage, which depresses trip counts and lengthens headways. Overnight hours can be empty simply because nothing is running.{/if}
+        </p>
       </div>
     </div>
     {#if days.length}
       <PollGrid {days} />
-      <p class="note">Capture gaps count five-minute periods within the day’s scheduled service with no capture at all. Notes are explained below when there are any.</p>
+      {#if !feed?.positions}<p class="note">Capture gaps count five-minute periods within the day’s scheduled service with no capture at all. Notes are explained below when there are any.</p>{/if}
       {#if notes.length}
         <ul class="notes">
           {#each notes as note}
@@ -231,8 +281,8 @@
       </div>
     </div>
     {#if days.length}
-      <QualityTable {days} units={app.units} />
-      <p class="note">The repeats row is what remains after the other steps, so it is approximate: raw rows are counted by hour and reports by service day, which places a few rows near 3 AM on a neighboring day. Intervals with no elapsed time are skipped without a count.</p>
+      <QualityTable {days} units={app.units} positions={Boolean(feed?.positions)} />
+      {#if !feed?.positions}<p class="note">The repeats row is what remains after the other steps, so it is approximate: raw rows are counted by hour and reports by service day, which places a few rows near 3 AM on a neighboring day. Intervals with no elapsed time are skipped without a count.</p>{/if}
     {:else}
       <p class="empty">Analyze a day to see what was kept and what was removed.</p>
     {/if}
@@ -245,17 +295,19 @@
         <p class="note">The speed method comes from the <a href="https://michaelmclean.me/cta-bus-speed-scorecard" target="_blank" rel="noopener noreferrer">CTA Bus Speed Scorecard</a>, generalized to any GTFS-RT feed.</p>
       </div>
     </div>
-    <Methods />
+    {#if feed?.positions}
+      <p class="prose">GPS speeds use straight-line distances between consecutive positions from the same vehicle and route. Station estimates break trajectories. Intervals across known outages, over two minutes, or above 35.8 m/s are excluded. Stationary runs of five minutes or more are excluded as likely layovers. Missing or implausible report timestamps fall back to poll time.</p>
+    {:else}<Methods />{/if}
   </section>
 
   <section class="section" aria-labelledby="sql-heading">
     <div class="section-head">
       <div>
         <h2 id="sql-heading">The SQL</h2>
-        <p class="note">DuckDB runs this in this browser, directly against the archive’s Parquet object. Rust then does the map-matching and rollups on the returned columns.</p>
+        <p class="note">DuckDB runs this in your browser against the Parquet file. Rust analyzes the returned positions.</p>
       </div>
       {#if queries.length > 1}
-        <label class="field">UTC file
+        <label class="field">{feed?.positions ? 'Local file date' : 'UTC file'}
           <select class="input" value={shownRead?.date} onchange={event => (chosenRead = event.currentTarget.value)}>
             {#each queries as read}<option value={read.date}>{read.date}</option>{/each}
           </select>
@@ -265,11 +317,15 @@
     {#if shownRead}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <pre class="sql" tabindex="0" role="region" aria-label="The SQL query for this archive file"><code>{shownRead.sql}</code></pre>
-      <p class="note"><code>{shownRead.sql.match(/read_parquet\('([^']+)'\)/)?.[1] ?? 'The file'}</code> is registered to <a href={shownRead.url} target="_blank" rel="noopener noreferrer">this object</a>. Fixed templates build the query in <code>crates/core/src/sql.rs</code>, and columns an older file lacks become typed nulls.</p>
+      <p class="note"><code>{shownRead.sql.match(/read_parquet\('([^']+)'\)/)?.[1] ?? 'The file'}</code> is registered to {#if shownRead.url}<a href={shownRead.url} target="_blank" rel="noopener noreferrer">this object</a>{:else}a local file{/if}. Fixed templates build the query in <code>crates/core/src/sql.rs</code>, and optional columns an older file lacks become typed nulls.</p>
     {:else}
       <p class="note">No query ran in this session{app.hasResults ? ', because these days came from results saved on this device' : ''}. Analyzing a new day shows its exact query here. The templates are in <a href="https://github.com/MisterClean/gtfsrt-dashboard/blob/main/crates/core/src/sql.rs" target="_blank" rel="noopener noreferrer">crates/core/src/sql.rs</a>.</p>
     {/if}
-    <p class="prose">Each archive file holds thousands of row groups, one per poll, and each records its earliest and latest fetch time. The time filter lets DuckDB skip row groups outside the hours a service day needs, and it asks only for the columns named here from the groups it keeps. It groups nearby byte ranges, so the actual download can run larger than that suggests. Every read also needs the footer, which is large: about 14 MB of a 34 MB Madison object. That’s why each file is read only once, even when two service days share it.</p>
+    {#if feed?.positions}
+      <p class="prose">Archive files run from local midnight to midnight. Analysis days can span two files. DuckDB uses the poll time to select the requested hours and reads only the columns used for GPS analysis. Rail positions estimated from a station break a trajectory and are left out of speed calculations.</p>
+    {:else}
+      <p class="prose">Each archive file holds thousands of row groups, one per poll, and each records its earliest and latest fetch time. The time filter lets DuckDB skip row groups outside the hours a service day needs, and it asks only for the columns named here from the groups it keeps. It groups nearby byte ranges, so the actual download can run larger than that suggests. Every read also needs the footer, which is large: about 14 MB of a 34 MB Madison object. That’s why each file is read only once, even when two service days share it.</p>
+    {/if}
   </section>
 
   <section class="section" aria-labelledby="device-heading">
@@ -296,7 +352,7 @@
         <caption class="sr-only">Who can see what when you use this app</caption>
         <thead><tr><th class="left" scope="col">Who</th><th class="left" scope="col">What they see</th></tr></thead>
         <tbody>
-          <tr><td class="left"><strong>Archive host</strong> (Google Cloud Storage)</td><td class="left wrap">Your network address and which public files are requested. Your browser requests them directly.</td></tr>
+          <tr><td class="left"><strong>Archive hosts</strong> (Google Cloud Storage and Chicago Transit Alerts)</td><td class="left wrap">Your network address and which public files are requested. Your browser requests them directly.</td></tr>
           <tr><td class="left"><strong>Map tiles</strong> (OpenFreeMap)</td><td class="left wrap">Your network address and the map area on screen, while the basemap is on. No transit data goes there.</td></tr>
           <tr><td class="left"><strong>This website’s host</strong></td><td class="left wrap">Ordinary requests for the application’s static files, including the address you open, which can name an agency and dates. Queries and results never reach it, because there is no server to send them to.</td></tr>
           <tr><td class="left"><strong>Anyone you send a link to</strong></td><td class="left wrap">The agency, days and view named in the link. Opening it runs the analysis on their own device. No results travel with it.</td></tr>
@@ -313,7 +369,7 @@
     <div class="tools">
       <button class="btn" disabled={!app.hasResults} onclick={downloadProvenance}>Download provenance JSON</button>
       <a class="btn" href="https://github.com/MisterClean/gtfsrt-dashboard" target="_blank" rel="noopener noreferrer">Source code</a>
-      <a class="btn" href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io archive</a>
+      <a class="btn" href={feed?.positions?.url ?? 'https://gtfsrt.io/'} target="_blank" rel="noopener noreferrer">{feed?.positions?.source ?? 'gtfsrt.io archive'}</a>
     </div>
     <p class="note">Each report’s tables download as CSV from that report, and the speed map downloads as GeoJSON.</p>
   </section>

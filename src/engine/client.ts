@@ -1,6 +1,6 @@
 // The main thread's handle on the worker: every call returns a promise.
 import type {
-  AnalyzeRequest, AnalyzeResult, CachedDays, EngineEvent, Feed, HotspotReport, NetworkMap, Overview,
+  AnalyzeRequest, AnalyzeResult, CachedDays, EngineEvent, FeedCatalog, HotspotReport, NetworkMap, Overview,
   QualityReport, RouteDetail, RouteScore, Selection, StopsReport, StringLineResult,
 } from './types';
 
@@ -51,7 +51,7 @@ class EngineClient {
   }
 
   init = () => this.call<boolean>('init', document.baseURI);
-  catalog = () => this.call<Feed[]>('catalog');
+  catalog = (feed?: string, manifest?: string) => this.call<FeedCatalog>('catalog', feed, manifest);
   analyze = (request: AnalyzeRequest) => this.call<AnalyzeResult>('analyze', request);
   stop = () => this.call<boolean>('stop');
   cachedDays = (feedKey: string) => this.call<CachedDays>('cachedDays', feedKey);

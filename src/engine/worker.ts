@@ -6,11 +6,14 @@ import * as duckdb from '@duckdb/duckdb-wasm';
 import duckWasm from '@duckdb/duckdb-wasm/dist/duckdb-base.wasm?url';
 import duckWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-base.worker.js?url';
 import {ARCHIVE, MAX_METADATA_BYTES, MAX_SCHEDULE_TABLE_BYTES, enforceObjectSize, validateArchiveURL} from './contracts.js';
+import {CHICAGO_FEEDS, CHICAGO_TIMEZONE, chicagoCatalog, chicagoReportTime, isChicagoFeed, openChicagoArchive} from './sources/chicago';
+import {MAX_POSITION_FILE_BYTES, planDailyPositions, sha256, verifiedPositionBytes} from './sources/daily';
+import type {DailyObject, PositionFile} from './sources/daily';
 import {
   clearCache, dayKey, deleteEntry, getEntry, listDays, putEntry, scheduleKey,
   type DayEntry, type DayIndexEntry, type EventsEntry, type FeedEntry, type ScheduleEntry,
 } from './cache';
-import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord} from './types';
+import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, FeedCatalog, PositionProvenance, ReadRecord, ScheduleRecord} from './types';
 
 /**
  * Below this share of matching trip IDs the feed and schedule don't belong together,
@@ -46,6 +49,7 @@ class RunStopped extends Error {}
  */
 class Run {
   cancelled = false;
+  readonly abort = new AbortController();
   readonly stopped: Promise<never>;
   readonly settled: Promise<void>;
   finish!: () => void;
@@ -59,6 +63,7 @@ class Run {
 
   cancel() {
     this.cancelled = true;
+    this.abort.abort();
     this.rejectStopped(new RunStopped());
   }
 
@@ -344,11 +349,11 @@ function openFeedEngine(feedKey: string) {
 }
 
 /** Restores a cached day. Returns false when it has to be analysed again. */
-async function restoreDay(run: Run, date: number) {
+async function restoreDay(run: Run, date: number, positions?: PositionDay) {
   const version = Engine.metricVersion();
   const key = dayKey(run.feedKey, date, version);
   const entry = await run.wait(getEntry<DayEntry>('days', key));
-  if (!entry) return false;
+  if (!entry || entry.positionRevision !== positions?.revision) return false;
   try {
     if (!run.engine.hasSchedule(entry.digest)) {
       const schedule = await run.wait(getEntry<ScheduleEntry>('schedules', scheduleKey(run.feedKey, entry.digest)));
@@ -369,11 +374,12 @@ async function restoreDay(run: Run, date: number) {
  * Saves a finished day, last of all writing the entry that makes it visible, so a
  * partly saved day can never be restored as if it were whole.
  */
-async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null) {
+async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null, positions?: PositionDay) {
   const version = Engine.metricVersion();
   const key = dayKey(run.feedKey, date, version);
   if (events && !(await run.wait(putEntry('events', key, {events} satisfies EventsEntry)))) return false;
-  if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString()} satisfies DayEntry)))) return false;
+  const entry: DayEntry = {cube, digest, savedAt: new Date().toISOString(), positionRevision: positions?.revision, positions: positions?.provenance};
+  if (!(await run.wait(putEntry('days', key, entry)))) return false;
   return run.wait(putEntry('dayIndex', key, {bytes: cube.byteLength} satisfies DayIndexEntry));
 }
 
@@ -384,25 +390,45 @@ function rememberEvents(date: number) {
   }
 }
 
-async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult) {
-  const {dates, dateMax} = request;
+interface PositionDay {
+  revision: string;
+  provenance: PositionProvenance;
+  routeType: number | null;
+}
+
+interface SourcePlan {
+  files: PositionFile[];
+  notes?: string[];
+  choices?: Map<number, ScheduleChoice>;
+}
+
+interface SourceSession {
+  ingestion: 'trip' | 'positions';
+  days?: Map<number, PositionDay>;
+  plan(dates: number[]): Promise<SourcePlan>;
+}
+
+interface SourceAdapter {
+  name: string;
+  matches(key: string): boolean;
+  discover(pin?: string): Promise<Feed[]>;
+  open(run: Run, request: AnalyzeRequest): Promise<SourceSession>;
+}
+
+interface GtfsRtFile {
+  url: string;
+  utc_date: string;
+  window_start: number;
+  window_end: number;
+  ends_at: number;
+  completes: number[];
+}
+
+async function planGtfsRt(run: Run, remaining: number[], dateMax: string): Promise<SourcePlan> {
   const target = run.engine;
-
-  const remaining: number[] = [];
-  for (const date of [...new Set(dates)].sort((a, b) => a - b)) {
-    if (await restoreDay(run, date)) {
-      result.cached.push(date);
-      run.emit({event: 'day', date, cached: true});
-    } else {
-      remaining.push(date);
-    }
-  }
-  if (!remaining.length) return;
-
   const notes: string[] = [];
   run.stage('Starting the local database', 0, 0, remaining.length);
   await run.wait(ensureDatabase());
-  result.engineVersion = engineVersion;
 
   run.stage('Looking up this feed in the archive', 0, 0, remaining.length);
   const metadata = await withFile(run, 'feeds.parquet', `${ARCHIVE}feeds.parquet`, async () => {
@@ -449,60 +475,256 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   if (estimated) notes.push(`The archive has no schedule stating this agency's time zone, so ${timezone} was estimated from vehicle positions. Hours of the day may be off if that is wrong.`);
   target.setClock(clockSamples(timezone, remaining[0], remaining[remaining.length - 1]));
 
-  const plan: {files: any[]} = JSON.parse(target.planRead(run.feedKey, JSON.stringify(remaining), dateMax));
+  const plan: {files: GtfsRtFile[]} = JSON.parse(target.planRead(run.feedKey, JSON.stringify(remaining), dateMax));
+  return {
+    notes, choices,
+    files: plan.files.map(file => ({
+      date: file.utc_date, start: file.ends_at - 86400, end: file.ends_at,
+      windowStart: file.window_start, windowEnd: file.window_end, completes: file.completes,
+      handle: {kind: 'range', url: file.url},
+    })),
+  };
+}
+
+interface DailySource {
+  timezone: string;
+  manifest?: string;
+  reportTime: string;
+  routeType: number | null;
+  objects: ReadonlyMap<string, DailyObject>;
+  gaps: PositionProvenance['gaps'];
+}
+
+/** Opens a GPS feed from daily files, whether they were published or picked locally. */
+export async function openDailySource(run: Run, dates: number[], source: DailySource): Promise<SourceSession> {
+  const {timezone, manifest, reportTime, routeType, objects, gaps} = source;
+  run.engine.setClock(clockSamples(timezone, dates[0], dates[dates.length - 1]));
+  const windows = new Map(dates.map(date => {
+    const [start, end] = run.engine.gpsWindow(date);
+    return [date, [start, end] as [number, number]];
+  }));
+  const all = planDailyPositions(timezone, windows, objects);
+  const days = new Map(await Promise.all([...all.days].map(async ([date, day]) => {
+    const [start, end] = day.window;
+    const overlapping = gaps.filter(gap => gap.start < end && gap.end > start);
+    const provenance: PositionProvenance = {date, timezone, manifest, reportTime, ...day, gaps: overlapping};
+    // A new index may add or correct unrelated days. Key this result by the
+    // inputs that can change it, including the adapter version and gap notes.
+    const revision = await sha256(new TextEncoder().encode(JSON.stringify([
+      1, timezone, reportTime, routeType, day.window, day.files.map(file => file.sha256 ?? null), overlapping,
+    ])));
+    return [date, {revision, provenance, routeType}] as const;
+  })));
+  return {
+    ingestion: 'positions', days,
+    async plan(selected) {
+      if (selected.length === dates.length) return all;
+      return planDailyPositions(timezone, new Map(selected.map(date => [date, windows.get(date)!])), objects);
+    },
+  };
+}
+
+const gtfsRt: SourceAdapter = {
+  name: 'gtfsrt.io',
+  matches: () => true,
+  async discover() {
+    const feeds = await archiveJson<Feed[]>('inventory.json');
+    if (!Array.isArray(feeds) || feeds.length > 5000) throw new Error('The archive catalog has an unexpected shape.');
+    return feeds.filter(feed => feed && typeof feed.base64url === 'string' && !isChicagoFeed(feed.base64url))
+      .map(({positions: _positions, ...feed}) => feed);
+  },
+  async open(run, request) {
+    return {ingestion: 'trip', plan: dates => planGtfsRt(run, dates, request.dateMax)};
+  },
+};
+
+const chicago: SourceAdapter = {
+  name: 'Chicago Transit Alerts',
+  matches: isChicagoFeed,
+  async discover(pin) {
+    return chicagoCatalog(await openChicagoArchive(pin));
+  },
+  async open(run, request) {
+    const key = request.feedKey;
+    if (!isChicagoFeed(key)) throw new Error('Choose a Chicago Transit Alerts feed.');
+    run.stage('Opening the Chicago Transit Alerts archive');
+    const archive = await openChicagoArchive(request.manifest, run.abort.signal);
+    const objects = archive.objects.get(key)!;
+    if (!objects.size) throw new Error('This Chicago Transit Alerts manifest has no files for the selected feed.');
+    return openDailySource(run, request.dates, {
+      timezone: CHICAGO_TIMEZONE, manifest: archive.manifest,
+      reportTime: chicagoReportTime(key), routeType: CHICAGO_FEEDS[key] === 'bus' ? 3 : 1,
+      objects, gaps: archive.gaps.get(key)!,
+    });
+  },
+};
+
+const sources = [chicago, gtfsRt];
+
+/** Registers a source from another app entry point, such as a local import. */
+export function registerPositionSource(adapter: SourceAdapter) {
+  sources.unshift(adapter);
+}
+
+async function catalog(requested?: string, pin?: string): Promise<FeedCatalog> {
+  const results = await Promise.allSettled(sources.map(source => source.discover(
+    requested && source.matches(requested) ? pin : undefined,
+  )));
+  const feeds: Feed[] = [];
+  const warnings: string[] = [];
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'fulfilled') feeds.push(...result.value);
+    else warnings.push(`${sources[index].name} could not be loaded. ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+  }
+  if (!feeds.length && warnings.length) throw new Error(warnings.join(' '));
+  return {feeds, warnings};
+}
+
+async function withPositionBuffer(run: Run, alias: string, data: Uint8Array, use: () => Promise<void>) {
+  await run.wait(ensureDatabase());
+  await run.wait(db!.registerFileBuffer(alias, data));
+  try {
+    await use();
+  } finally {
+    if (!run.cancelled) await run.wait(db!.dropFile(alias).catch(() => {}));
+  }
+}
+
+async function readPositions(run: Run, source: SourceSession, file: PositionFile, progress: (within: number) => void): Promise<ReadRecord> {
+  const started = performance.now();
+  const handle = file.handle;
+  const record: ReadRecord = {
+    date: file.date, url: handle?.kind === 'local' ? '' : handle?.url ?? '',
+    bytes: 0, status: 'missing', rows: 0, seconds: 0, sql: '',
+  };
+  const label = `${file.date} positions`;
+  const alias = 'positions.parquet';
+  let lastReport = 0;
+  const use = async () => {
+    const columns = JSON.stringify(await columnsOf(run, alias));
+    const project = source.ingestion === 'positions' ? Engine.positionFixesQuery : Engine.fixesQuery;
+    record.sql = project(columns, alias, file.windowStart, file.windowEnd);
+    await stream(run, record.sql, batch => {
+      const fetched = numberColumn(batch, 'fetch') as Float64Array;
+      const timestamp = numberColumn(batch, 'timestamp');
+      const lat = numberColumn(batch, 'latitude');
+      const lon = numberColumn(batch, 'longitude');
+      const vehicle = textColumn(batch, 'vehicle_id');
+      const route = textColumn(batch, 'route_id');
+      if (source.ingestion === 'positions') {
+        run.engine.pushPositions(fetched, timestamp, lat, lon, numberColumn(batch, 'approximate'), ...vehicle, ...route);
+      } else {
+        run.engine.pushFixes(fetched, timestamp, lat, lon, numberColumn(batch, 'occupancy_status'), numberColumn(batch, 'differential'),
+          ...textColumn(batch, 'trip_id'), ...vehicle, ...route,
+          ...textColumn(batch, 'start_date'), ...textColumn(batch, 'start_time'));
+      }
+      record.rows += fetched.length;
+      const now = performance.now();
+      if (now - lastReport > 250 && fetched.length) {
+        lastReport = now;
+        const within = file.rows !== undefined
+          ? record.rows / Math.max(1, file.rows)
+          : (fetched[fetched.length - 1] - file.windowStart) / (file.windowEnd - file.windowStart);
+        progress(Math.min(1, Math.max(0, within)));
+      }
+    });
+    record.status = 'read';
+  };
+
+  if (handle?.kind === 'range') {
+    const size = await run.wait(objectSize(handle.url, label));
+    if (size !== null) {
+      record.bytes = enforceObjectSize(size, label);
+      await withFile(run, alias, handle.url, use);
+    }
+  } else if (handle?.kind === 'verified') {
+    if (handle.bytes > MAX_POSITION_FILE_BYTES) throw new Error(`${label} exceeds the 64 MiB position file limit.`);
+    const response = await run.wait(handle.fetch(run.abort.signal));
+    if (response.ok) {
+      const data = await run.wait(verifiedPositionBytes(response, handle.bytes, handle.sha256, MAX_POSITION_FILE_BYTES));
+      record.bytes = data.byteLength;
+      await withPositionBuffer(run, alias, data, use);
+    } else if (response.status !== 404) {
+      throw new Error(`The archive returned HTTP ${response.status} for ${label}.`);
+    }
+  } else if (handle?.kind === 'local') {
+    if (handle.file.size > MAX_POSITION_FILE_BYTES) throw new Error(`${label} exceeds the 64 MiB position file limit.`);
+    const data = new Uint8Array(await run.wait(handle.file.arrayBuffer()));
+    if (await run.wait(sha256(data)) !== handle.sha256) throw new Error(`${label} did not match its expected checksum.`);
+    record.bytes = data.byteLength;
+    await withPositionBuffer(run, alias, data, use);
+  }
+  record.seconds = (performance.now() - started) / 1000;
+  return record;
+}
+
+async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult) {
+  const target = run.engine;
+  const dates = [...new Set(request.dates)].sort((a, b) => a - b);
+  if (!dates.length || dates.length > 62) throw new Error('Choose between 1 and 62 service days.');
+  for (const date of dates) {
+    const iso = formatDate(date);
+    const instant = Date.parse(iso);
+    if (!Number.isInteger(date) || !Number.isFinite(instant) || new Date(instant).toISOString().slice(0, 10) !== iso) {
+      throw new Error('Choose valid service dates.');
+    }
+  }
+  const adapter = sources.find(source => source.matches(run.feedKey))!;
+  const source = await run.wait(adapter.open(run, {...request, dates}));
+  const remaining: number[] = [];
+  for (const date of dates) {
+    const positions = source.days?.get(date);
+    if (positions) target.removeDay(date);
+    if (await restoreDay(run, date, positions)) {
+      result.cached.push(date);
+      if (positions) run.emit({event: 'positions', record: positions.provenance});
+      run.emit({event: 'day', date, cached: true});
+    } else {
+      remaining.push(date);
+    }
+  }
+  if (!remaining.length) return;
+
+  const {files, choices, notes = []} = await run.wait(source.plan(remaining));
   target.clearBuffer();
-  const totalFiles = plan.files.length;
+  const totalFiles = files.length;
   let completedDays = 0;
   let saveFailed = false;
   const missing: [number, number][] = [];
   const failedSchedules = new Map<string, string>();
   const processed = new Set<number>();
 
-  for (const [fileIndex, file] of plan.files.entries()) {
-    const started = performance.now();
-    const label = `${file.utc_date}`;
+  const missingFiles = new Set<string>();
+
+  for (const [fileIndex, file] of files.entries()) {
+    const label = file.date;
     const dayIndex = completedDays + 1;
     const progress = (within: number) => (fileIndex + within) / totalFiles;
     run.stage(`Checking the ${label} archive file`, progress(0), dayIndex, remaining.length);
-    const size = await run.wait(objectSize(file.url, `Archive ${label}`));
-    const record: ReadRecord = {date: file.utc_date, url: file.url, bytes: size ?? 0, status: size === null ? 'missing' : 'read', rows: 0, seconds: 0, sql: ''};
-    if (size === null) {
-      missing.push([file.ends_at - 86400, file.ends_at]);
-    } else {
-      enforceObjectSize(size, `Archive ${label}`);
-      await withFile(run, file.alias, file.url, async () => {
-        const columns = await columnsOf(run, file.alias);
-        const sql = Engine.fixesQuery(JSON.stringify(columns), file.alias, file.window_start, file.window_end);
-        record.sql = sql;
-        let lastReport = 0;
-        await stream(run, sql, batch => {
-          const fetched = numberColumn(batch, 'fetch') as Float64Array;
-          const [tripOffsets, tripBytes] = textColumn(batch, 'trip_id');
-          const [vehicleOffsets, vehicleBytes] = textColumn(batch, 'vehicle_id');
-          const [routeOffsets, routeBytes] = textColumn(batch, 'route_id');
-          const [dateOffsets, dateBytes] = textColumn(batch, 'start_date');
-          const [timeOffsets, timeBytes] = textColumn(batch, 'start_time');
-          target.pushFixes(fetched, numberColumn(batch, 'timestamp'), numberColumn(batch, 'latitude'), numberColumn(batch, 'longitude'),
-            numberColumn(batch, 'occupancy_status'), numberColumn(batch, 'differential'),
-            tripOffsets, tripBytes, vehicleOffsets, vehicleBytes, routeOffsets, routeBytes, dateOffsets, dateBytes, timeOffsets, timeBytes);
-          record.rows += fetched.length;
-          const now = performance.now();
-          if (now - lastReport > 250 && fetched.length) {
-            lastReport = now;
-            // Files are written in time order, so the clock shows how far along we are.
-            const within = Math.min(1, Math.max(0, (fetched[fetched.length - 1] - file.window_start) / (file.window_end - file.window_start)));
-            run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length);
-          }
-        });
-      });
+    const record = await readPositions(run, source, file, within => {
+      run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length);
+    });
+    result.engineVersion = engineVersion;
+    if (record.status === 'missing') {
+      missing.push([file.start, file.end]);
+      missingFiles.add(file.date);
     }
-    record.seconds = (performance.now() - started) / 1000;
     run.emit({event: 'read', record});
 
-    for (const date of file.completes as number[]) {
+    for (const date of file.completes) {
       processed.add(date);
       const dayNotes = [...notes];
-      const choice = choices.get(date);
+      const positions = source.days?.get(date);
+      const choice = choices?.get(date);
+      if (positions) {
+        dayNotes.push(positions.provenance.reportTime);
+        for (const gap of positions.provenance.gaps) {
+          const time = new Intl.DateTimeFormat('en-US', {
+            timeZone: positions.provenance.timezone, month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', timeZoneName: 'short',
+          });
+          dayNotes.push(`${gap.reduced ? 'Reduced polling' : 'Known archive gap'} (${time.formatRange(gap.start * 1000, gap.end * 1000)}). ${gap.note}`);
+        }
+      }
       if (choice && !failedSchedules.has(choice.key)) {
         try {
           await loadSchedule(run, choice, formatDate(date));
@@ -524,13 +746,24 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       const useSchedule = joined && (!hasFixes || match >= MIN_TRIP_MATCH);
       const missingJson = JSON.stringify(missing);
       const notesJson = JSON.stringify(dayNotes);
+      const options = positions ? JSON.stringify({
+        revision: positions.revision, route_type: positions.routeType,
+        outages: positions.provenance.gaps.filter(gap => !gap.reduced).map(gap => [Math.floor(gap.start), Math.ceil(gap.end)]),
+        reduced_polling: positions.provenance.gaps.some(gap => gap.reduced),
+      }) : undefined;
       const output = (useSchedule
-        ? target.processDay(date, choice!.key, file.ends_at, missingJson, notesJson)
-        : target.processGpsDay(date, file.ends_at, missingJson, notesJson)) as {status: string; cube?: Uint8Array; events?: Uint8Array; meta?: Uint8Array; digest?: string};
+        ? target.processDay(date, choice!.key, file.end, missingJson, notesJson)
+        : target.processGpsDay(date, file.end, missingJson, notesJson, options)) as {status: string; cube?: Uint8Array; events?: Uint8Array; meta?: Uint8Array; digest?: string};
       completedDays += 1;
 
+      if (positions) {
+        positions.provenance.files = positions.provenance.files.map(file => ({...file, missing: missingFiles.has(file.date)}));
+        run.emit({event: 'positions', record: positions.provenance});
+      }
       if (output.status === 'no_data') {
-        const reason = `The archive has no vehicle data for ${formatDate(date)}.`;
+        const reason = positions
+          ? `No usable positions were available for ${formatDate(date)}. Check the files and coverage in Data & methods.`
+          : `The archive has no vehicle data for ${formatDate(date)}.`;
         result.unavailable.push({date, reason});
         run.emit({event: 'unavailable', date, reason});
       } else {
@@ -540,7 +773,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
           const digest = useSchedule ? choice!.key : output.digest!;
           let saved = true;
           if (output.meta) saved = await run.wait(putEntry('schedules', scheduleKey(run.feedKey, digest), {meta: output.meta} satisfies ScheduleEntry));
-          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null));
+          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null, positions));
           if (saved) {
             if (output.events) rememberEvents(date);
           } else if (!saveFailed) {
@@ -553,7 +786,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       }
 
       const next = remaining[remaining.indexOf(date) + 1];
-      const nextOrigin = next ? target.serviceOrigin(next) : undefined;
+      const nextOrigin = next ? (positions ? target.gpsWindow(next)[0] : target.serviceOrigin(next)) : undefined;
       if (nextOrigin !== undefined) target.evictBefore(nextOrigin);
     }
   }
@@ -576,7 +809,7 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
   try {
     await execute(run, request, result);
   } catch (error) {
-    if (!(error instanceof RunStopped)) throw error;
+    if (!run.cancelled && !(error instanceof RunStopped)) throw error;
     result.stopped = true;
   } finally {
     if (activeRun === run) activeRun = undefined;
@@ -601,11 +834,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     await engineReady;
     return true;
   },
-  async catalog() {
-    const data = await archiveJson<Feed[]>('inventory.json');
-    if (!Array.isArray(data) || data.length > 5000) throw new Error('The archive catalog has an unexpected shape.');
-    return data;
-  },
+  catalog,
   analyze,
   async stop() {
     await stopActiveRun();

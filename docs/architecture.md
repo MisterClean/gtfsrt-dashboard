@@ -157,3 +157,9 @@ src/views/      one file per report
 - **No trip updates.** Predictions describe what a feed expected, not what happened. Stop passes come from observed positions instead, which also avoids reading files several times larger.
 - **No ridership.** The archive has none, so hotspots report vehicle hours rather than rider hours. Where a feed reports occupancy, the rollups keep it for later use.
 - **No multi-agency league table.** Agencies differ too much for one comparable score. The speed scale is absolute so a color means the same thing everywhere, but the app doesn't rank agencies.
+
+## Position sources
+
+The worker source registry separates discovery and planning from the common file reader and analysis loop. gtfsrt.io retains its UTC partition and schedule resolver. Chicago Transit Alerts resolves a versioned manifest and plans local calendar partitions against the engine’s GPS windows. Full files are capped at 64 MiB and verified against SHA-256 before registration in DuckDB. The daily-file reader also accepts local Blob handles for a future import entry point.
+
+CTA cache entries carry a revision derived from contributing file hashes, gap metadata, timezone, mode and adapter version. The manifest is resolved before restoring a result. Pinned links use immutable manifest hashes. Position results retain their source provenance in the day entry.

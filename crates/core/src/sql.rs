@@ -94,6 +94,30 @@ pub fn fixes_query(
     ))
 }
 
+/// Projects a daily positions file into the GPS batch contract. Position files
+/// use epoch milliseconds and can omit the vehicle clock and estimate flag.
+pub fn position_fixes_query(
+    columns: &[String],
+    alias: &str,
+    window_start: i64,
+    window_end: i64,
+) -> Result<String, String> {
+    let columns: HashSet<&str> = columns.iter().map(String::as_str).collect();
+    for name in ["ts", "vehicle_id", "route", "lat", "lon"] {
+        if !columns.contains(name) {
+            return Err(format!("This positions file has no {name} column."));
+        }
+    }
+    let alias = checked_alias(alias)?;
+    let timestamp = column(&columns, "vehicle_ts", "DOUBLE");
+    let approximate = column(&columns, "approx", "TINYINT");
+    let start = window_start.saturating_mul(1000);
+    let end = window_end.saturating_mul(1000);
+    Ok(format!(
+        "SELECT\n  ts::DOUBLE / 1000.0 AS fetch,\n  COALESCE({timestamp} / 1000.0, 0) AS timestamp,\n  COALESCE(TRY_CAST(lat AS FLOAT), 'nan'::FLOAT) AS latitude,\n  COALESCE(TRY_CAST(lon AS FLOAT), 'nan'::FLOAT) AS longitude,\n  COALESCE({approximate}, 0) AS approximate,\n  CAST(vehicle_id AS VARCHAR) AS vehicle_id,\n  CAST(route AS VARCHAR) AS route_id\nFROM read_parquet({alias})\nWHERE ts >= {start} AND ts < {end}"
+    ))
+}
+
 fn table_query(
     columns: &[String],
     alias: &str,
