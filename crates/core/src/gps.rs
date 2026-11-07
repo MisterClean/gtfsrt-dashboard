@@ -16,6 +16,8 @@ use crate::rt::{Fix, RtBuffer};
 use crate::schedule::{Grid, RouteMeta, ScheduleMeta, SegKey, SegMeta};
 use crate::time::{Clock, SERVICE_HOURS, ServiceDate, service_hour};
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::Deserialize;
+use std::ops::Range;
 
 /// Longest gap between fixes that still counts as one movement. Shorter than the
 /// schedule-joined limit, because a straight line across a long gap cuts corners.
@@ -48,6 +50,21 @@ pub fn gps_digest(date: ServiceDate) -> String {
     format!("gps|{date}")
 }
 
+/// The 24 hours from 3 AM belong to this date, so a fix counts on exactly one.
+pub fn gps_window(origin: i64) -> Range<i64> {
+    let start = origin + 3 * 3600;
+    start..start + 24 * 3600
+}
+
+/// Metadata and known coverage issues for an archive of position observations.
+#[derive(Debug, Deserialize)]
+pub struct PositionOptions {
+    pub revision: String,
+    pub route_type: Option<i32>,
+    pub outages: Vec<(i64, i64)>,
+    pub reduced_polling: bool,
+}
+
 /// Builds rollups for `date` from buffered fixes using position alone. Routes take
 /// their names from `known_routes` when the IDs match, and otherwise show the ID
 /// the feed reported. `coverage` and `notes` work as in [`crate::day::process_day`].
@@ -59,31 +76,60 @@ pub fn process_gps_day(
     coverage: &Coverage,
     notes: &[String],
 ) -> Result<GpsDay, String> {
+    process_gps_day_with_options(buffer, known_routes, date, clock, coverage, notes, None)
+}
+
+pub fn process_gps_day_with_options(
+    buffer: &mut RtBuffer,
+    known_routes: &[RouteMeta],
+    date: ServiceDate,
+    clock: &Clock,
+    coverage: &Coverage,
+    notes: &[String],
+    positions: Option<&PositionOptions>,
+) -> Result<GpsDay, String> {
     let origin = clock
         .service_origin(date)
         .ok_or_else(|| format!("{date} is outside the supported calendar."))?;
-    // The 24 hours from 3 AM belong to this date, so a fix counts on exactly one.
-    let window_start = origin + 3 * 3600;
-    let window_end = window_start + 24 * 3600;
+    let window = gps_window(origin);
 
     let mut fixes: Vec<Fix> = buffer
         .fixes
         .iter()
-        .filter(|fix| (window_start..window_end).contains(&i64::from(fix.time)))
+        .filter(|fix| window.contains(&i64::from(fix.time)))
         .copied()
         .collect();
-    fixes.sort_unstable_by_key(|fix| (fix.vehicle, fix.time));
+    if positions.is_some() {
+        // Conflicting reports at the same instant get a stable order. A station
+        // estimate wins a tie so that neither side of it becomes a speed sample.
+        let route = |fix: &Fix| {
+            buffer
+                .routes
+                .get(buffer.descriptors[fix.descriptor as usize].route)
+        };
+        fixes.sort_unstable_by(|a, b| {
+            (a.vehicle, a.time, !a.approximate)
+                .cmp(&(b.vehicle, b.time, !b.approximate))
+                .then_with(|| route(a).cmp(route(b)))
+                .then_with(|| a.lat.total_cmp(&b.lat))
+                .then_with(|| a.lon.total_cmp(&b.lon))
+        });
+    } else {
+        fixes.sort_unstable_by_key(|fix| (fix.vehicle, fix.time));
+    }
     fixes.dedup_by_key(|fix| (fix.vehicle, fix.time));
 
+    let usable = fixes.iter().filter(|fix| !fix.approximate);
+    let unique = usable.clone().count() as u64;
     let mut quality = Quality {
-        fixes_unique: fixes.len() as u64,
-        fixes_trip_unmatched: fixes.len() as u64,
-        fixes_on_day: fixes.len() as u64,
+        fixes_unique: unique,
+        fixes_trip_unmatched: unique,
+        fixes_on_day: unique,
         ..Quality::default()
     };
-    add_hour_counts(buffer, window_start, window_end, &mut quality);
+    add_hour_counts(buffer, window.start, window.end, &mut quality);
 
-    let center = mean_position(&fixes);
+    let center = mean_position(usable, unique);
     let grid = Grid::for_latitude(center.0);
     let mut routes: Vec<RouteMeta> = Vec::new();
     let mut route_index: FxHashMap<u32, u32> = FxHashMap::default();
@@ -94,7 +140,7 @@ pub fn process_gps_day(
     let mut vehicles: FxHashSet<(u32, u8, u32)> = FxHashSet::default();
 
     for vehicle_fixes in fixes.chunk_by(|a, b| a.vehicle == b.vehicle) {
-        let pairs = usable_pairs(vehicle_fixes, buffer, &mut quality);
+        let pairs = usable_pairs(vehicle_fixes, buffer, positions, &mut quality);
         let mut bearing_sector = 0_u8;
         for pair in pairs {
             let seconds = (pair.t1 - pair.t0) as f32;
@@ -108,7 +154,7 @@ pub fn process_gps_day(
                         id: id.to_owned(),
                         short_name: id.to_owned(),
                         long_name: String::new(),
-                        route_type: None,
+                        route_type: positions.and_then(|source| source.route_type),
                         color: String::new(),
                         text_color: String::new(),
                     });
@@ -173,7 +219,7 @@ pub fn process_gps_day(
         }
     }
 
-    add_polls(buffer, origin, &mut quality);
+    add_polls(buffer, origin, positions.map(|_| &window), &mut quality);
     // Segments with no drawable line came from pairs that never moved.
     let segs_with_paths: Vec<SegMeta> = segs
         .into_iter()
@@ -214,18 +260,29 @@ pub fn process_gps_day(
     let mut seg_rows: Vec<SegHour> = seg_hours.into_values().collect();
     seg_rows.sort_by_key(|row| (row.seg, row.hour));
 
-    // No schedule says when service runs, so judge against the daytime hours.
-    let gaps = coverage.gaps(date, origin, origin + 5 * 3600, origin + 25 * 3600);
-    let status = if quality.rows == 0 {
+    // Existing feeds infer coverage from daytime hours. Position archives
+    // provide their partition and gap coverage for the full analysis window.
+    let gaps = if positions.is_some() {
+        coverage.gaps(date, origin, window.start, window.end)
+    } else {
+        coverage.gaps(date, origin, origin + 5 * 3600, origin + 25 * 3600)
+    };
+    let has_known_gap =
+        positions.is_some_and(|source| source.reduced_polling || !source.outages.is_empty());
+    let status = if quality.rows == 0 || (positions.is_some() && unique == 0) {
         DayStatus::NoData
-    } else if gaps.is_empty() {
+    } else if gaps.is_empty() && !has_known_gap {
         DayStatus::Complete
     } else {
         DayStatus::Partial
     };
-    let mut warnings = vec![format!(
-        "{date}: this day could not be joined to a schedule, so it shows GPS speeds only, with no on-time performance, headways or run times. Speeds are measured between consecutive positions. They read about 5-10% below schedule-joined speeds network-wide, and up to 20-25% below on winding routes or feeds with sparse reports, so use them to compare routes and times of day, not as absolute speeds."
-    )];
+    let mut warnings = vec![if positions.is_some() {
+        "GPS speeds use straight-line distances between reported positions. On-time performance, scheduled headways and trip run times require a schedule match.".to_owned()
+    } else {
+        format!(
+            "{date}: this day could not be joined to a schedule, so it shows GPS speeds only, with no on-time performance, headways or run times. Speeds are measured between consecutive positions. They read about 5-10% below schedule-joined speeds network-wide, and up to 20-25% below on winding routes or feeds with sparse reports, so use them to compare routes and times of day, not as absolute speeds."
+        )
+    }];
     warnings.extend_from_slice(notes);
     warnings.extend(gaps);
     if status != DayStatus::NoData && quality.pairs_kept == 0 {
@@ -234,7 +291,10 @@ pub fn process_gps_day(
         ));
     }
 
-    let digest = gps_digest(date);
+    let digest = positions.map_or_else(
+        || gps_digest(date),
+        |source| format!("gps|{}", source.revision),
+    );
     Ok(GpsDay {
         meta: ScheduleMeta {
             digest: digest.clone(),
@@ -270,7 +330,12 @@ fn sector_of(from: (f32, f32), to: (f32, f32)) -> u8 {
 }
 
 /// Consecutive fixes that pass the rules, with long stationary runs removed.
-fn usable_pairs(fixes: &[Fix], buffer: &RtBuffer, quality: &mut Quality) -> Vec<Pair> {
+fn usable_pairs(
+    fixes: &[Fix],
+    buffer: &RtBuffer,
+    positions: Option<&PositionOptions>,
+    quality: &mut Quality,
+) -> Vec<Pair> {
     let mut kept = Vec::with_capacity(fixes.len());
     let mut stationary: Vec<Pair> = Vec::new();
     let mut stationary_seconds = 0.0_f32;
@@ -292,6 +357,10 @@ fn usable_pairs(fixes: &[Fix], buffer: &RtBuffer, quality: &mut Quality) -> Vec<
 
     for window in fixes.windows(2) {
         let (a, b) = (window[0], window[1]);
+        if a.approximate || b.approximate {
+            flush(&mut stationary, &mut stationary_seconds, &mut kept, quality);
+            continue;
+        }
         quality.pairs += 1;
         let seconds = (b.time - a.time) as f32;
         let route = buffer.descriptors[a.descriptor as usize].route;
@@ -299,9 +368,18 @@ fn usable_pairs(fixes: &[Fix], buffer: &RtBuffer, quality: &mut Quality) -> Vec<
             || buffer.routes.get(route).is_empty()
         {
             quality.pairs_no_route += 1;
+            if positions.is_some() {
+                flush(&mut stationary, &mut stationary_seconds, &mut kept, quality);
+            }
             continue;
         }
-        if seconds > MAX_GAP_S {
+        let crosses_outage = positions.is_some_and(|source| {
+            source
+                .outages
+                .iter()
+                .any(|&(start, end)| i64::from(a.time) < end && start < i64::from(b.time))
+        });
+        if seconds > MAX_GAP_S || crosses_outage {
             quality.pairs_long_gap += 1;
             flush(&mut stationary, &mut stationary_seconds, &mut kept, quality);
             continue;
@@ -337,15 +415,14 @@ fn usable_pairs(fixes: &[Fix], buffer: &RtBuffer, quality: &mut Quality) -> Vec<
     kept
 }
 
-fn mean_position(fixes: &[Fix]) -> (f64, f64) {
-    if fixes.is_empty() {
+fn mean_position<'a>(fixes: impl Iterator<Item = &'a Fix>, count: u64) -> (f64, f64) {
+    if count == 0 {
         return (0.0, 0.0);
     }
-    let count = fixes.len() as f64;
-    (
-        fixes.iter().map(|f| f64::from(f.lat)).sum::<f64>() / count,
-        fixes.iter().map(|f| f64::from(f.lon)).sum::<f64>() / count,
-    )
+    let (lat, lon) = fixes.fold((0.0, 0.0), |(lat, lon), fix| {
+        (lat + f64::from(fix.lat), lon + f64::from(fix.lon))
+    });
+    (lat / count as f64, lon / count as f64)
 }
 
 fn add_hour_counts(buffer: &RtBuffer, start: i64, end: i64, quality: &mut Quality) {
@@ -362,11 +439,14 @@ fn add_hour_counts(buffer: &RtBuffer, start: i64, end: i64, quality: &mut Qualit
     }
 }
 
-fn add_polls(buffer: &RtBuffer, origin: i64, quality: &mut Quality) {
+fn add_polls(buffer: &RtBuffer, origin: i64, window: Option<&Range<i64>>, quality: &mut Quality) {
     let mut polls = buffer.polls.clone();
     polls.sort_unstable();
     polls.dedup();
     for poll in polls {
+        if window.is_some_and(|span| !span.contains(&i64::from(poll))) {
+            continue;
+        }
         let offset = i64::from(poll) - origin;
         if (0..SERVICE_HOURS as i64 * 3600).contains(&offset) {
             quality.polls[service_hour(offset)] += 1;
@@ -411,6 +491,70 @@ mod tests {
                 differential: false,
             });
         }
+    }
+
+    #[test]
+    fn position_archives_keep_unassigned_fixes_and_break_at_station_estimates() {
+        let mut buffer = RtBuffer::default();
+        let origin = clock().service_origin(DATE).unwrap();
+        for i in 0..5 {
+            let time = (origin + 8 * 3600 + i * 20) as f64;
+            buffer.push_position(
+                RawFix {
+                    fetch: time,
+                    timestamp: 0.0,
+                    lat: 41.0 + i as f32 * 0.001,
+                    lon: -87.0,
+                    trip_id: None,
+                    vehicle_id: Some(b"0101"),
+                    route_id: Some(b"blue"),
+                    start_date: None,
+                    start_time: None,
+                    occupancy: -1,
+                    differential: false,
+                },
+                i == 2,
+            );
+        }
+        let options = PositionOptions {
+            revision: "fixture".into(),
+            route_type: Some(1),
+            outages: vec![],
+            reduced_polling: false,
+        };
+        let day = process_gps_day_with_options(
+            &mut buffer,
+            &[],
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+            Some(&options),
+        )
+        .unwrap();
+        assert_eq!(day.cube.quality.pairs_kept, 2);
+        assert_eq!(day.cube.quality.fixes_unique, 4);
+        assert_eq!(day.cube.quality.fallback_time, 5);
+        assert_eq!(day.meta.routes[0].route_type, Some(1));
+        assert_eq!(buffer.vehicles.get(0), "0101");
+        assert_eq!(day.cube.digest, "gps|fixture");
+
+        let options = PositionOptions {
+            outages: vec![(origin + 8 * 3600, origin + 9 * 3600)],
+            ..options
+        };
+        let day = process_gps_day_with_options(
+            &mut buffer,
+            &[],
+            DATE,
+            &clock(),
+            &Coverage::complete(),
+            &[],
+            Some(&options),
+        )
+        .unwrap();
+        assert_eq!(day.cube.quality.pairs_kept, 0);
+        assert_eq!(day.cube.status, DayStatus::Partial);
     }
 
     #[test]

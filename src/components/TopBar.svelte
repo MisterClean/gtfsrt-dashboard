@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {bytes, plural} from '../lib/format';
+  import {bytes, isoDate, plural} from '../lib/format';
   import {addDays} from '../lib/dates';
   import {app, feedLabel} from '../lib/state.svelte';
   import type {Mode} from '../engine/types';
@@ -14,10 +14,11 @@
     const perFile = feed.total_bytes / Math.max(1, span);
     const files = new Set<string>();
     for (const date of app.uncachedDates) {
-      const iso = `${String(date).slice(0, 4)}-${String(date).slice(4, 6)}-${String(date).slice(6, 8)}`;
+      const iso = isoDate(date);
       files.add(iso);
       files.add(addDays(iso, 1));
     }
+    if (feed.positions) return [...files].reduce((sum, date) => sum + (feed.positions!.bytesByDate[date] ?? 0), 0);
     return files.size * perFile * 0.75;
   });
 

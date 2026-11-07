@@ -28,7 +28,7 @@ The intended URL is `https://michaelmclean.me/gtfsrt-dashboard/`. The website is
        add_header X-Frame-Options "DENY" always;
        add_header Referrer-Policy "no-referrer" always;
        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
-       add_header Content-Security-Policy "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://storage.googleapis.com/parquet.gtfsrt.io/ https://tiles.openfreemap.org; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" always;
+       add_header Content-Security-Policy "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://storage.googleapis.com/parquet.gtfsrt.io/ https://tiles.openfreemap.org https://data.chicagotransitalerts.app/positions/; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" always;
        add_header Cache-Control "public, no-cache, no-transform" always;
    }
    ```
@@ -36,7 +36,7 @@ The intended URL is `https://michaelmclean.me/gtfsrt-dashboard/`. The website is
    The policy text must match `scripts/security.mjs`. Confirm `.wasm` is served as `application/wasm`, and `.js` and `.mjs` as JavaScript. The same location and policy must cover the DuckDB worker, the map worker and the extensions, because workers don't inherit a page's policy. Cross-origin isolation is unnecessary for the single-threaded DuckDB bundle.
 
 5. Build the website image and validate the nginx configuration. Commit the website integration separately.
-6. Verify on HTTPS: page and worker headers, a real archive load, switching views, stop and reload, clearing results, and that the only outside connections are the archive bucket and the basemap.
+6. Verify on HTTPS: page and worker headers, a real archive load, switching views, stop and reload, clearing results, and that the outside connections are the archive bucket, Chicago Transit Alerts positions, and the basemap.
 
 ## Release consistency
 

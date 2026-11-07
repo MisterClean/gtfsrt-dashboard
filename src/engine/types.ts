@@ -331,7 +331,17 @@ export interface Feed {
   date_max: string;
   total_records: number;
   total_bytes: number;
+  positions?: {
+    source: string;
+    url: string;
+    timezone: string;
+    mode: Mode;
+    /** Available partition dates and sizes, used to estimate a download. */
+    bytesByDate: Record<string, number>;
+  };
 }
+
+export interface FeedCatalog { feeds: Feed[]; warnings: string[] }
 
 export interface Selection {
   dates: number[];
@@ -347,6 +357,7 @@ export interface AnalyzeRequest {
   feedKey: string;
   dates: number[];
   dateMax: string;
+  manifest?: string;
 }
 
 export interface ReadRecord {
@@ -357,6 +368,16 @@ export interface ReadRecord {
   rows: number;
   seconds: number;
   sql: string;
+}
+
+export interface PositionProvenance {
+  date: number;
+  timezone: string;
+  manifest?: string;
+  window: [number, number];
+  reportTime: string;
+  files: {date: string; url?: string; sha256?: string; approximateRows?: number; missing: boolean}[];
+  gaps: {start: number; end: number; note: string; reduced: boolean}[];
 }
 
 export interface ScheduleRecord {
@@ -373,6 +394,7 @@ export type EngineEvent =
   | { event: 'day'; date: number; cached: boolean }
   | { event: 'unavailable'; date: number; reason: string }
   | { event: 'read'; record: ReadRecord }
+  | { event: 'positions'; record: PositionProvenance }
   | { event: 'schedule'; record: ScheduleRecord }
   | { event: 'warning'; message: string };
 

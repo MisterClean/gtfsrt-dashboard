@@ -1,5 +1,5 @@
 // Applied to the page AND worker responses, because workers do not inherit a
-// page's policy. The only remote hosts are the public transit archive and the
+// page's policy. The only remote hosts are the public transit archives and the
 // optional basemap. Production hosting needs these same headers; see docs/hosting.md.
 export const contentSecurityPolicy = [
   "default-src 'none'",
@@ -7,7 +7,7 @@ export const contentSecurityPolicy = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://storage.googleapis.com/parquet.gtfsrt.io/ https://tiles.openfreemap.org",
+  "connect-src 'self' https://storage.googleapis.com/parquet.gtfsrt.io/ https://tiles.openfreemap.org https://data.chicagotransitalerts.app/positions/",
   "worker-src 'self' blob:",
   "base-uri 'none'",
   "form-action 'none'",

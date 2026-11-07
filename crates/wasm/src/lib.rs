@@ -10,7 +10,7 @@ use transit_core::cube::{
     self, CachedSchedule, Coverage, DayCube, DayStatus, METRIC_VERSION, StopEvent,
 };
 use transit_core::day::process_day;
-use transit_core::gps::process_gps_day;
+use transit_core::gps::{self, PositionOptions};
 use transit_core::library::Library;
 use transit_core::report::{self, Merged, Selection};
 use transit_core::rt::{RawFix, RtBuffer};
@@ -484,6 +484,72 @@ impl Engine {
         self.buffer.fixes.len() as f64
     }
 
+    #[wasm_bindgen(js_name = removeDay)]
+    pub fn remove_day(&mut self, date: u32) {
+        self.library.days.remove(&date);
+        self.library.events.remove(&date);
+        self.merged = None;
+    }
+
+    /// Accepts GPS observations that have no scheduled trip descriptor.
+    #[wasm_bindgen(js_name = pushPositions)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_positions(
+        &mut self,
+        fetch: &[f64],
+        timestamp: &[f64],
+        lat: &[f32],
+        lon: &[f32],
+        approximate: &[i8],
+        vehicle_offsets: &[i32],
+        vehicle_bytes: &[u8],
+        route_offsets: &[i32],
+        route_bytes: &[u8],
+    ) -> Result<(), JsError> {
+        check_lengths(
+            fetch.len(),
+            &[
+                timestamp.len(),
+                lat.len(),
+                lon.len(),
+                approximate.len(),
+                vehicle_offsets.len().saturating_sub(1),
+                route_offsets.len().saturating_sub(1),
+            ],
+        )?;
+        let vehicle = TextColumn::new(vehicle_offsets, vehicle_bytes);
+        let route = TextColumn::new(route_offsets, route_bytes);
+        for row in 0..fetch.len() {
+            self.buffer.push_position(
+                RawFix {
+                    fetch: fetch[row],
+                    timestamp: timestamp[row],
+                    lat: lat[row],
+                    lon: lon[row],
+                    trip_id: None,
+                    vehicle_id: vehicle.get(row),
+                    route_id: route.get(row),
+                    start_date: None,
+                    start_time: None,
+                    occupancy: -1,
+                    differential: false,
+                },
+                approximate[row] == 1,
+            );
+        }
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = gpsWindow)]
+    pub fn gps_window(&self, date: u32) -> Result<Vec<f64>, JsError> {
+        let origin = self
+            .clock
+            .service_origin(ServiceDate(date))
+            .ok_or_else(|| error("This date is outside the supported calendar."))?;
+        let window = gps::gps_window(origin);
+        Ok(vec![window.start as f64, window.end as f64])
+    }
+
     /// Fraction of buffered fixes whose trip ID exists in the compiled schedule.
     #[wasm_bindgen(js_name = tripMatchRate)]
     pub fn trip_match_rate(&self, digest: &str) -> f64 {
@@ -571,6 +637,7 @@ impl Engine {
         read_through: f64,
         missing: &str,
         notes: &str,
+        positions: Option<String>,
     ) -> Result<Object, JsError> {
         let known = self
             .schedules
@@ -578,13 +645,19 @@ impl Engine {
             .map(|schedule| schedule.routes.clone())
             .unwrap_or_default();
         let (coverage, notes) = coverage_and_notes(read_through, missing, notes)?;
-        let day = process_gps_day(
+        let positions: Option<PositionOptions> = positions
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(|e| error(format!("Invalid position options: {e}")))?;
+        let day = gps::process_gps_day_with_options(
             &mut self.buffer,
             &known,
             ServiceDate(date),
             &self.clock,
             &coverage,
             &notes,
+            positions.as_ref(),
         )
         .map_err(error)?;
         let output = Object::new();
@@ -827,6 +900,18 @@ impl Engine {
         let columns: Vec<String> =
             serde_json::from_str(columns).map_err(|e| error(format!("Invalid columns: {e}")))?;
         sql::fixes_query(&columns, alias, start as i64, end as i64).map_err(error)
+    }
+
+    #[wasm_bindgen(js_name = positionFixesQuery)]
+    pub fn position_fixes_query(
+        columns: &str,
+        alias: &str,
+        start: f64,
+        end: f64,
+    ) -> Result<String, JsError> {
+        let columns: Vec<String> =
+            serde_json::from_str(columns).map_err(|e| error(format!("Invalid columns: {e}")))?;
+        sql::position_fixes_query(&columns, alias, start as i64, end as i64).map_err(error)
     }
 
     #[wasm_bindgen(js_name = scheduleQuery)]

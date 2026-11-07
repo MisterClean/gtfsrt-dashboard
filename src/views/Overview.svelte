@@ -38,6 +38,7 @@
   });
 
   const o = $derived(app.overview);
+  const positions = $derived(Boolean(app.feed?.positions));
   const list = $derived(o ? findings(o, app.routes, app.units) : []);
   const lead = $derived(list[0] ?? null);
   const byHour = $derived(new Map<number, HourRow>((o?.hourly ?? []).map(row => [row.hour, row])));
@@ -67,6 +68,7 @@
     {key: 'gaps', label: 'Capture gaps', title: 'Five-minute periods during scheduled service with no archived feed capture', value: d => d.empty_buckets, format: d => (d.service_buckets === 0 ? '—' : d.empty_buckets ? `${(d.empty_buckets * 5).toLocaleString('en-US')} min` : 'None')},
     {key: 'status', label: 'Status', left: true, value: d => (d.status === 'Partial' ? 'Partial' : 'Complete'), format: d => (d.status === 'Partial' ? 'Partial, see note above' : d.empty_buckets > 0 ? 'Complete, with gaps' : 'Complete')},
   ]);
+  const positionDayColumns = new Set(['date', 'speed', 'peak', 'status']);
 </script>
 
 {#if o}
@@ -90,13 +92,14 @@
       <div class="stat">
         <dt><Term topic="speed">Operating speed</Term></dt>
         <dd>{speed(o.speed, app.units)} <small>{unit}</small></dd>
-        <div class="sub">{speed(o.scheduled_speed, app.units)} scheduled, stops included</div>
+        <div class="sub">{positions ? 'Estimated from GPS positions' : `${speed(o.scheduled_speed, app.units)} scheduled, stops included`}</div>
       </div>
       <div class="stat">
         <dt><Term topic="period">Peak speed</Term></dt>
         <dd>{speed(o.speed_peak, app.units)} <small>{unit}</small></dd>
         <div class="sub">{signedPct(peakChange)} against midday</div>
       </div>
+      {#if !positions}
       <div class="stat">
         <dt><Term topic="ontime">On-time departures</Term></dt>
         <dd>{pct(onTimeShare)}</dd>
@@ -112,6 +115,7 @@
           <div class="sub">No schedule to compare with</div>
         {/if}
       </div>
+      {/if}
       {#if o.headways}
         <div class="stat">
           <dt><Term topic="headways">Excess wait</Term></dt>
@@ -120,7 +124,7 @@
         </div>
       {/if}
       <div class="stat">
-        <dt><Term topic="service">Vehicles at peak</Term></dt>
+        <dt><Term topic="service">{positions ? 'Vehicles observed at peak' : 'Vehicles at peak'}</Term></dt>
         <dd>{int(o.peak_vehicles)}</dd>
         <div class="sub">{int(o.service_hours_observed_per_day)} service hours a day</div>
       </div>
@@ -149,22 +153,23 @@
 
     <section class="section">
       <div class="section-head">
-        <div><h2>Through the day</h2><p class="note">Pointing at any chart moves all four. Shaded bands mark the 7–9 AM and 4–6 PM peaks.</p></div>
+        <div><h2>Through the day</h2><p class="note">Pointing at any chart highlights the same hour across the charts. Shaded bands mark the 7–9 AM and 4–6 PM peaks.</p></div>
       </div>
       <div class="small-multiples">
         <figure>
           <figcaption><h3><Term topic="speed">Speed, {unit}</Term></h3></figcaption>
           <LineChart
             bind:hover
-            label="Measured and scheduled speed by hour"
+            label={positions ? 'Measured speed by hour' : 'Measured and scheduled speed by hour'}
             format={v => v.toFixed(1)}
             formatAxis={v => v.toFixed(0)}
             series={[
               {key: 'obs', label: 'Measured', color: 'var(--ink)', values: at(r => toSpeed(r.speed))},
-              {key: 'sched', label: 'Scheduled', color: 'var(--gray-series)', reference: true, values: at(r => toSpeed(r.scheduled_speed))},
+              ...(!positions ? [{key: 'sched', label: 'Scheduled', color: 'var(--gray-series)', reference: true, values: at(r => toSpeed(r.scheduled_speed))}] : []),
             ]}
           />
         </figure>
+        {#if !positions}
         <figure>
           <figcaption><h3><Term topic="ontime">On-time departures at timepoints</Term></h3></figcaption>
           <LineChart
@@ -189,11 +194,12 @@
             ]}
           />
         </figure>
+        {/if}
         <figure>
-          <figcaption><h3><Term topic="service">Vehicles in service</Term></h3></figcaption>
+          <figcaption><h3><Term topic="service">{positions ? 'Vehicles observed' : 'Vehicles in service'}</Term></h3></figcaption>
           <LineChart
             bind:hover
-            label="Distinct vehicles in service by hour"
+            label={positions ? 'Distinct vehicles observed by hour' : 'Distinct vehicles in service by hour'}
             yMin={0}
             format={v => v.toFixed(0)}
             legend
@@ -218,7 +224,7 @@
       <div class="section-head">
         <div><h2>Day by day</h2><p class="note">Look here first when one result seems off. A capture gap means the archive has no feed snapshots for that time, not that service stopped.</p></div>
       </div>
-      <DataTable columns={dayColumns} rows={o.days} caption="Results by service day" defaultSort="date" filename="days.csv" />
+      <DataTable columns={positions ? dayColumns.filter(column => positionDayColumns.has(column.key)) : dayColumns} rows={o.days} caption="Results by service day" defaultSort="date" filename="days.csv" />
     </section>
   </div>
 {/if}

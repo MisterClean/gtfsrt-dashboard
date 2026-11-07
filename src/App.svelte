@@ -46,6 +46,9 @@
     {#if app.catalogError}
       <div class="page"><div class="banner error" role="alert"><strong>The archive catalog could not be loaded.</strong> {app.catalogError} <button class="btn small" onclick={() => { app.catalogError = null; app.start(); }}>Try again</button></div></div>
     {/if}
+    {#each app.catalogWarnings as warning}
+      <div class="notice"><div class="banner caution" role="status">{warning}</div></div>
+    {/each}
     {#if app.error}
       <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error} Days already finished are still here.</div></div>
     {/if}
@@ -58,6 +61,12 @@
 
     {#if app.view === 'data'}
       <DataView />
+    {:else if app.feed?.positions && (app.view === 'reliability' || app.view === 'stops')}
+      <div class="page">
+        <h1>{app.view === 'reliability' ? 'Reliability' : 'Stops'}</h1>
+        <p class="lede">This report needs positions linked to scheduled trips. This feed supports GPS speeds and coverage.</p>
+        <button class="btn" onclick={() => app.go('data')}>Open Data &amp; methods</button>
+      </div>
     {:else if !app.hasResults}
       <div class="page start">
         <div class="start-copy">
@@ -65,7 +74,11 @@
           {#if app.running}
             <p class="lede">The first results appear as soon as the first day is finished, and they refine as each day is added. You can keep reading while it works.</p>
           {:else if app.feed}
-            <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
+            {#if app.feed.positions}
+              <p class="lede">See vehicle speeds by route and hour, and when the archive captured positions. These results use GPS observations from {app.feed.positions.source}.</p>
+            {:else}
+              <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
+            {/if}
             <p class="lede">Your browser reads the public archive directly and does the analysis itself. There is no account, no upload and no query server. Results stay on this device, so a day only has to be analyzed once.</p>
             <div class="tools">
               <button class="btn primary big" disabled={!app.dates.length} onclick={() => app.analyze()}>Analyze {plural(app.pendingDates.length, 'day')}</button>

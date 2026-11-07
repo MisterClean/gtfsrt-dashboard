@@ -1,3 +1,5 @@
+import type {PositionProvenance} from './types';
+
 // The visitor's own results, kept in their browser so a day is only ever
 // analysed once. Holds derived rollups, never raw vehicle data. Every read and write
 // tolerates storage being unavailable: the app then simply re-analyses.
@@ -61,7 +63,13 @@ export function putEntry(store: Store, key: string, value: unknown): Promise<boo
 export const dayKey = (feed: string, date: number, version: number) => `${feed}|${date}|${version}`;
 export const scheduleKey = (feed: string, digest: string) => `${feed}|${digest}`;
 
-export interface DayEntry { cube: Uint8Array; digest: string; savedAt: string }
+export interface DayEntry {
+  cube: Uint8Array;
+  digest: string;
+  savedAt: string;
+  positionRevision?: string;
+  positions?: PositionProvenance;
+}
 export interface EventsEntry { events: Uint8Array }
 export interface ScheduleEntry { meta: Uint8Array }
 /** Where a zone came from matters: a schedule's own zone always beats an estimate. */

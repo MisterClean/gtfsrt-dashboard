@@ -9,8 +9,9 @@
   interface Props {
     days: QualityDay[];
     units: Units;
+    positions?: boolean;
   }
-  let {days, units}: Props = $props();
+  let {days, units, positions = false}: Props = $props();
 
   interface Step {
     key: string;
@@ -46,7 +47,7 @@
         {key: 'no_vehicle', label: 'No vehicle ID', indent: true, value: q => q.no_vehicle, base: q => q.rows},
         {key: 'bad', label: 'Unusable coordinates', title: 'Outside valid ranges, or exactly (0, 0)', indent: true, value: q => q.bad_coordinate, base: q => q.rows},
         {key: 'repeats', label: 'Repeated polls, and rows on other days’ trips', title: 'What remains after the steps above and the reports used below. Approximate, because rows are counted by hour and reports by service day.', indent: true, value: repeats, base: q => q.rows},
-        {key: 'on_day', label: 'Distinct reports on this day’s trips', title: 'One per vehicle, trip and report time', strong: true, value: q => q.fixes_on_day, base: q => q.rows},
+        {key: 'on_day', label: positions ? 'Distinct measured positions' : 'Distinct reports on this day’s trips', title: positions ? 'One per vehicle and report second, excluding station estimates' : 'One per vehicle, trip and report time', strong: true, value: q => q.fixes_on_day, base: q => q.rows},
         {key: 'no_date', label: 'No operating day for that trip nearby', title: 'The trip ID is in the schedule, but no service date within reach runs it, so these reports could not be assigned to a day', indent: true, value: q => q.fixes_no_service_date},
         {key: 'off_route', label: 'More than 120 m off the route line', title: 'Skipped, usually a detour', indent: true, value: q => q.off_route, base: q => q.fixes_on_day},
         {key: 'backward', label: 'Moved backward along the line', title: 'More than 30 m, usually GPS jitter. Held at the furthest point reached rather than removed.', indent: true, value: q => q.backward, base: q => q.fixes_on_day},
@@ -57,13 +58,13 @@
     {
       title: 'Intervals between reports',
       steps: [
-        {key: 'pairs', label: 'Intervals', title: 'Consecutive reports on one trip', strong: true, value: q => q.pairs},
+        {key: 'pairs', label: 'Intervals', title: positions ? 'Consecutive positions from one vehicle' : 'Consecutive reports on one trip', strong: true, value: q => q.pairs},
         {key: 'no_route', label: 'No route reported, or route changed', title: 'GPS-only days, where a pair of reports needs one route to belong to', indent: true, value: q => q.pairs_no_route, base: q => q.pairs},
         {key: 'layover', label: 'Terminal layover trimmed', indent: true, value: q => q.pairs_layover, base: q => q.pairs},
-        {key: 'gap', label: 'Reporting gap over 3 minutes', indent: true, value: q => q.pairs_long_gap, base: q => q.pairs},
+        {key: 'gap', label: positions ? 'Gap over 2 minutes or known outage' : 'Reporting gap over 3 minutes', indent: true, value: q => q.pairs_long_gap, base: q => q.pairs},
         {key: 'geometry', label: 'Progress the GPS doesn’t support', indent: true, value: q => q.pairs_geometry, base: q => q.pairs},
         {key: 'fast', label: 'Above the speed backstop', indent: true, value: q => q.pairs_too_fast, base: q => q.pairs},
-        {key: 'standstill', label: 'Standstill of 10 minutes or more', indent: true, value: q => q.pairs_standstill, base: q => q.pairs},
+        {key: 'standstill', label: positions ? 'Standstill of 5 minutes or more' : 'Standstill of 10 minutes or more', indent: true, value: q => q.pairs_standstill, base: q => q.pairs},
         {key: 'kept', label: 'Kept for speed', strong: true, value: q => q.pairs_kept, base: q => q.pairs},
       ],
     },
@@ -92,6 +93,10 @@
       ],
     },
   ]);
+  const tripSteps = new Set(['no_trip', 'repeats', 'no_date', 'off_route', 'backward', 'unmatched', 'layover', 'geometry', 'layover_s']);
+  const visibleGroups = $derived(positions
+    ? groups.slice(0, 3).map(group => ({...group, steps: group.steps.filter(step => !tripSteps.has(step.key))}))
+    : groups);
 
   const sum = (read: (q: Quality) => number) => days.reduce((total, day) => total + read(day.quality), 0);
   const display = (step: Step, value: number) => (step.format ? step.format(value) : int(value));
@@ -103,7 +108,7 @@
   }
 
   function exportCsv() {
-    const steps = groups.flatMap(group => group.steps.map(step => ({...step, group: group.title})));
+    const steps = visibleGroups.flatMap(group => group.steps.map(step => ({...step, group: group.title})));
     downloadCsv(
       'data-quality.csv',
       [
@@ -130,7 +135,7 @@
         {#each days as day}<th scope="col">{dateLabel(day.date)}</th>{/each}
       </tr>
     </thead>
-    {#each groups as group}
+    {#each visibleGroups as group}
       <tbody>
         <tr class="group">
           <th class="left group-head" scope="rowgroup" colspan={3 + days.length}><span>{group.title}</span></th>

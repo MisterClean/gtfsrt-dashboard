@@ -2,7 +2,7 @@
 // from the worker's merged rollups whenever it changes.
 import {engine} from '../engine/client';
 import type {
-  AnalyzeResult, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
+  AnalyzeResult, EngineEvent, Feed, Mode, Overview, PositionProvenance, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
 } from '../engine/types';
 import {decodeDates, encodeDates, lastDays} from './dates';
 import {slowestHour} from './findings';
@@ -29,6 +29,8 @@ class AppState {
   feeds = $state<Feed[]>([]);
   feedKey = $state<string | null>(null);
   catalogError = $state<string | null>(null);
+  catalogWarnings = $state<string[]>([]);
+  private positionManifest: string | undefined;
 
   dates = $state<number[]>([]);
   cachedDates = $state<number[]>([]);
@@ -63,6 +65,7 @@ class AppState {
   stalled = $state(false);
   warnings = $state<string[]>([]);
   reads = $state<ReadRecord[]>([]);
+  positionDays = $state<Record<number, PositionProvenance>>({});
   schedules = $state<ScheduleRecord[]>([]);
   result = $state<AnalyzeResult | null>(null);
 
@@ -83,6 +86,7 @@ class AppState {
   /** Which speed scale to color with. A commuter rail network on the bus scale is one solid color. */
   scaleMode = $derived.by((): Mode => {
     if (this.mode !== 'All') return this.mode;
+    if (this.feed?.positions) return this.feed.positions.mode;
     return (this.overview?.speed ?? 0) > 9 ? 'Rail' : 'Bus';
   });
   loadedDates = $derived(this.dates.filter(d => this.analyzedDates.includes(d)));
@@ -139,7 +143,9 @@ class AppState {
   async start() {
     try {
       await engine.init();
-      const feeds = await engine.catalog();
+      const params = new URLSearchParams(location.search);
+      const {feeds, warnings} = await engine.catalog(params.get('feed') ?? undefined, params.get('manifest') ?? undefined);
+      this.catalogWarnings = warnings;
       this.feeds = feeds
         .filter(f => f.feed_type === 'vehicle_positions' && /^[A-Za-z0-9_-]+$/.test(f.base64url))
         .sort((a, b) => feedLabel(a).localeCompare(feedLabel(b)));
@@ -155,6 +161,7 @@ class AppState {
     const requested = params.get('feed');
     const fallback = this.feeds.find(f => f.agency_id === 'metro-transit-madison') ?? this.feeds[0];
     const feed = this.feeds.find(f => f.base64url === requested) ?? fallback;
+    this.positionManifest = feed.positions && feed.base64url === requested ? params.get('manifest') ?? undefined : undefined;
     const view = params.get('view') as View | null;
     if (view && ['overview', 'map', 'routes', 'route', 'reliability', 'stops', 'hotspots', 'data'].includes(view)) this.view = view;
     this.routeId = params.get('route');
@@ -170,6 +177,7 @@ class AppState {
     const url = new URL(location.href);
     url.search = '';
     if (this.feedKey) url.searchParams.set('feed', this.feedKey);
+    if (this.feed?.positions && this.positionManifest) url.searchParams.set('manifest', this.positionManifest);
     for (const [key, value] of Object.entries(encodeDates(this.dates))) url.searchParams.set(key, value as string);
     if (this.view !== 'overview') url.searchParams.set('view', this.view);
     if (this.routeId && this.view === 'route') url.searchParams.set('route', this.routeId);
@@ -196,6 +204,7 @@ class AppState {
       this.routes = [];
       this.quality = null;
       this.reads = [];
+      this.positionDays = {};
       this.schedules = [];
       this.warnings = [];
       this.result = null;
@@ -211,7 +220,7 @@ class AppState {
     if (feedKey !== this.feedKey) return;
     const feed = this.feed;
     if (dates && feed) this.dates = this.cleanDates(dates, feed);
-    else if (feed) this.dates = lastDays(feed.date_min, feed.date_max, 'weekday', 5);
+    else if (feed) this.dates = lastDays(feed.date_min, feed.date_max, 'weekday', feed.positions ? 1 : 5);
     this.writeUrl();
     // Days already on this device load without asking. New downloads wait for a click.
     if (this.dates.some(d => this.cachedDates.includes(d))) {
@@ -232,8 +241,10 @@ class AppState {
   }
 
   async refreshCached() {
-    if (!this.feedKey) return;
-    const cached = await engine.cachedDays(this.feedKey);
+    const feed = this.feedKey;
+    if (!feed) return;
+    const cached = await engine.cachedDays(feed);
+    if (this.feedKey !== feed) return;
     this.cachedDates = cached.dates;
     this.cachedBytes = cached.bytes;
   }
@@ -261,7 +272,10 @@ class AppState {
       if (this.running) this.stalled = Date.now() - this.lastProgress > STALL_MS;
     }, 5000);
     try {
-      const result = await engine.analyze({run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
+      const result = await engine.analyze({
+        run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max,
+        manifest: this.feed.positions ? this.positionManifest : undefined,
+      });
       if (run === this.currentRun) this.result = result;
     } catch (error) {
       if (run === this.currentRun) this.error = errorText(error);
@@ -292,6 +306,7 @@ class AppState {
     this.overview = null;
     this.routes = [];
     this.quality = null;
+    this.positionDays = {};
     this.version += 1;
     if (this.feedKey) await engine.openFeed(this.feedKey);
     await this.refreshCached();
@@ -317,6 +332,9 @@ class AppState {
         break;
       case 'read':
         this.reads = [...this.reads, event.record];
+        break;
+      case 'positions':
+        this.positionDays = {...this.positionDays, [event.record.date]: event.record};
         break;
       case 'schedule':
         this.schedules = [...this.schedules.filter(s => s.key !== event.record.key), event.record];
