@@ -1,0 +1,26 @@
+name: Feature request
+description: A report, metric or change that would help your work.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to decide or do?
+      description: Start from the planning question.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data it needs
+      description: Does the GTFS-RT archive or the schedule have it? Where did you see it defined?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today

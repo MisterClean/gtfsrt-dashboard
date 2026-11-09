@@ -1,0 +1,48 @@
+name: Bug report
+description: Something broke, looked wrong or didn't load.
+labels: [bug]
+body:
+  - type: input
+    id: feed
+    attributes:
+      label: Agency feed
+      description: The agency as shown in the picker, or the feed key from the link.
+    validations:
+      required: true
+  - type: input
+    id: dates
+    attributes:
+      label: Dates selected
+      placeholder: 2026-11-03 to 2026-11-07
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser, version and device
+      placeholder: Chrome 142 on macOS
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A copied selection link helps.
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Provenance JSON
+      description: From Data & methods, "Download provenance JSON". Paste it here or attach the file. It holds feed, days, versions, warnings and counts, and no personal data.
+      render: json
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Open the browser developer tools if you can, and paste anything in red.
+      render: text
