@@ -155,6 +155,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   border: 1px solid var(--rule-strong); font-size: 13px; font-weight: 450; color: var(--ink);
 }
 select.input:hover, input.input:hover, .field select:hover { border-color: var(--faint); }
+.input::placeholder { color: var(--muted); opacity: 1; }
 
 .seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; padding: 2px; gap: 2px; border: 1px solid var(--rule-strong); border-radius: 5px; background: var(--paper); }
 .seg button {

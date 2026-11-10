@@ -12,6 +12,7 @@ import {parseHealthFile, staleness, type FeedHealth} from './health.ts';
 import {datesWhere, dayOf, inFlight, isPending, markSaved, queueDays, reduceDays, releaseDays, settleDays, type Days, type Outcome} from './days.ts';
 import {IDLE, checkStall, endRun, failRun, runEvent, selectionChanged, startRun, type RunState} from './run.ts';
 import {bootFailed, isBooting, type Boot, type BootStep} from './startup.ts';
+import {readSnapshotLocation, snapshotHash, type SnapshotClient} from './snapshot';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
 
@@ -22,13 +23,20 @@ const RUN_REFRESH_MS = 20_000;
 
 interface Preferences { units: Units; theme: 'auto' | 'light' | 'dark'; basemap: boolean }
 
+/** A host whose content policy blocks the tile server (the Claude artifact) turns the street basemap off. */
+function basemapAllowed() {
+  return document.querySelector('meta[name="transit-basemap"]')?.getAttribute('content') !== 'off';
+}
+
 function loadPreferences(): Preferences {
   const defaults: Preferences = {units: 'imperial', theme: 'auto', basemap: true};
+  let preferences = defaults;
   try {
-    return {...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')};
+    preferences = {...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')};
   } catch {
-    return defaults;
+    // Defaults stand in a private window.
   }
+  return {...preferences, basemap: preferences.basemap && basemapAllowed()};
 }
 
 class AppState {
@@ -79,6 +87,7 @@ class AppState {
   // Raw: nothing mutates these, so there is no need to wrap every row in a reactive proxy.
   routes = $state.raw<RouteScore[]>([]);
   quality = $state<QualityReport | null>(null);
+  snapshot = $state.raw<SnapshotClient | null>(null);
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   /** Results from a run or a refresh that has been superseded are ignored. */
@@ -104,7 +113,9 @@ class AppState {
   unavailableDates = $derived<Record<number, string>>(Object.fromEntries(
     datesWhere(this.days, day => day.status === 'no_data').map(date => [date, this.days[date].reason ?? 'The archive has no data for this day.']),
   ));
-  loadedDates = $derived(this.dates.filter(d => dayOf(this.days, d).status === 'loaded'));
+  loadedDates = $derived(this.snapshot
+    ? this.snapshot.manifest.overview.dates.map(dateNumber)
+    : this.dates.filter(d => dayOf(this.days, d).status === 'loaded'));
   pendingDates = $derived(this.dates.filter(d => isPending(dayOf(this.days, d))));
   /** Selected days that are saved here and will load by themselves once the current run is done. */
   queuedNext = $derived.by(() => {
@@ -211,7 +222,28 @@ class AppState {
     return this.selectFeed(feed.base64url, dates.length ? dates : null, true);
   }
 
+  openSnapshot(snapshot: SnapshotClient) {
+    this.snapshot = snapshot;
+    this.mode = 'Bus';
+    this.overview = snapshot.manifest.overview;
+    this.routes = snapshot.manifest.routes;
+    this.readSnapshotUrl();
+  }
+
+  readSnapshotUrl() {
+    const {view, routeId} = readSnapshotLocation(location.hash);
+    if (this.routeId !== routeId) this.directionIndex = 0;
+    this.view = view;
+    this.routeId = routeId;
+  }
+
   writeUrl() {
+    if (this.snapshot) {
+      const view = this.view === 'route' || this.view === 'data' ? this.view : 'routes';
+      const hash = snapshotHash(view, this.routeId);
+      if (hash !== location.hash) history.pushState(null, '', hash);
+      return;
+    }
     const url = new URL(location.href);
     url.search = '';
     if (this.feedKey) url.searchParams.set('feed', this.feedKey);
@@ -472,6 +504,19 @@ class AppState {
   }
 
   // ---- Navigation -----------------------------------------------------------
+
+  async loadRoute(id: string) {
+    if (this.snapshot) {
+      const report = await this.snapshot.route(id);
+      return {id, route: report?.route ?? null, map: report?.map ?? null};
+    }
+    const [route, map] = await Promise.all([engine.routeDetail(id), engine.networkMap(id)]);
+    return {id, route, map};
+  }
+
+  loadStringLine(id: string, dir: number, date: string) {
+    return this.snapshot ? this.snapshot.stringLine(id, dir, date) : engine.stringLine(id, dir, dateNumber(date));
+  }
 
   setMapHour(hour: number) {
     this.mapHour = hour;

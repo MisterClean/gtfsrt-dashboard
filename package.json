@@ -10,6 +10,8 @@
     "validate:feeds": "node scripts/validate-feeds.mjs",
     "verify:release": "node scripts/verify-release.mjs",
     "package": "node scripts/package.mjs",
+    "package:cta-site": "node scripts/package-cta-site.mjs",
+    "package:cta-artifact": "node scripts/package-cta-artifact.mjs",
     "probe": "node spike/run-browser-probe.mjs",
     "probe:serve": "node spike/serve.mjs",
     "build:wasm": "node scripts/build.mjs --wasm-only",

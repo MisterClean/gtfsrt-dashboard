@@ -1,6 +1,8 @@
 <script lang="ts">
   // Exact definitions, in the language a planner would use. These must stay in step
   // with crates/core/src and docs/metrics.md.
+  import {pct} from '../../lib/format';
+  import {CTA_ROUTE_MATCH_MIN} from '../../lib/snapshot';
   import {app} from '../../lib/state.svelte';
 
   const minutesText = (seconds: number) => {
@@ -45,7 +47,11 @@
     <li><strong>A missing trip is not proof of cancellation.</strong> It may be a reporting gap. This app reports trips observed, never trips cancelled.</li>
     <li><strong>Stop times are inferred from GPS.</strong> The archive has no door-open events or confirmed arrivals, so times are interpolated between position reports along the route line.</li>
     <li><strong>Polling limits the detail.</strong> Most feeds report every 20 to 60 seconds. One pass of one stop is an estimate, and only averages over many passes should be read closely.</li>
-    <li><strong>Schedules come from the archive.</strong> Results use the version in force on each day, and a trip counts only if its realtime ID matches that schedule.</li>
+    {#if app.snapshot}
+      <li><strong>Schedule matches are reconstructed.</strong> The position archive records scheduled starts and route details. A trip counts when those fields identify one scheduled trip on the service date.</li>
+    {:else}
+      <li><strong>Schedules come from the archive.</strong> Results use the version in force on each day, and a trip counts only if its realtime ID matches that schedule.</li>
+    {/if}
   </ul>
 </div>
 
@@ -87,23 +93,36 @@
     <summary>Confidence intervals</summary>
     <div class="body">
       <p>With five or more days selected, the route scorecard shows a 95% interval on peak speed and on the change from midday. Days are resampled with replacement 1,000 times, using each route’s pooled daily speeds, so it reflects how much the result would move with a different set of days. It does not capture error in individual GPS reports. Because the interval uses pooled speeds, a fixed-segment estimate can fall just outside it.</p>
-      <p>Shares of on-time departures, bunching and gaps are printed with their sample size. Under 20 events they read “too few trips”; under 100 they are marked as a low sample. When under 80% of realtime trip IDs match the schedule the figures are labelled partial with the match rate, and under 25% they are withheld. Days with no schedule show speeds only.</p>
+      <p>Shares of on-time departures, bunching and gaps are printed with their sample size. Under 20 events they read “too few trips”; under 100 they are marked as a low sample.</p>
+      {#if app.snapshot}
+        <p>Route schedule-based figures are labelled partial below an 80% position report match. On-time, trip share and headway figures are withheld below a {pct(CTA_ROUTE_MATCH_MIN)} match.</p>
+      {:else}
+        <p>When under 80% of realtime trip IDs match the schedule the figures are labelled partial with the match rate, and under 25% they are withheld. Days with no schedule show speeds only.</p>
+      {/if}
     </div>
   </details>
 
   <details id="method-time">
     <summary>Service days and time</summary>
     <div class="body">
-      <p>Days here are local GTFS service days, not UTC archive days. Scheduled times count from noon minus twelve hours on the service date, so a trip can run past 24:00:00 and daylight-saving days still line up. One service day overlaps two UTC archive files, and each file is read only once.</p>
-      <p>A trip’s service date is the feed’s reported start date when the run falls within four hours of the trip’s scheduled window on that date. Otherwise it is the active service date, among the local date and the days either side, whose scheduled window is nearest the run. A run more than four hours from any scheduled window isn’t counted as that trip.</p>
-      <p>The schedule for each day is the most recently retrieved version covering that date and already published by then. If the archive only captured a covering version later, that one is used and flagged above.</p>
+      {#if app.snapshot}
+        <p>Days are local GTFS service days in Chicago. The archived scheduled start determines the service date. A trip can continue after midnight, with 1 AM displayed as hour 25 on the preceding service day.</p>
+        <p>See Sources and preparation for the schedule version used for this snapshot.</p>
+      {:else}
+        <p>Days here are local GTFS service days, not UTC archive days. Scheduled times count from noon minus twelve hours on the service date, so a trip can run past 24:00:00 and daylight-saving days still line up. One service day overlaps two UTC archive files, and each file is read only once.</p>
+        <p>A trip’s service date is the feed’s reported start date when the run falls within four hours of the trip’s scheduled window on that date. Otherwise it is the active service date, among the local date and the days either side, whose scheduled window is nearest the run. A run more than four hours from any scheduled window isn’t counted as that trip.</p>
+        <p>The schedule for each day is the most recently retrieved version covering that date and already published by then. If the archive only captured a covering version later, that one is used and flagged above.</p>
+      {/if}
     </div>
   </details>
 
   <details id="method-matching">
     <summary>Placing vehicles on the route</summary>
     <div class="body">
-      <p>A trip ID leads to a route line and stop list in that day’s schedule. Each report is projected onto the line inside a window that moves with the vehicle: from 60 m behind its last position to as far ahead as the speed backstop allows, plus 200 m. This keeps a match on the correct pass of a loop or an out-and-back line. Reports more than 120 m from the line count as off route and are skipped.</p>
+      {#if app.snapshot}
+        <p>The archived route, service date and scheduled start must identify an active CTA bus trip. The archive’s pattern identifier or an exact headsign corroborates the assignment. Reports with no unique match are excluded.</p>
+      {/if}
+      <p>{#if !app.snapshot}A trip ID leads to a route line and stop list in that day’s schedule. {/if}Each report is projected onto the line inside a window that moves with the vehicle: from 60 m behind its last position to as far ahead as the speed backstop allows, plus 200 m. This keeps a match on the correct pass of a loop or an out-and-back line. Reports more than 120 m from the line count as off route and are skipped.</p>
       <p>When a line passes a position more than once, on a loop or an out-and-back, each pass is followed through the whole run and the one that explains the most reports wins. Matching by the schedule alone would send a late vehicle to the wrong pass and lose exactly the worst trips. After that, the earliest pass within 25 m of the best fit is used. Within 300 m of the end of the line, the best fit in the next 150 m is used instead, so a terminal hook is reached rather than stopped short of.</p>
       <p>Some agencies draw their lines out to each stop's curb and back. A vehicle doesn't drive those detours, so they are removed before measuring distance: a turn of 75° or more between two segments of up to 30 m, where the road carries on in about the same direction beyond it.</p>
       <p>Stops are placed along the line so that their order is preserved, choosing the combination that keeps stops closest to the line.</p>
@@ -121,8 +140,12 @@
   <details id="method-ontime">
     <summary>On-time performance</summary>
     <div class="body">
-      <p>The observed departure minus the scheduled departure at each timepoint, or the arrival at the last stop. The current window counts a departure as on time from {windowText}. Exactly {minutesText(app.earlyS)} early is on time, and exactly {minutesText(app.lateS)} late is late.</p>
-      <p>When an agency’s schedule marks timepoints, only those count, because other stop times are usually interpolated. When a trip marks none, all its stops count. Each trip counts at each timepoint once, so repeated polling doesn’t change the weighting.</p>
+      <p>The observed departure minus the scheduled departure at {app.snapshot ? 'each observed stop' : 'each timepoint'}, or the arrival at the last stop. The current window counts a departure as on time from {windowText}. Exactly {minutesText(app.earlyS)} early is on time, and exactly {minutesText(app.lateS)} late is late.</p>
+      {#if app.snapshot}
+        <p>The CTA schedule used here has no designated timepoints. Each trip counts once at each observed stop, so repeated polling doesn’t change the weighting.</p>
+      {:else}
+        <p>When an agency’s schedule marks timepoints, only those count, because other stop times are usually interpolated. When a trip marks none, all its stops count. Each trip counts at each timepoint once, so repeated polling doesn’t change the weighting.</p>
+      {/if}
     </div>
   </details>
 
