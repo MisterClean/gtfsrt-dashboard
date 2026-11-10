@@ -1,5 +1,6 @@
 <script lang="ts">
   import {onMount} from 'svelte';
+  import FeedNotice from './components/FeedNotice.svelte';
   import NavRail from './components/NavRail.svelte';
   import Tooltip from './components/Tooltip.svelte';
   import TopBar from './components/TopBar.svelte';
@@ -51,6 +52,7 @@
       <div class="page"><ErrorNotice failure={loading.catalogFailure} extra="The agency list comes from the archive." onretry={() => { app.catalogError = null; loading.clear(); app.start(); }} /></div>
     {/if}
     <LoadProgress />
+    <FeedNotice />
     {#if loading.failure}
       <div class="notice"><ErrorNotice failure={loading.failure} onretry={app.pendingDates.length ? () => { loading.clear(); app.analyze(); } : undefined} /></div>
     {/if}

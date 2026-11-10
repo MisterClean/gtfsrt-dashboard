@@ -1,0 +1,37 @@
+{
+  "_help": "Hand-edited. Keys are agency_id or agency_id/system_id (the more specific wins). Fields: hide, note, status (ok|stale|gps_only|low_match|thin|empty), reason, trip_match (0-1), trips_per_day, large. Overrides beat the probe. After editing, run: node scripts/validate-feeds.mjs",
+  "broward-county-transit": {
+    "note": "The feed stopped publishing in July. Pick another agency for current data."
+  },
+  "bigbluebus": {
+    "status": "gps_only",
+    "note": "The archive has no schedule that joins to this feed's trip IDs, so trip, on-time and run-time figures are blank."
+  },
+  "ddot-detroit": {
+    "status": "gps_only",
+    "note": "No schedule joins to this feed, and the archive states no time zone, so America/New_York is estimated."
+  },
+  "sound-transit": {
+    "trip_match": 0.39,
+    "note": "Trips whose IDs are not in the schedule are left out, so headline figures rest on a partial match."
+  },
+  "metrolink": {
+    "trips_per_day": 176,
+    "note": "Few trips a day: an overnight \"slowest hour\" can come from a handful of trains."
+  },
+  "mountain-line-missoula": {
+    "trips_per_day": 497
+  },
+  "mta": {
+    "large": true,
+    "note": "Very large feed (about 51,000 trips a day). Expect around a minute, and a tab that may freeze while it runs."
+  },
+  "king-county-metro": {
+    "large": true,
+    "note": "Large service (about 12,000 trips a day). Expect about 20 seconds and a sluggish tab."
+  },
+  "metro-transit-mpls": {
+    "large": true,
+    "note": "Large feed. Expect about 20 seconds and a sluggish tab."
+  }
+}
