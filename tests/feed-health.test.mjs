@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {classify, findOverride, groupOf, parseHealthFile, resolveHealth, staleness, approxBytesPerDay} from '../src/lib/health.ts';
+import {classify, findOverride, groupOf, parseHealthFile, resolveHealth, staleness, approxBytesPerDay, sizeClass} from '../src/lib/health.ts';
 import {buildHealthFile, headObject} from '../scripts/validate-feeds.mjs';
 
 const feed = (over = {}) => ({
@@ -36,7 +36,7 @@ test('classifies schedule, match and thin-service problems, worst first', () => 
 });
 
 test('overrides beat the probe: forced status, reason, hide and note', () => {
-  const base = {facts: feed(), reference: REF, checked_at: 'now'};
+  const base = {facts: feed(), reference: REF};
   const forced = resolveHealth({...base, override: {status: 'gps_only', note: 'n'}});
   assert.equal(forced.status, 'gps_only');
   assert.equal(forced.reason, 'GPS speeds only — no schedule match');
@@ -52,7 +52,7 @@ test('overrides beat the probe: forced status, reason, hide and note', () => {
 });
 
 test('large comes from size unless overridden', () => {
-  const base = {reference: REF, checked_at: 'now'};
+  const base = {reference: REF};
   const big = feed({total_bytes: 100 * 1024 * 1024 * 312});
   assert.equal(resolveHealth({...base, facts: big}).large, true);
   assert.equal(resolveHealth({...base, facts: feed()}).large, false);
@@ -86,14 +86,15 @@ test('parses the health file defensively', () => {
 test('buildHealthFile uses the newest archive day as reference and the probe result', async () => {
   const inventory = [feed({base64url: 'one'}), feed({base64url: 'two', date_max: '2026-07-22'}),
     feed({base64url: 'three', feed_type: 'trip_updates'}), feed({base64url: 'bad id!'})];
-  const file = await buildHealthFile({inventory, overrides: {}, checkedAt: 't', probe: async f => ({head_ok: f.base64url !== 'one', bytes: 1234})});
-  assert.equal(file.reference_date, REF);
+  const file = await buildHealthFile({inventory, overrides: {}, probe: async f => ({head_ok: f.base64url !== 'one', bytes: 1234})});
   assert.deepEqual(Object.keys(file.feeds), ['one', 'two']);
   assert.equal(file.feeds.one.status, 'stale');
   assert.equal(file.feeds.one.reason, 'The newest archive file is missing');
   assert.equal(file.feeds.two.status, 'stale');
-  assert.equal(file.feeds.two.approx_bytes_per_day, 1234);
-  assert.equal(file.checked_at, 't');
+  assert.equal(file.feeds.two.approx_bytes_per_day, 10 * 1024 * 1024);
+  assert.equal(sizeClass(14 * 1024 * 1024), 10 * 1024 * 1024);
+  assert.equal(sizeClass(16 * 1024 * 1024), 20 * 1024 * 1024);
+  assert.equal(file.checked_at, undefined);
   assert.equal(Object.keys(parseHealthFile(file)).length, 2);
 });
 

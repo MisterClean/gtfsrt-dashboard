@@ -18,9 +18,7 @@ export interface FeedHealth {
   status: HealthStatus;
   /** One line, shown beside the badge. Null when the feed is fine. */
   reason: string | null;
-  date_max: string;
-  /** The last complete service day. The newest archive day is missing its evening. */
-  latest_day: string;
+  /** Rounded to the nearest 10 MB so the committed file only changes when the size class does. */
   approx_bytes_per_day: number;
   /** Share of realtime trip IDs found in the schedule, 0 to 1. Null when not measured. */
   trip_match: number | null;
@@ -30,7 +28,6 @@ export interface FeedHealth {
   head_ok: boolean | null;
   note: string | null;
   hidden: boolean;
-  checked_at: string;
 }
 
 export interface FeedOverride {
@@ -72,6 +69,10 @@ type Ids = {agency_id: string | null; system_id: string | null};
 
 /** A readable id for bug reports, such as "septa/rail". */
 export const feedId = (feed: Ids) => [feed.agency_id, feed.system_id].filter(Boolean).join('/') || 'unknown';
+
+/** Nearest 10 MB, never zero for a feed that has data. */
+export const sizeClass = (bytes: number) => Math.max(1, Math.round(bytes / TEN_MB)) * TEN_MB;
+const TEN_MB = 10 * 1024 * 1024;
 
 export function approxBytesPerDay(feed: Pick<FeedFacts, 'date_min' | 'date_max' | 'total_bytes'>) {
   const span = Math.max(1, daysBetween(feed.date_min, feed.date_max) + 1);
@@ -120,9 +121,8 @@ export function resolveHealth(args: {
   reference: string;
   override?: FeedOverride;
   measured?: {trip_match?: number | null; trips_per_day?: number | null; schedule_join?: boolean | null; head_ok?: boolean | null};
-  checked_at: string;
 }): FeedHealth {
-  const {facts, reference, override, measured = {}, checked_at} = args;
+  const {facts, reference, override, measured = {}} = args;
   const trip_match = override?.trip_match ?? measured.trip_match ?? null;
   const trips_per_day = override?.trips_per_day ?? measured.trips_per_day ?? null;
   const derived = classify({facts, reference, trip_match, trips_per_day, schedule_join: measured.schedule_join});
@@ -132,16 +132,13 @@ export function resolveHealth(args: {
   return {
     status,
     reason,
-    date_max: facts.date_max,
-    latest_day: addIsoDays(facts.date_max, -1),
-    approx_bytes_per_day: bytes,
+    approx_bytes_per_day: sizeClass(bytes),
     trip_match,
     trips_per_day,
     large: override?.large ?? bytes >= LARGE_BYTES_PER_DAY,
     head_ok: measured.head_ok ?? null,
     note: override?.note ?? null,
     hidden: override?.hide ?? status === 'empty',
-    checked_at,
   };
 }
 
@@ -153,7 +150,8 @@ export const STATUS_BADGE: Record<HealthStatus, string> = {
   ok: 'Working', stale: 'Out of date', gps_only: 'GPS only', low_match: 'Low match', thin: 'Thin', empty: 'No data',
 };
 
-export interface HealthFile { schema: 1; checked_at: string; reference_date: string; feeds: Record<string, FeedHealth> }
+/** No timestamps: the file only changes when a status, size class or note does. */
+export interface HealthFile { schema: 1; feeds: Record<string, FeedHealth> }
 
 /** Tolerant: a missing or malformed file leaves every feed "unknown" and still selectable. */
 export function parseHealthFile(value: unknown): Record<string, FeedHealth> {

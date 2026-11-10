@@ -11,7 +11,7 @@
 import {readFile, writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {ARCHIVE} from '../src/engine/contracts.js';
-import {addIsoDays, feedId, findOverride, resolveHealth} from '../src/lib/health.ts';
+import {addIsoDays, feedId, findOverride, resolveHealth, sizeClass} from '../src/lib/health.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const outPath = resolve(root, 'public/feed-health.json');
@@ -33,7 +33,7 @@ export async function headObject(feed, fetchImpl = fetch) {
   }
 }
 
-export async function buildHealthFile({inventory, overrides, checkedAt, probe}) {
+export async function buildHealthFile({inventory, overrides, probe}) {
   const feeds = inventory.filter(f => f.feed_type === 'vehicle_positions' && /^[A-Za-z0-9_-]+$/.test(f.base64url));
   if (!feeds.length) throw new Error('The inventory lists no vehicle-position feeds.');
   const reference = feeds.map(f => f.date_max).sort().at(-1);
@@ -41,7 +41,7 @@ export async function buildHealthFile({inventory, overrides, checkedAt, probe}) 
   for (const feed of feeds) {
     const measured = probe ? await probe(feed) : {head_ok: null};
     const health = resolveHealth({
-      facts: feed, reference, override: findOverride(overrides, feed), measured, checked_at: checkedAt,
+      facts: feed, reference, override: findOverride(overrides, feed), measured,
     });
     // A missing newest object is worse than the averages suggest.
     if (measured.head_ok === false && health.status === 'ok') {
@@ -49,10 +49,10 @@ export async function buildHealthFile({inventory, overrides, checkedAt, probe}) 
       health.reason = 'The newest archive file is missing';
     }
     // A single file's size beats the lifetime average when we have it.
-    if (measured.bytes) health.approx_bytes_per_day = measured.bytes;
+    if (measured.bytes) health.approx_bytes_per_day = sizeClass(measured.bytes);
     out[feed.base64url] = {id: feedId(feed), name: feed.agency_name, ...health};
   }
-  return {schema: 1, checked_at: checkedAt, reference_date: reference, feeds: out};
+  return {schema: 1, feeds: out};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -62,7 +62,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const overrides = JSON.parse(await readFile(overridesPath, 'utf8'));
   delete overrides._help;
   const probe = args.has('--offline') ? null : async feed => ({...(await headObject(feed))});
-  const next = await buildHealthFile({inventory, overrides, checkedAt: new Date().toISOString(), probe});
+  const next = await buildHealthFile({inventory, overrides, probe});
   await writeFile(outPath, `${JSON.stringify(next, null, 2)}\n`);
   const counts = {};
   for (const h of Object.values(next.feeds)) counts[h.status] = (counts[h.status] ?? 0) + 1;

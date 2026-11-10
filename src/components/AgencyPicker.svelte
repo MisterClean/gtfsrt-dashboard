@@ -4,7 +4,7 @@
   // anyone starts a download. A feed missing from the health file is simply
   // unmarked and fully selectable.
   import {bytes} from '../lib/format';
-  import {feedId, groupOf, shortDate, STATUS_BADGE, type FeedHealth, type HealthGroup} from '../lib/health';
+  import {addIsoDays, feedId, groupOf, shortDate, STATUS_BADGE, type FeedHealth, type HealthGroup} from '../lib/health';
   import {app, feedLabel} from '../lib/state.svelte';
   import type {Feed} from '../engine/types';
 
@@ -39,7 +39,7 @@
   function meta(feed: Feed, health: FeedHealth | null) {
     const parts = [feedId(feed)];
     if (health?.large) parts.push(`large, about ${bytes(health.approx_bytes_per_day)} a day`);
-    if (health && health.status !== 'stale' && health.status !== 'empty') parts.push(`to ${shortDate(health.latest_day)}`);
+    if (health && health.status !== 'stale' && health.status !== 'empty') parts.push(`to ${shortDate(addIsoDays(feed.date_max, -1))}`);
     return parts.join(' \u00b7 ');
   }
   const badge = (h: FeedHealth | null) => (h && h.status !== 'ok' ? STATUS_BADGE[h.status] : '');
