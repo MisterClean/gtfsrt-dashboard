@@ -72,6 +72,8 @@ npm run dev           # Vite dev server with hot reload
 
 Open the URL Vite prints. Rerun `npm run build:wasm` after changing Rust. The pinned toolchain in `rust-toolchain.toml` includes the WASM target. `CARGO` and `WASM_BINDGEN` can override tool paths.
 
+For a fixed CTA bus report using the Chicago Transit Alerts Positions archive, see the [CTA snapshot workflow](docs/cta-site.md). It reuses the Routes scorecard and route detail views with precomputed reports; raw transit archives stay outside Git and the published Site.
+
 To build and preview the release under its real security policy:
 
 ```sh

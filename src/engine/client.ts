@@ -9,15 +9,15 @@ type RunEvent = EngineEvent & {run: number};
 type Pending = {resolve: (value: any) => void; reject: (reason: Error) => void};
 
 class EngineClient {
-  private worker: Worker;
+  private worker?: Worker;
   private pending = new Map<number, Pending>();
   private nextId = 1;
   private listeners = new Set<(event: RunEvent) => void>();
   private failure: Error | null = null;
 
-  constructor() {
-    this.worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module', name: 'transit-engine'});
-    this.worker.addEventListener('message', (event: MessageEvent) => {
+  private startWorker() {
+    const worker = new Worker(new URL('./worker.ts', import.meta.url), {type: 'module', name: 'transit-engine'});
+    worker.addEventListener('message', (event: MessageEvent) => {
       const data = event.data;
       if (data.event) {
         for (const listener of this.listeners) listener(data as RunEvent);
@@ -29,7 +29,7 @@ class EngineClient {
       if (data.error) pending.reject(reviveError(data.error));
       else pending.resolve(data.result);
     });
-    this.worker.addEventListener('error', event => {
+    worker.addEventListener('error', event => {
       // Keep what the browser said, so a bug report has something to go on.
       const where = event.filename ? ` at ${event.filename}:${event.lineno}:${event.colno}` : '';
       const original = event.error instanceof Error ? event.error : new Error(event.message || 'The engine worker crashed');
@@ -41,17 +41,19 @@ class EngineClient {
       for (const pending of this.pending.values()) pending.reject(this.failure);
       this.pending.clear();
     });
-    this.worker.addEventListener('messageerror', event => {
+    worker.addEventListener('messageerror', event => {
       console.error('[transit-almanac] a message from the engine could not be read', event);
     });
+    return worker;
   }
 
   private call<T>(method: string, ...args: unknown[]): Promise<T> {
     if (this.failure) return Promise.reject(this.failure);
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
+      const worker = (this.worker ??= this.startWorker());
       this.pending.set(id, {resolve, reject});
-      this.worker.postMessage({id, method, args});
+      worker.postMessage({id, method, args});
     });
   }
 
