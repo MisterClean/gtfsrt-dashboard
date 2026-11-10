@@ -7,6 +7,7 @@ import type {
 import {decodeDates, encodeDates, lastDays} from './dates';
 import {slowestHour} from './findings';
 import {dateNumber, plural, type Units} from './format.ts';
+import {parseHealthFile, staleness, type FeedHealth} from './health.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
 
@@ -30,6 +31,9 @@ class AppState {
   feeds = $state<Feed[]>([]);
   feedKey = $state<string | null>(null);
   catalogError = $state<string | null>(null);
+  /** Generated feed health, keyed by feed. Empty when the file is missing; every feed then stays selectable. */
+  health = $state<Record<string, FeedHealth>>({});
+  showAllFeeds = $state(false);
 
   dates = $state<number[]>([]);
   cachedDates = $state<number[]>([]);
@@ -81,6 +85,9 @@ class AppState {
   private watchdog: ReturnType<typeof setInterval> | undefined;
 
   feed = $derived(this.feeds.find(f => f.base64url === this.feedKey) ?? null);
+  feedHealth = $derived(this.feed ? this.health[this.feed.base64url] ?? null : null);
+  /** Set when the feed's newest complete day is long past: its days are not near today. */
+  stale = $derived(this.feed ? staleness(this.feed, new Date().toISOString().slice(0, 10)) : null);
   /** Which speed scale to color with. A commuter rail network on the bus scale is one solid color. */
   scaleMode = $derived.by((): Mode => {
     if (this.mode !== 'All') return this.mode;
@@ -145,6 +152,7 @@ class AppState {
         .filter(f => f.feed_type === 'vehicle_positions' && /^[A-Za-z0-9_-]+$/.test(f.base64url))
         .sort((a, b) => feedLabel(a).localeCompare(feedLabel(b)));
       if (!this.feeds.length) throw new Error('The catalog lists no vehicle-position feeds. Try again later.');
+      this.health = await loadHealth();
       this.readUrl();
     } catch (error) {
       this.catalogError = errorText(error);
@@ -183,6 +191,7 @@ class AppState {
 
   async selectFeed(feedKey: string, dates: number[] | null, fromUrl = false) {
     const changed = feedKey !== this.feedKey;
+    const previousDates = this.dates;
     this.feedKey = feedKey;
     if (changed) {
       // Nothing from the previous agency may land here from now on.
@@ -212,7 +221,14 @@ class AppState {
     if (feedKey !== this.feedKey) return;
     const feed = this.feed;
     if (dates && feed) this.dates = this.cleanDates(dates, feed);
-    else if (feed) this.dates = lastDays(feed.date_min, feed.date_max, 'weekday', 5);
+    else if (feed) {
+      // Keep the range when this agency has all of it. Otherwise start from its recent weekdays, but
+      // never pick days from a feed that stopped long ago: the notice offers its latest day instead.
+      const first = dateNumber(feed.date_min);
+      const last = dateNumber(feed.date_max);
+      const kept = previousDates.length > 0 && previousDates.every(d => d >= first && d <= last);
+      this.dates = kept ? [...previousDates] : staleness(feed, new Date().toISOString().slice(0, 10)).stale ? [] : lastDays(feed.date_min, feed.date_max, 'weekday', 5);
+    }
     this.writeUrl();
     // Days already on this device load without asking. New downloads wait for a click.
     if (this.dates.some(d => this.cachedDates.includes(d))) {
@@ -237,6 +253,11 @@ class AppState {
     const cached = await engine.cachedDays(this.feedKey);
     this.cachedDates = cached.dates;
     this.cachedBytes = cached.bytes;
+  }
+
+  /** For a feed with nothing near today: select its newest complete day, on request. */
+  useLatestDay() {
+    if (this.stale) this.setDates([dateNumber(this.stale.latest_day)]);
   }
 
   setDates(dates: number[]) {
@@ -403,6 +424,15 @@ export type MethodTopic = 'speed' | 'period' | 'ci' | 'time' | 'matching' | 'pas
 export function feedLabel(feed: Feed) {
   const name = feed.agency_name ?? feed.agency_id ?? 'Unnamed agency';
   return feed.system_name ? `${name} · ${feed.system_name}` : name;
+}
+
+async function loadHealth() {
+  try {
+    const response = await fetch('./feed-health.json', {cache: 'no-cache'});
+    return response.ok ? parseHealthFile(await response.json()) : {};
+  } catch {
+    return {};
+  }
 }
 
 export function errorText(error: unknown) {

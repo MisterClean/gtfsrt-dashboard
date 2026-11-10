@@ -1,5 +1,6 @@
 <script lang="ts">
   import {onMount} from 'svelte';
+  import FeedNotice from './components/FeedNotice.svelte';
   import NavRail from './components/NavRail.svelte';
   import Tooltip from './components/Tooltip.svelte';
   import TopBar from './components/TopBar.svelte';
@@ -46,6 +47,7 @@
     {#if app.catalogError}
       <div class="page"><div class="banner error" role="alert"><strong>The archive catalog could not be loaded.</strong> {app.catalogError} <button class="btn small" onclick={() => { app.catalogError = null; app.start(); }}>Try again</button></div></div>
     {/if}
+    <FeedNotice />
     {#if app.error}
       <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error} Days already finished are still here.</div></div>
     {/if}
