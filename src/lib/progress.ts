@@ -2,7 +2,6 @@
 // tested without a browser. The bar only ever moves forward: stages that don't know
 // their own fraction (reading a schedule, starting the database) keep the last one.
 
-export type DayStatus = 'pending' | 'reading' | 'analyzing' | 'cached' | 'done' | 'no_data';
 export type Phase = 'database' | 'lookup' | 'read' | 'schedule' | 'analyze';
 
 export interface Progress {
@@ -15,7 +14,6 @@ export interface Progress {
   /** Archive bytes scanned so far, by file size and position. Null until the sizes are known. */
   bytesDone: number | null;
   bytesTotal: number | null;
-  days: Record<number, DayStatus>;
 }
 
 /** The fields of the worker's `stage` event that progress cares about. */
@@ -33,63 +31,29 @@ export interface StageInfo {
 
 export type ProgressEvent =
   | ({event: 'stage'} & StageInfo)
-  | {event: 'day'; date: number; cached: boolean}
-  | {event: 'unavailable'; date: number}
   | {event: string};
 
 export function startProgress(dates: number[], now = Date.now()): Progress {
+  return {startedAt: now, message: 'Starting', phase: null, fraction: 0, dayIndex: 0, dayCount: dates.length, bytesDone: null, bytesTotal: null};
+}
+
+/** Which day is where belongs to days.ts. This is only the bar and the words beside it. */
+export function reduceProgress(progress: Progress, event: ProgressEvent): Progress {
+  if (event.event !== 'stage') return progress;
+  const stage = event as {event: 'stage'} & StageInfo;
   return {
-    startedAt: now, message: 'Starting', phase: null, fraction: 0, dayIndex: 0, dayCount: dates.length,
-    bytesDone: null, bytesTotal: null, days: Object.fromEntries(dates.map(date => [date, 'pending' as DayStatus])),
+    ...progress,
+    message: stage.message,
+    phase: stage.phase ?? progress.phase,
+    // Never backwards, and clamped so a bad value can't overshoot.
+    fraction: Math.min(1, Math.max(progress.fraction, stage.fraction ?? 0)),
+    dayIndex: Math.max(progress.dayIndex, stage.dayIndex ?? 0),
+    dayCount: stage.dayCount || progress.dayCount,
+    // Byte totals can grow as more files are sized, but what's been read can't shrink.
+    bytesDone: stage.bytesDone === undefined ? progress.bytesDone : Math.max(progress.bytesDone ?? 0, stage.bytesDone),
+    bytesTotal: stage.bytesTotal ?? progress.bytesTotal,
   };
 }
-
-/** The first day not yet finished, which is the one being read. */
-function activeDay(days: Record<number, DayStatus>) {
-  return Object.keys(days).map(Number).sort((a, b) => a - b).find(date => days[date] === 'pending' || days[date] === 'reading');
-}
-
-export function reduceProgress(progress: Progress, event: ProgressEvent): Progress {
-  switch (event.event) {
-    case 'stage': {
-      const stage = event as {event: 'stage'} & StageInfo;
-      const days = {...progress.days};
-      if (stage.phase === 'analyze' && stage.date !== undefined && days[stage.date] !== undefined) {
-        days[stage.date] = 'analyzing';
-      } else if (stage.phase === 'read') {
-        const active = activeDay(days);
-        if (active !== undefined) days[active] = 'reading';
-      }
-      return {
-        ...progress,
-        message: stage.message,
-        phase: stage.phase ?? progress.phase,
-        // Never backwards, and clamped so a bad value can't overshoot.
-        fraction: Math.min(1, Math.max(progress.fraction, stage.fraction ?? 0)),
-        dayIndex: Math.max(progress.dayIndex, stage.dayIndex ?? 0),
-        dayCount: stage.dayCount || progress.dayCount,
-        // Byte totals can grow as more files are sized, but what's been read can't shrink.
-        bytesDone: stage.bytesDone === undefined ? progress.bytesDone : Math.max(progress.bytesDone ?? 0, stage.bytesDone),
-        bytesTotal: stage.bytesTotal ?? progress.bytesTotal,
-        days,
-      };
-    }
-    case 'day': {
-      const day = event as {event: 'day'; date: number; cached: boolean};
-      return {...progress, days: {...progress.days, [day.date]: day.cached ? 'cached' : 'done'}};
-    }
-    case 'unavailable': {
-      const day = event as {event: 'unavailable'; date: number};
-      return {...progress, days: {...progress.days, [day.date]: 'no_data'}};
-    }
-    default:
-      return progress;
-  }
-}
-
-export const DAY_STATUS_LABEL: Record<DayStatus | 'failed', string> = {
-  pending: 'waiting', reading: 'reading', analyzing: 'analyzing', cached: 'from this device', done: 'done', no_data: 'no data', failed: 'failed',
-};
 
 /** m:ss, or h:mm:ss for very long runs. */
 export function formatElapsed(ms: number): string {

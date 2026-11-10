@@ -6,40 +6,30 @@
   import {download} from '../lib/map-export';
   import {hourRange, int, pct, routeName, speedUnit, speedWithUnit, toDisplaySpeed} from '../lib/format';
   import {HOURS} from '../lib/scale';
-  import {app, errorText} from '../lib/state.svelte';
+  import {app} from '../lib/state.svelte';
+  import {resource} from '../lib/resource.svelte';
   import LineChart from '../charts/LineChart.svelte';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap, {type MapMetric, type MapPeriod} from '../map/SpeedMap.svelte';
   import {CLASS_VARS} from '../lib/speed-scale';
 
-  // Raw: this is megabytes of geometry for a big agency, and deep reactivity would wrap all of it.
-  let network = $state.raw<NetworkMap | null>(null);
   let route = $state('');
   let period = $state<MapPeriod>('hour');
   let metric = $state<MapMetric>('speed');
   let pinned = $state<MapFeature | null>(null);
 
-  let failure = $state<string | null>(null);
-  let request = 0;
-
-  $effect(() => {
+  // The route filter is a way of looking at the same map, so changing it keeps the map up while the new one loads.
+  const map = resource<NetworkMap>(() => {
     app.version;
     const filter = route || undefined;
-    if (!app.hasResults || !app.overview) return;
-    const current = ++request;
-    engine.networkMap(filter).then(
-      result => {
-        if (current !== request) return;
-        network = result;
-        failure = null;
-      },
-      error => {
-        if (current !== request) return;
-        network = null;
-        pinned = null;
-        failure = errorText(error);
-      },
-    );
+    if (!app.hasResults || !app.overview) return null;
+    return {key: 'network', load: () => engine.networkMap(filter)};
+  });
+  const network = $derived(map.value);
+  const failure = $derived(map.failure);
+  // A pinned street belongs to the map it was picked from.
+  $effect(() => {
+    if (!network) pinned = null;
   });
 
   const current = $derived(network?.hours.find(h => h.hour === app.mapHour) ?? null);

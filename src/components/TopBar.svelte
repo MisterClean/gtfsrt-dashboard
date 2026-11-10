@@ -2,7 +2,6 @@
   import {bytes, plural} from '../lib/format';
   import {estimateLoad, isIndeterminate} from '../lib/progress';
   import {app} from '../lib/state.svelte';
-  import {loading} from '../lib/loading.svelte';
   import type {Mode} from '../engine/types';
   import AgencyPicker from './AgencyPicker.svelte';
   import DatePicker from './DatePicker.svelte';
@@ -23,8 +22,8 @@
   }
 
   // The monotonic figure, so the bar never jumps back during schedule stages.
-  const fraction = $derived(Math.round((loading.progress?.fraction ?? 0) * 100));
-  const waiting = $derived(loading.progress ? isIndeterminate(loading.progress) : true);
+  const fraction = $derived(Math.round((app.progress?.fraction ?? 0) * 100));
+  const waiting = $derived(app.progress ? isIndeterminate(app.progress) : true);
 </script>
 
 <header class="topbar">

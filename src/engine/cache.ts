@@ -4,6 +4,8 @@
 // so silently, though: each failure is logged, and the first one is reported so the
 // page can say once that results won't be kept.
 // Keep the original database name so analyzed days survive the rename.
+import type {DayMethod} from './method.ts';
+
 const DB_NAME = 'transit-notebook';
 const STORES = ['schedules', 'days', 'events', 'feeds', 'dayIndex'] as const;
 type Store = (typeof STORES)[number];
@@ -100,6 +102,8 @@ export interface DayEntry {
   cube: Uint8Array; digest: string; savedAt: string;
   /** Share of realtime trip IDs found in the schedule, 0 to 1. Absent on days saved before it was kept. */
   tripMatch?: number | null;
+  /** How the day was measured. Absent on days saved before it was kept. */
+  method?: DayMethod;
 }
 export interface EventsEntry { events: Uint8Array }
 export interface ScheduleEntry { meta: Uint8Array }

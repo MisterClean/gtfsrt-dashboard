@@ -7,7 +7,8 @@
   import ErrorNotice from './components/ErrorNotice.svelte';
   import LoadHeadsUp from './components/LoadHeadsUp.svelte';
   import LoadProgress from './components/LoadProgress.svelte';
-  import {loading} from './lib/loading.svelte';
+  import RunNotice from './components/RunNotice.svelte';
+  import {BOOT_MESSAGE, bootWords} from './lib/startup';
   import {app, feedLabel} from './lib/state.svelte';
   import {dateLabel, plural} from './lib/format';
   import Overview from './views/Overview.svelte';
@@ -36,7 +37,7 @@
     const fromDays = [...byMessage].map(([warning, dates]) =>
       dates.length === total || /^\d{4}-\d{2}-\d{2}:/.test(warning) ? warning : `${dates.map(date => dateLabel(date, {month: 'short', day: 'numeric'})).join(', ')}: ${warning}`,
     );
-    return [...new Set([...app.warnings, ...Object.values(app.unavailableDates).filter(() => app.dates.length > 0), ...fromDays])];
+    return [...new Set([...app.warnings, ...fromDays])];
   });
 </script>
 
@@ -48,16 +49,14 @@
   <TopBar />
   <NavRail />
   <main id="main">
-    {#if app.catalogError && loading.catalogFailure}
-      <div class="page"><ErrorNotice failure={loading.catalogFailure} extra="The agency list comes from the archive." onretry={() => { app.catalogError = null; loading.clear(); app.start(); }} /></div>
+    {#if app.boot.step === 'failed'}
+      <div class="page"><ErrorNotice failure={app.boot.failure} words={bootWords(app.boot)} onretry={() => app.start()} /></div>
     {/if}
     <LoadProgress />
     <FeedNotice />
-    {#if loading.failure}
-      <div class="notice"><ErrorNotice failure={loading.failure} onretry={app.pendingDates.length ? () => { loading.clear(); app.analyze(); } : undefined} /></div>
-    {/if}
-    {#if loading.cacheNotice}
-      <div class="notice"><div class="banner caution" role="status">{loading.cacheNotice}</div></div>
+    <RunNotice />
+    {#if app.cacheNotice}
+      <div class="notice"><div class="banner caution" role="status">{app.cacheNotice}</div></div>
     {/if}
     <LoadHeadsUp />
     {#if app.reportError}
@@ -75,15 +74,15 @@
           <h1>{label || 'Transit performance, on your device'}</h1>
           {#if app.running}
             <p class="lede">The first results appear as soon as the first day is finished, and they refine as each day is added. You can keep reading while it works.</p>
-          {:else if app.feed}
+          {:else if app.feed && app.boot.step === 'ready'}
             <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
             <p class="lede">Your browser reads the public archive directly and does the analysis itself. There is no account, no upload and no query server. Results stay on this device, so a day only has to be analyzed once.</p>
             <div class="tools">
               <button class="btn primary big" disabled={!app.dates.length} onclick={() => app.analyze()}>Analyze {plural(app.pendingDates.length, 'day')}</button>
               <span class="fine">Choose another agency or other days above.</span>
             </div>
-          {:else}
-            <p class="lede">Loading the archive catalog…</p>
+          {:else if app.boot.step !== 'failed' && app.boot.step !== 'ready'}
+            <p class="lede" role="status" data-boot={app.boot.step}>{BOOT_MESSAGE[app.boot.step]}</p>
           {/if}
         </div>
       </div>
