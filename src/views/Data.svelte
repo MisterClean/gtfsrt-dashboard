@@ -6,12 +6,28 @@
   import QualityTable from '../charts/data/QualityTable.svelte';
   import {THRESHOLDS} from '../charts/data/thresholds';
   import type {ReadRecord} from '../engine/types';
+  import {METHOD_LABEL, METHOD_NOTE, type DayMethod} from '../engine/method';
   import {downloadFile} from '../lib/download';
   import {bytes, dateLabel, dateNumber, datesLabel, int, isoDate, plural} from '../lib/format';
   import {app, feedLabel, errorText} from '../lib/state.svelte';
 
   const days = $derived(app.quality?.days ?? []);
   const feed = $derived(app.feed);
+
+  /** How the days on screen were measured, grouped, so a mix of methods is stated rather than averaged over. */
+  const methodGroups = $derived.by(() => {
+    const byMethod = new Map<DayMethod | null, number[]>();
+    for (const day of days) {
+      const method = day.method ?? null;
+      byMethod.set(method, [...(byMethod.get(method) ?? []), dateNumber(day.date)]);
+    }
+    return [...byMethod].map(([method, dates]) => ({
+      method,
+      dates,
+      label: method ? METHOD_LABEL[method] : 'Not recorded',
+      note: method ? METHOD_NOTE[method] : 'Saved by an earlier version, which did not record how each day was measured. The results are unchanged. Clear and analyze the day again to record it.',
+    }));
+  });
 
   const shortDigest = (key: string) => key.split('+').map(part => part.replace(/^v1:/, '').slice(0, 12)).join(' + ');
   const retrievedDate = (value: string) => dateLabel(value.slice(0, 10), {month: 'short', day: 'numeric', year: 'numeric'});
@@ -121,6 +137,16 @@
       <dl class="facts">
         <div><dt>Agency and feed</dt><dd>{feedLabel(feed)}</dd></div>
         <div><dt>Service days</dt><dd>{app.loadedDates.length ? `${datesLabel(app.loadedDates)} · ${plural(app.loadedDates.length, 'day')}` : 'None analyzed yet'}{#if app.pendingDates.length}<span class="dim">{' · '}{plural(app.pendingDates.length, app.loadedDates.length ? 'more day' : 'day')} chosen, not analyzed</span>{/if}</dd></div>
+        {#if methodGroups.length}
+          <div data-methods>
+            <dt>How they were measured</dt>
+            <dd>
+              {#each methodGroups as group}
+                <div data-method={group.method ?? 'unknown'}><strong>{group.label}</strong><span class="dim">{' · '}{datesLabel(group.dates)}{group.dates.length > 1 ? ` · ${plural(group.dates.length, 'day')}` : ''}</span><br /><span class="dim">{group.note}</span></div>
+              {/each}
+            </dd>
+          </div>
+        {/if}
         <div><dt>In the archive</dt><dd>{dateLabel(feed.date_min, {month: 'short', day: 'numeric', year: 'numeric'})} to {dateLabel(feed.date_max, {month: 'short', day: 'numeric', year: 'numeric'})} · {int(feed.total_records)} rows · {bytes(feed.total_bytes)}</dd></div>
         <div><dt>Source</dt><dd><a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io</a> public GTFS-RT archive, vehicle positions</dd></div>
         {#if app.quality}<div><dt>Calculation version</dt><dd>{app.quality.metric_version}</dd></div>{/if}

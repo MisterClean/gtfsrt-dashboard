@@ -1,11 +1,20 @@
 <script lang="ts">
   // A failure in plain language: what happened, what to do, a retry, and the technical
   // text behind a disclosure for bug reports.
-  import {errorDetails, friendlyError, type EngineError} from '../engine/errors';
+  import {errorDetails, friendlyError, type EngineError, type FriendlyError} from '../engine/errors';
 
-  let {failure, onretry, extra = ''}: {failure: EngineError; onretry?: () => void; extra?: string} = $props();
+  interface Props {
+    failure: EngineError;
+    /** Words that fit where it happened better than the error's own. */
+    words?: FriendlyError;
+    onretry?: () => void;
+    ondismiss?: () => void;
+    extra?: string;
+    retryLabel?: string;
+  }
+  let {failure, words, onretry, ondismiss, extra = '', retryLabel = 'Try again'}: Props = $props();
 
-  const friendly = $derived(friendlyError(failure));
+  const friendly = $derived(words ?? friendlyError(failure));
   const details = $derived(errorDetails(failure));
   let copied = $state(false);
 
@@ -24,7 +33,10 @@
   <strong>{friendly.title}</strong>
   {friendly.advice}{extra ? ` ${extra}` : ''}
   {#if onretry && friendly.retryable}
-    <button class="btn small" onclick={onretry}>Try again</button>
+    <button class="btn small" onclick={onretry}>{retryLabel}</button>
+  {/if}
+  {#if ondismiss}
+    <button class="btn small quiet" onclick={ondismiss}>Dismiss</button>
   {/if}
   {#if failure.kind === 'engine_crash'}
     <button class="btn small" onclick={() => location.reload()}>Reload</button>

@@ -5,11 +5,10 @@ import {durationLabel, estimateLoad, formatElapsed, reduceProgress, startProgres
 const dates = [20261104, 20261105, 20261106];
 const stage = (fields) => ({event: 'stage', message: 'x', ...fields});
 
-test('starts with every day pending at zero', () => {
+test('starts at zero with the number of days', () => {
   const progress = startProgress(dates, 1000);
   assert.equal(progress.fraction, 0);
   assert.equal(progress.dayCount, 3);
-  assert.deepEqual(Object.values(progress.days), ['pending', 'pending', 'pending']);
 });
 
 test('the fraction never moves backwards, even when a stage reports zero', () => {
@@ -42,21 +41,6 @@ test('a stage without byte or day fields keeps the earlier values (schedule stag
   assert.equal(progress.dayCount, 3);
   assert.equal(progress.bytesTotal, 20);
   assert.equal(progress.phase, 'schedule');
-});
-
-test('tracks each day from pending through reading, analyzing and done', () => {
-  let progress = startProgress(dates);
-  progress = reduceProgress(progress, stage({phase: 'read'}));
-  assert.equal(progress.days[20261104], 'reading');
-  progress = reduceProgress(progress, stage({phase: 'analyze', date: 20261104}));
-  assert.equal(progress.days[20261104], 'analyzing');
-  progress = reduceProgress(progress, {event: 'day', date: 20261104, cached: false});
-  assert.equal(progress.days[20261104], 'done');
-  progress = reduceProgress(progress, stage({phase: 'read'}));
-  assert.equal(progress.days[20261105], 'reading');
-  progress = reduceProgress(progress, {event: 'unavailable', date: 20261105});
-  progress = reduceProgress(progress, {event: 'day', date: 20261106, cached: true});
-  assert.deepEqual(Object.values(progress.days), ['done', 'no_data', 'cached']);
 });
 
 test('unrelated events leave progress alone', () => {

@@ -5,8 +5,7 @@
   import {addDays, dayTypeOf, lastDays, rangeDates, type DayType} from '../lib/dates';
   import {dateLabel, dateNumber, datesLabel, isoDate, parseIso, plural} from '../lib/format';
   import {app} from '../lib/state.svelte';
-  import {loading} from '../lib/loading.svelte';
-  import {DAY_STATUS_LABEL} from '../lib/progress';
+  import {dayOf, statusLabel, type DayRecord} from '../lib/days';
 
   let open = $state(false);
   let root = $state<HTMLElement>();
@@ -98,6 +97,18 @@
     app.setDates(app.dates.includes(number) ? app.dates.filter(d => d !== number) : [...app.dates, number]);
   }
 
+  // Only the marks that are on the calendar now are explained under it.
+  const legend = $derived.by(() => {
+    const records: DayRecord[] = Object.values(app.days);
+    const parts: string[] = [];
+    if (records.some(r => r.status === 'loaded' && r.partial)) parts.push('hollow dot: only partly in the archive, so read again next visit');
+    if (records.some(r => r.status === 'queued')) parts.push('dashed outline: waiting');
+    if (records.some(r => r.status === 'reading' || r.status === 'analyzing')) parts.push('copper outline: working');
+    if (records.some(r => r.status === 'no_data')) parts.push('struck through: no data');
+    if (records.some(r => r.status === 'failed')) parts.push('red outline: failed');
+    return parts;
+  });
+
   const available = (iso: string) => !!feed && iso >= feed.date_min && iso <= feed.date_max;
 </script>
 
@@ -154,20 +165,24 @@
           {#each cells as iso}
             {#if iso}
               {@const number = dateNumber(iso)}
-              {@const status = number in app.unavailableDates ? 'no_data' : loading.dayStatus(number)}
+              {@const record = dayOf(app.days, number)}
+              {@const label = statusLabel(record)}
               <button
                 class="day"
                 class:selected={app.dates.includes(number)}
                 class:anchor={anchor === iso}
                 class:weekend={dayTypeOf(iso) !== 'weekday'}
-                class:cached={app.cachedDates.includes(number)}
-                class:failed={status === 'failed'}
-                class:nodata={status === 'no_data'}
-                class:working={status === 'reading' || status === 'analyzing'}
-                class:waiting={status === 'pending'}
+                class:cached={record.saved}
+                class:partial={record.status === 'loaded' && record.partial}
+                class:failed={record.status === 'failed'}
+                class:nodata={record.status === 'no_data'}
+                class:working={record.status === 'reading' || record.status === 'analyzing'}
+                class:waiting={record.status === 'queued'}
+                data-status={record.status}
+                title={record.reason ?? (record.status === 'loaded' && record.partial ? 'Part of this day was missing from the archive when it was read.' : undefined)}
                 disabled={!available(iso)}
                 aria-pressed={app.dates.includes(number)}
-                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{app.cachedDates.includes(number) ? ', already on this device' : ''}{status && status !== 'done' && status !== 'cached' ? `, ${DAY_STATUS_LABEL[status]}` : ''}"
+                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{record.saved ? ', already on this device' : ''}{label ? `, ${label}` : ''}"
                 onclick={() => toggle(iso)}
               >{parseIso(iso).getUTCDate()}</button>
             {:else}
@@ -176,7 +191,7 @@
           {/each}
         </div>
         <p class="fine foot"><strong>Selected:</strong> {app.dates.length ? `${datesLabel(app.dates)} (${plural(app.dates.length, 'day')})` : 'no days'}</p>
-        <p class="fine foot"><span class="dot"></span> Already on this device{#if app.running || loading.failedDates.length || Object.keys(app.unavailableDates).length} · dashed or copper outline: waiting or working, struck through: no data, red outline: failed{/if}</p>
+        <p class="fine foot"><span class="dot"></span> Already on this device{#each legend as part}{' · '}{part}{/each}</p>
         <p class="fine">Days are local service days. The newest day in the archive is missing its evening until the next file is published.</p>
       </div>
     </div>
@@ -214,6 +229,10 @@
   .day.cached::after {
     content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px;
     border-radius: 50%; background: var(--copper);
+  }
+  .day.partial::after {
+    content: ""; position: absolute; left: 50%; bottom: 2px; width: 6px; height: 6px; margin-left: -3px;
+    border-radius: 50%; border: 1.5px solid var(--copper); background: none; box-sizing: border-box;
   }
   .day.waiting { outline: 1px dashed var(--rule-strong); outline-offset: -1px; }
   .day.working { outline: 1.5px solid var(--copper); outline-offset: -1.5px; }

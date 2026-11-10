@@ -11,6 +11,7 @@ import {
   type DayEntry, type DayIndexEntry, type EventsEntry, type FeedEntry, type ScheduleEntry,
 } from './cache';
 import {EngineError, classifyError, isTransient, serializeError} from './errors';
+import {chooseMethod, usesSchedule, withMethod, type DayMethod} from './method.ts';
 import {withTripMatch} from './tripmatch';
 import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord, TimingSpan} from './types';
 
@@ -37,6 +38,8 @@ let baseUrl = '';
 let eventDatesInMemory: number[] = [];
 /** Share of realtime trip IDs matching the schedule for each day of the open feed, 0 to 1. */
 let tripMatches = new Map<number, number | null>();
+/** How each day of the open feed was measured. Absent for days saved before it was kept. */
+let dayMethods = new Map<number, DayMethod>();
 
 let db: duckdb.AsyncDuckDB | undefined;
 let duckWorkerInstance: Worker | undefined;
@@ -543,6 +546,7 @@ function openFeedEngine(feedKey: string) {
   currentFeed = feedKey;
   eventDatesInMemory = [];
   tripMatches = new Map();
+  dayMethods = new Map();
   return engine;
 }
 
@@ -562,6 +566,8 @@ async function restoreDay(run: Run, date: number) {
     // Days saved before the rate was kept have none, and are read from their notes.
     if (imported && entry.tripMatch !== undefined) tripMatches.set(date, entry.tripMatch);
     else tripMatches.delete(date);
+    if (imported && entry.method) dayMethods.set(date, entry.method);
+    else dayMethods.delete(date);
     return imported;
   } catch (error) {
     if (error instanceof RunStopped) throw error;
@@ -577,11 +583,11 @@ async function restoreDay(run: Run, date: number) {
  * Saves a finished day, last of all writing the entry that makes it visible, so a
  * partly saved day can never be restored as if it were whole.
  */
-async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null, tripMatch: number | null) {
+async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null, tripMatch: number | null, method: DayMethod) {
   const version = Engine.metricVersion();
   const key = dayKey(run.feedKey, date, version);
   if (events && !(await run.wait(putEntry('events', key, {events} satisfies EventsEntry)))) return false;
-  if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString(), tripMatch} satisfies DayEntry)))) return false;
+  if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString(), tripMatch, method} satisfies DayEntry)))) return false;
   return run.wait(putEntry('dayIndex', key, {bytes: cube.byteLength} satisfies DayIndexEntry));
 }
 
@@ -600,7 +606,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   for (const date of [...new Set(dates)].sort((a, b) => a - b)) {
     if (await restoreDay(run, date)) {
       result.cached.push(date);
-      run.emit({event: 'day', date, cached: true});
+      run.emit({event: 'day', date, cached: true, saved: true, partial: false});
     } else {
       remaining.push(date);
     }
@@ -785,11 +791,16 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       if (joined && hasFixes && match >= MIN_TRIP_MATCH && match < NOTE_TRIP_MATCH) {
         dayNotes.push(`${formatDate(date)}: ${(match * 100).toFixed(0)}% of realtime trip IDs match the schedule, and the rest are left out. This is normal for a feed shared with other agencies, but check the share of scheduled trips observed.`);
       }
-      const useSchedule = joined && (!hasFixes || match >= MIN_TRIP_MATCH);
+      const method = chooseMethod({
+        hasSchedule: Boolean(choice), publishedBefore: choice?.published_before ?? true, scheduleFailed: Boolean(failure),
+        hasFixes, match, minMatch: MIN_TRIP_MATCH,
+      });
+      const useSchedule = usesSchedule(method);
       // Measured whenever positions were compared with a schedule, even if the match was
       // too low to use it. Null when there was nothing to compare.
       const tripMatch = joined && hasFixes ? match : null;
       tripMatches.set(date, tripMatch);
+      dayMethods.set(date, method);
       const missingJson = JSON.stringify(missing);
       const notesJson = JSON.stringify(dayNotes);
       const analysisStarted = performance.now();
@@ -806,18 +817,19 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       } else {
         // Only a whole day is saved. A partial one is read again next time, because
         // the archive may have the rest by then.
+        let saved = false;
         if (output.status === 'complete' && output.cube) {
+          saved = true;
           const digest = useSchedule ? choice!.key : output.digest!;
-          let saved = true;
           if (output.meta) saved = await run.wait(putEntry('schedules', scheduleKey(run.feedKey, digest), {meta: output.meta} satisfies ScheduleEntry));
-          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null, tripMatch));
+          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null, tripMatch, method));
           if (saved) {
             if (output.events) rememberEvents(date);
           }
           // A failed save is reported once by the cache itself, as a notice on the page.
         }
         result.analyzed.push(date);
-        run.emit({event: 'day', date, cached: false});
+        run.emit({event: 'day', date, cached: false, saved, partial: output.status === 'partial'});
       }
 
       const next = remaining[remaining.indexOf(date) + 1];
@@ -897,6 +909,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
       currentFeed = undefined;
       eventDatesInMemory = [];
       tripMatches = new Map();
+      dayMethods = new Map();
     }
     return true;
   },
@@ -909,7 +922,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     engine?.select(selection);
     return true;
   },
-  overview: () => withTripMatch(JSON.parse(engine!.overview()), tripMatches),
+  overview: () => withMethod(withTripMatch(JSON.parse(engine!.overview()), tripMatches), dayMethods),
   routes: () => JSON.parse(engine!.routes()),
   networkMap: (route?: string) => JSON.parse(engine!.networkMap(route)),
   hotspots: () => JSON.parse(engine!.hotspots()),
@@ -929,7 +942,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     return {available: target.hasEvents(date), line: JSON.parse(target.stringLine(route, dir, date))};
   },
   stops: () => JSON.parse(engine!.stops()),
-  quality: () => JSON.parse(engine!.quality()),
+  quality: () => withMethod(JSON.parse(engine!.quality()), dayMethods),
 };
 
 addEventListener('message', async (event: MessageEvent) => {

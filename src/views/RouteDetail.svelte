@@ -19,15 +19,11 @@
   } from '../lib/format';
   import {HOURS} from '../lib/scale';
   import {app, errorText} from '../lib/state.svelte';
+  import {resource} from '../lib/resource.svelte';
   import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, sampleText, scheduleSuppressed} from '../lib/stats';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
-  let detail = $state<RouteDetail | null>(null);
-  let network = $state<NetworkMap | null>(null);
-  let loaded = $state<string | null>(null);
-  let problem = $state<string | null>(null);
-  let refreshing = $state(false);
   let highlight = $state<[number, number][] | null>(null);
 
   let chosenDate = $state<string | null>(null);
@@ -40,38 +36,22 @@
   let hover = $state<number | null>(null);
   let headwayHover = $state<number | null>(null);
 
-  // The route.
-  $effect(() => {
+  // The route. Its ID is the subject, so one route's report is never shown under another's name.
+  const report = resource<{id: string; route: RouteDetail | null; map: NetworkMap}>(() => {
     app.version;
     const id = app.routeId;
     // Results can be flagged while the engine's selection is being rebuilt; wait for the overview.
-    if (!id || !app.hasResults || !app.overview) {
-      detail = null;
-      network = null;
-      loaded = null;
-      return;
-    }
-    let current = true;
-    refreshing = true;
-    problem = null;
-    Promise.all([engine.routeDetail(id), engine.networkMap(id)])
-      .then(([route, map]) => {
-        if (!current) return;
-        detail = route;
-        network = map;
-        loaded = id;
-        if (!route) problem = `Route ${id} has no service in the selected days.`;
-      })
-      .catch(error => {
-        if (current) problem = errorText(error);
-      })
-      .finally(() => {
-        if (current) refreshing = false;
-      });
-    return () => {
-      current = false;
-    };
+    if (!id || !app.hasResults || !app.overview) return null;
+    return {key: id, load: async () => {
+      const [route, map] = await Promise.all([engine.routeDetail(id), engine.networkMap(id)]);
+      return {id, route, map};
+    }};
   });
+  const detail = $derived(report.value?.route ?? null);
+  const network = $derived(report.value?.map ?? null);
+  const loaded = $derived(report.value?.id ?? null);
+  const refreshing = $derived(report.status === 'refreshing');
+  const problem = $derived(report.failure ?? (report.value && !report.value.route ? `Route ${report.value.id} has no service in the selected days.` : null));
 
   const score = $derived(detail?.score ?? null);
   // One route's own mode picks the scale, whatever the rest of the agency runs.

@@ -49,9 +49,10 @@ Two more checks aren't in CI:
 ```sh
 cargo test -p transit-core --test sql_contract -- --ignored   # needs the duckdb CLI
 npm run test:e2e                                              # built release against the live archive
+npm run test:e2e:states                                       # startup, stop, failure and day states, same archive
 ```
 
-The end-to-end test needs Chrome. Set `CHROME_PATH` to an installed browser if Playwright's own Chromium isn't available. It reads the live archive, so a failure can be the archive and not your change.
+The end-to-end tests need Chrome. Set `CHROME_PATH` to an installed browser if Playwright's own Chromium isn't available. They read the live archive, so a failure can be the archive and not your change. The second one cuts its own connection to the archive partway through, through a local proxy, to check what the page says when a run fails.
 
 ## Rules that are easy to miss
 

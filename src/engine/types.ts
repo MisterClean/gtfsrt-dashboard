@@ -1,4 +1,6 @@
 // What the Rust reports return. Mirrors crates/core/src/report.rs.
+import type {DayMethod} from './method.ts';
+
 export type Mode = 'All' | 'Bus' | 'Rail' | 'Ferry' | 'Other' | 'Unknown';
 export type DayStatus = 'Complete' | 'Partial' | 'NoData';
 
@@ -44,6 +46,8 @@ export interface DayRow {
    * measured: a day with no schedule, or a saved day from before it was kept.
    */
   trip_match: number | null;
+  /** How the day was measured. Null for a day saved before this was kept. */
+  method?: DayMethod | null;
   warnings: string[];
 }
 
@@ -320,7 +324,11 @@ export interface Quality {
   empty_buckets: number;
 }
 
-export interface QualityDay { date: string; digest: string; status: DayStatus; quality: Quality; warnings: string[] }
+export interface QualityDay {
+  date: string; digest: string; status: DayStatus; quality: Quality; warnings: string[];
+  /** How the day was measured. Null for a day saved before this was kept. */
+  method?: DayMethod | null;
+}
 export interface QualityReport { days: QualityDay[]; metric_version: number }
 
 // ---- Catalog and engine messages -------------------------------------------
@@ -383,7 +391,15 @@ export type EngineEvent =
       /** The service day being analyzed, when there is one. */
       date?: number;
     }
-  | { event: 'day'; date: number; cached: boolean }
+  | {
+      event: 'day'; date: number;
+      /** Loaded from this device rather than read from the archive. */
+      cached: boolean;
+      /** Its results are kept on this device. False for a partial day, or when saving failed. */
+      saved: boolean;
+      /** Part of the day was missing from the archive. */
+      partial: boolean;
+    }
   | { event: 'unavailable'; date: number; reason: string }
   | { event: 'read'; record: ReadRecord }
   | { event: 'schedule'; record: ScheduleRecord }

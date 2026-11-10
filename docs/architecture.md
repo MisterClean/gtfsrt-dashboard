@@ -111,6 +111,27 @@ Only complete days are saved. A day whose scheduled service runs into a missing 
 
 The merged sums are recomputed on demand, and anything that changes the library clears them, so a report can't read sums from before a day or schedule arrived.
 
+## Page state
+
+What the page knows is held in a few small state machines, each a set of pure functions with unit tests. The app state (`src/lib/state.svelte.ts`) holds their values and nothing that duplicates them: the lists the views read, such as the days in memory or the days saved on the device, are computed from these values every time.
+
+| Machine | File | States |
+| --- | --- | --- |
+| Startup | `lib/startup.ts` | starting the engine, loading the catalog, opening the agency, ready, or failed at a named step |
+| A service day | `lib/days.ts` | idle, queued, reading, analyzing, loaded (whole or partial), no data, failed. Whether it is saved on the device is recorded beside the status. |
+| The analysis run | `lib/run.ts` | idle, running (with progress and a stall flag), stopped, failed. A stopped or failed run keeps the days it did not finish. |
+| A view's own report | `lib/resource.ts` | empty, loading, ready, refreshing, failed |
+| How a day was measured | `engine/method.ts` | schedule, schedule captured later, or GPS only for one of three named reasons |
+
+Rules that follow from them:
+
+- **Saved days load by themselves.** A saved day picked while a run is going is queued, and loads when that run ends, however it ends.
+- **A notice lasts as long as it applies.** A stopped or failed run's notice names the days it left. It narrows as those days are deselected or finished, and goes when none are left. Its button asks for exactly those days.
+- **A day with no data isn't pending.** It is asked for again only when the visitor says to check the archive again.
+- **One reset.** Changing agency and clearing saved results both go through the same reset, so neither can leave part of the old agency behind.
+- **A report is only shown for its subject.** A view never shows one route's report under another's name, and a failed refresh removes the old answer instead of leaving it up as if it were current.
+- **The method is recorded, not inferred.** The worker names how each day was measured when it analyzes it and saves the name with the day. Days saved before this have none and say "Not recorded".
+
 ## Source contracts
 
 The archive's [published-artifact contract](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/specs/behaviors/published-artifacts.md) defines these resources:
@@ -145,7 +166,7 @@ crates/core/src/
 crates/wasm/    browser bindings
 src/engine/     worker, cache, client, network contracts
 src/components/ shell, table, date picker and other shared pieces
-src/lib/        state, formatting, scales, downloads
+src/lib/        state and its state machines, formatting, scales, downloads
 src/charts/     SVG and canvas charts
 src/map/        MapLibre map, basemap style, time control
 src/views/      one file per report
