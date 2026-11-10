@@ -23,13 +23,20 @@ const RUN_REFRESH_MS = 20_000;
 
 interface Preferences { units: Units; theme: 'auto' | 'light' | 'dark'; basemap: boolean }
 
+/** A host whose content policy blocks the tile server (the Claude artifact) turns the street basemap off. */
+function basemapAllowed() {
+  return document.querySelector('meta[name="transit-basemap"]')?.getAttribute('content') !== 'off';
+}
+
 function loadPreferences(): Preferences {
   const defaults: Preferences = {units: 'imperial', theme: 'auto', basemap: true};
+  let preferences = defaults;
   try {
-    return {...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')};
+    preferences = {...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')};
   } catch {
-    return defaults;
+    // Defaults stand in a private window.
   }
+  return {...preferences, basemap: preferences.basemap && basemapAllowed()};
 }
 
 class AppState {
