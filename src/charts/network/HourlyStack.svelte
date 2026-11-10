@@ -4,11 +4,10 @@
   import type {HourRow} from '../../engine/types';
   import {measure} from '../../lib/actions';
   import {hourRange, hourShort, int, pct} from '../../lib/format';
+  import {isShown, sampleText} from '../../lib/stats';
   import {HOURS, PEAKS, linear} from '../../lib/scale';
   import {tooltip} from '../../lib/tooltip.svelte';
 
-  /** Hours with fewer departures than this say more about chance than service. */
-  const MIN_DEPARTURES = 10;
   const GAP = 2;
 
   let {rows, height = 230}: {rows: HourRow[]; height?: number} = $props();
@@ -39,7 +38,7 @@
   const columns = $derived(
     HOURS.flatMap(hour => {
       const row = byHour.get(hour);
-      if (!row || row.on_time.total < MIN_DEPARTURES) return [];
+      if (!row || !isShown(row.on_time.total)) return [];
       const left = x(hour) + (slot - barWidth) / 2;
       const plot = height - margin.top - margin.bottom;
       let base = height - margin.bottom;
@@ -58,14 +57,14 @@
 
   function rowsFor(hour: number) {
     const row = byHour.get(hour);
-    if (!row || row.on_time.total < MIN_DEPARTURES) return [{title: hourRange(hour)}, {note: 'Too few departures to report'}];
+    if (!row || !isShown(row.on_time.total)) return [{title: hourRange(hour)}, {note: `Too few trips to report (n = ${int(row?.on_time.total ?? 0)})`}];
     const {total, on_time, late, early} = row.on_time;
     return [
       {title: hourRange(hour)},
       {label: 'On time', value: pct(on_time / total)},
       {label: 'Late', value: pct(late / total)},
       {label: 'Early', value: pct(early / total)},
-      {note: `${int(total)} departures at timepoints`},
+      {note: `${sampleText(total)} departures at timepoints`},
     ];
   }
 

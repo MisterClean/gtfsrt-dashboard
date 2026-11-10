@@ -19,6 +19,7 @@
   } from '../lib/format';
   import {HOURS} from '../lib/scale';
   import {app, errorText} from '../lib/state.svelte';
+  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, sampleText, scheduleSuppressed} from '../lib/stats';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
@@ -78,6 +79,12 @@
   const direction = $derived<DirectionDetail | null>(directions[Math.min(app.directionIndex, directions.length - 1)] ?? null);
   const name = $derived(score ? routeName(score.label, score.long_name) : '');
   const days = $derived(Math.max(1, detail?.dates.length ?? 1));
+  const coverage = $derived(coverageOf(app.overview));
+  const onTimeShown = $derived(!!score && !scheduleSuppressed(coverage) && isShown(score.on_time.total));
+  const caveat = $derived(coverageNote(coverage));
+  const shownPct = (value: number | null, n: number) => (scheduleSuppressed(coverage) ? DASH : isShown(n) ? `${pct(value)}${sampleState(n) === 'low' ? '*' : ''}` : TOO_FEW);
+  const perDay = (total: number) => (total / days).toFixed(1);
+  const minutesBare = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? DASH : (seconds / 60).toFixed(1));
   const unit = $derived(speedUnit(app.units));
   const date = $derived(chosenDate && detail?.dates.includes(chosenDate) ? chosenDate : (detail?.dates[detail.dates.length - 1] ?? null));
 
@@ -188,8 +195,9 @@
       descending: true, value: stop => stop.zone_seconds, format: stop => (stop.zone_seconds === null ? DASH : `${Math.round(stop.zone_seconds)} s`),
     },
     {key: 'deviation', label: 'Mean deviation', title: 'Minutes:seconds against the schedule. Positive is late.', descending: true, value: stop => stop.deviation, format: stop => deviation(stop.deviation)},
-    {key: 'ontime', label: 'On time', value: stop => ratioOf(stop.on_time.on_time, stop.on_time.total), format: stop => pct(ratioOf(stop.on_time.on_time, stop.on_time.total))},
-    {key: 'bunched', label: 'Bunched', title: 'Frequent service only', descending: true, value: stop => stop.headways?.bunched ?? null, format: stop => pct(stop.headways?.bunched)},
+    {key: 'ontime', label: 'On time, all passes', title: `${DEFINITIONS.ontimeStops} Withheld under ${MIN_EVENTS} passes.`, value: stop => (isShown(stop.on_time.total) ? ratioOf(stop.on_time.on_time, stop.on_time.total) : null), format: stop => shownPct(ratioOf(stop.on_time.on_time, stop.on_time.total), stop.on_time.total)},
+    {key: 'passesN', label: 'Timed passes (n)', title: 'Stop passes behind the on-time share, across all selected days', descending: true, value: stop => stop.on_time.total, format: stop => int(stop.on_time.total)},
+    {key: 'bunched', label: 'Bunched', title: 'Frequent service only', descending: true, value: stop => stop.headways?.bunched ?? null, format: stop => (stop.headways ? shownPct(stop.headways.bunched, stop.headways.count) : DASH)},
     {key: 'gap', label: 'Gap to next stop', title: 'Distance along the line to the next stop', value: stop => stop.gap_to_next_m, format: stop => shortLength(stop.gap_to_next_m, app.units), csv: stop => (stop.gap_to_next_m === null ? '' : Math.round(stop.gap_to_next_m))},
   ]);
 
@@ -197,14 +205,15 @@
     {key: 'hour', label: 'Hour', left: true, value: row => row.hour, format: row => hourRange(row.hour), csv: row => hourRange(row.hour)},
     {key: 'speed', label: `Speed, ${unit}`, descending: true, value: row => row.speed, format: row => speed(row.speed, app.units), csv: row => (row.speed === null ? '' : Number(speed(row.speed, app.units)))},
     {key: 'sched', label: `Scheduled, ${unit}`, descending: true, value: row => row.scheduled_speed, format: row => speed(row.scheduled_speed, app.units), csv: row => (row.scheduled_speed === null ? '' : Number(speed(row.scheduled_speed, app.units)))},
-    {key: 'ontime', label: 'On time', value: row => ratioOf(row.on_time.on_time, row.on_time.total), format: row => pct(ratioOf(row.on_time.on_time, row.on_time.total))},
-    {key: 'late', label: 'Late', descending: true, value: row => ratioOf(row.on_time.late, row.on_time.total), format: row => pct(ratioOf(row.on_time.late, row.on_time.total))},
-    {key: 'tripsSched', label: 'Trips scheduled', descending: true, value: row => row.trips_scheduled, format: row => int(row.trips_scheduled)},
-    {key: 'tripsObs', label: 'Observed', descending: true, value: row => row.trips_observed, format: row => int(row.trips_observed)},
-    {key: 'headway', label: 'Headway', title: 'Average observed time between vehicles. Frequent service only.', value: row => (row.headways ? row.actual_headway_s : null), format: row => (row.headways ? minutes(row.actual_headway_s, 1) : DASH)},
-    {key: 'headwaySched', label: 'Scheduled headway', value: row => (row.headways ? row.scheduled_headway_s : null), format: row => (row.headways ? minutes(row.scheduled_headway_s, 1) : DASH)},
-    {key: 'bunched', label: 'Bunched', descending: true, value: row => row.headways?.bunched ?? null, format: row => pct(row.headways?.bunched)},
-    {key: 'gapped', label: 'Gaps', descending: true, value: row => row.headways?.gapped ?? null, format: row => pct(row.headways?.gapped)},
+    {key: 'ontime', label: 'On time', title: `Departures at timepoints in the on-time window. Withheld under ${MIN_EVENTS} departures; * marks fewer than 100.`, value: row => (isShown(row.on_time.total) ? ratioOf(row.on_time.on_time, row.on_time.total) : null), format: row => shownPct(ratioOf(row.on_time.on_time, row.on_time.total), row.on_time.total)},
+    {key: 'timed', label: 'Timed departures (n, all days)', title: 'Total across the selected days, behind the on-time shares', descending: true, value: row => row.on_time.total, format: row => int(row.on_time.total)},
+    {key: 'late', label: 'Late', descending: true, value: row => ratioOf(row.on_time.late, row.on_time.total), format: row => shownPct(ratioOf(row.on_time.late, row.on_time.total), row.on_time.total)},
+    {key: 'tripsSched', label: 'Trips scheduled a day', title: 'Average per selected day, like every other count on this page', descending: true, value: row => Number((row.trips_scheduled / days).toFixed(2)), format: row => perDay(row.trips_scheduled)},
+    {key: 'tripsObs', label: 'Trips observed a day', title: 'Average per selected day', descending: true, value: row => Number((row.trips_observed / days).toFixed(2)), format: row => perDay(row.trips_observed)},
+    {key: 'headway', label: 'Headway, min', title: 'Average observed time between vehicles. Frequent service only.', value: row => (row.headways ? row.actual_headway_s : null), format: row => (row.headways ? minutesBare(row.actual_headway_s) : DASH)},
+    {key: 'headwaySched', label: 'Scheduled headway, min', value: row => (row.headways ? row.scheduled_headway_s : null), format: row => (row.headways ? minutesBare(row.scheduled_headway_s) : DASH)},
+    {key: 'bunched', label: 'Bunched', descending: true, value: row => row.headways?.bunched ?? null, format: row => (row.headways ? shownPct(row.headways.bunched, row.headways.count) : DASH)},
+    {key: 'gapped', label: 'Gaps', descending: true, value: row => row.headways?.gapped ?? null, format: row => (row.headways ? shownPct(row.headways.gapped, row.headways.count) : DASH)},
   ]);
 
   const patternColumns = $derived<Column<PatternSummary>[]>([
@@ -325,6 +334,7 @@
       </div>
     </div>
 
+    {#if caveat}<p class="banner caution" role="note" data-coverage={coverage.mode}>{#if coverage.mode === 'gps'}<strong>Speeds only.</strong> {/if}{caveat}</p>{/if}
     <dl class="stats">
       <div class="stat">
         <dt><Term topic="speed">Operating speed</Term></dt>
@@ -343,20 +353,30 @@
         </div>
       </div>
       <div class="stat">
-        <dt><Term topic="ontime">On-time departures</Term></dt>
-        <dd>{pct(ratioOf(score.on_time.on_time, score.on_time.total))}</dd>
-        <div class="sub">{pct(ratioOf(score.on_time.late, score.on_time.total))} late, {pct(ratioOf(score.on_time.early, score.on_time.total))} early</div>
+        <dt><Term topic="ontime" def={DEFINITIONS.ontime('1 min early', '5 min late')}>On-time departures</Term></dt>
+        {#if onTimeShown}
+          <dd>{pct(ratioOf(score.on_time.on_time, score.on_time.total))}{#if coverage.mode === 'partial'} <small>partial</small>{/if}</dd>
+          <div class="sub">{pct(ratioOf(score.on_time.late, score.on_time.total))} late, {pct(ratioOf(score.on_time.early, score.on_time.total))} early · at timepoints · {sampleText(score.on_time.total)}</div>
+        {:else}
+          <dd>—</dd>
+          <div class="sub">{scheduleSuppressed(coverage) ? 'withheld, no usable schedule match' : sampleText(score.on_time.total)}</div>
+        {/if}
       </div>
       <div class="stat">
-        <dt><Term topic="service">Trips observed</Term></dt>
+        <dt><Term topic="service" def={DEFINITIONS.observed}>Trips observed</Term></dt>
         <dd>{int(score.trips_observed / days)} <small>a day</small></dd>
-        <div class="sub">{pct(ratioOf(score.trips_observed, score.trips_scheduled), 1)} of {int(score.trips_scheduled / days)} scheduled</div>
+        <div class="sub">{scheduleSuppressed(coverage) ? 'no usable schedule match' : `${pct(ratioOf(score.trips_observed, score.trips_scheduled), 1)} of ${int(score.trips_scheduled / days)} scheduled`}</div>
       </div>
       {#if score.headways}
         <div class="stat">
-          <dt><Term topic="headways">Excess wait</Term></dt>
-          <dd>{minutes(score.headways.excess_wait_s, 1)}</dd>
-          <div class="sub">{pct(score.headways.bunched)} bunched, {pct(score.headways.gapped)} after a gap</div>
+          <dt><Term topic="headways" def={DEFINITIONS.excessWait}>Excess wait</Term></dt>
+          {#if isShown(score.headways.count) && !scheduleSuppressed(coverage)}
+            <dd>{minutes(score.headways.excess_wait_s, 1)}</dd>
+            <div class="sub">{pct(score.headways.bunched)} bunched, {pct(score.headways.gapped)} after a gap · {sampleText(score.headways.count)} headways</div>
+          {:else}
+            <dd>—</dd>
+            <div class="sub">{sampleText(score.headways.count)} headways</div>
+          {/if}
         </div>
       {/if}
       <div class="stat">
@@ -606,8 +626,8 @@
               yMax={1}
               format={value => `${(value * 100).toFixed(0)}%`}
               series={[
-                {key: 'ontime', label: 'On time', color: 'var(--blue)', values: at(row => (row.on_time.total >= 5 ? ratioOf(row.on_time.on_time, row.on_time.total) : null))},
-                {key: 'late', label: 'Late', color: 'var(--orange)', values: at(row => (row.on_time.total >= 5 ? ratioOf(row.on_time.late, row.on_time.total) : null))},
+                {key: 'ontime', label: 'On time', color: 'var(--blue)', values: at(row => (isShown(row.on_time.total) ? ratioOf(row.on_time.on_time, row.on_time.total) : null))},
+                {key: 'late', label: 'Late', color: 'var(--orange)', values: at(row => (isShown(row.on_time.total) ? ratioOf(row.on_time.late, row.on_time.total) : null))},
               ]}
             />
           </figure>
@@ -615,7 +635,7 @@
         <DataTable
           columns={hourColumns}
           rows={direction.hourly}
-          caption="This direction by service hour"
+          caption="This direction by service hour. Trip counts are per day; timed departures are totals across the selected days."
           defaultSort="hour"
           filename="route-{score.id}-direction-{direction.dir}-hours.csv"
         />

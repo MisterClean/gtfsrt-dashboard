@@ -135,6 +135,24 @@ The network's own peak, midday and evening figures on the Overview are pooled ac
 - **Shown for:** Route peak speed and peak change, with at least five selected days.
 - **Known limits:** It shows how much the result would move with a different set of similar days. It doesn't capture error in individual GPS reports. Resampling every segment for every route would be too slow, so the interval's width comes from pooled speeds, and it is then moved to surround the fixed-segment figure shown beside it.
 
+### Sample sizes and partial days
+
+One rule, in `src/lib/stats.ts`, decides whether a figure is shown. Every on-time share, headway share and excess-wait figure is printed with its n, and its definition is on hover beside the headline number.
+
+| Events behind a share | What the app does |
+| --- | --- |
+| Under 20 | Withheld. The figure reads "too few trips" with its n. |
+| 20 to 99 | Shown, marked "low sample" (`*` in tables). |
+| 100 or more | Shown. |
+
+- **Events** are timed departures for on-time, and headways on frequent service for bunching, gaps, wait assessment and excess wait. Twenty events leave about 10 points of sampling error at a 50% share, and 100 about 5.
+- **One hour of the day** is the thinnest slice charted. On-time by hour needs 20 departures. Headways by hour need 100, because late at night a handful of overlapping trips can look like frequent service.
+- **Headline hours.** "Slowest hour" and "worst on-time hour" are chosen only among hours with enough events and with at least half the service (vehicle hours observed) of the median operating hour. A single overnight run on a thin schedule is not named the slowest or least reliable hour.
+- **Intervals.** Peak speed and peak change use day resampling (see above). `wilson()` in `stats.ts` gives a Wilson score interval for proportions when a view needs one; the views do not show it yet.
+- **Trip-ID match.** The app reports the share of realtime trip IDs that match the schedule when it is under 80%. At 25% or more the on-time, trips-observed and headway figures stay but are labelled "partial" with the match rate: they describe the matched trips only. Under 25% they are withheld, because a subset that small is not representative of the service. Speeds are never withheld. Sound Transit at 39% is "partial". The 25% line is a judgement, not a measured error bound; revisit it with validation data.
+- **Days with no schedule.** If every selected day is GPS-only, the pages show speeds only, with one notice, and leave out on-time, trips, headways and run times rather than showing zeros. If only some days lack a schedule, the shares cover the other days and the notice says so.
+- **Units.** Counts per route, stop and hour are per selected day unless the heading says "all days" or "(n)". Speeds, minutes and distances carry their unit in the column heading, and cells show bare numbers.
+
 ### Share of time stopped
 
 - **Formula:** Time in intervals moving under 0.9 m/s (about 2 mph) ÷ measured time.
@@ -163,7 +181,8 @@ The **main pattern** is the one with the most complete observed trips in the sel
 - **Where measured:** At stops the schedule marks `timepoint = 1`. When a trip marks none, at all its stops.
 - **Weighting:** Each trip counts once at each timepoint. Repeated polling doesn't change the weighting, unlike snapshot-based methods.
 - **Data needed:** Trip IDs that match the schedule version in force, and a schedule that reflects what was operated.
-- **Known limits:** It says nothing about a trip absent from the feed. A trip on detour can be missing passes, because reports off the line are skipped. Trips defined only through `frequencies.txt` aren't expanded, so their deviations aren't meaningful.
+- **Labelling:** The window, "at timepoints" and n appear beside every on-time figure. Stop-level on-time counts every pass, not only timepoints, so the Stops and route stop tables are headed "all passes" and can differ from the route figure.
+- **Known limits:** It says nothing about a trip absent from the feed, so a route seen on 60% of its trips can still read 95% on time; read it beside the share of trips observed. A trip on detour can be missing passes, because reports off the line are skipped. Trips defined only through `frequencies.txt` aren't expanded, so their deviations aren't meaningful.
 
 **Compared with common practice:** Many agencies use a one-minute-early, five-minute-late window at timepoints, but they read it from AVL stop events. Some exclude the final timepoint or measure only origin departures. This app includes every timepoint, using the arrival at the last stop.
 
@@ -197,7 +216,7 @@ A trip that passes a stop twice doesn't set its own scheduled headway.
 | Scheduled wait | The same formula over the schedule's consecutive stop times, for gaps of 15 minutes or less |
 | Excess wait | Average wait minus scheduled wait |
 
-**Known limits:** A trip absent from the feed lengthens observed headways whether or not it ran. Read these beside trips observed, and treat them with caution when that share is low. A stop pass missed through a reporting gap has the same effect on a smaller scale. Excess wait assumes riders arrive at random and doesn't weight by ridership.
+**Known limits:** Gap shares drop headways longer than the larger of an hour or four scheduled headways, so they are a floor and are labelled "at least". A trip absent from the feed lengthens observed headways whether or not it ran. Read these beside trips observed, and treat them with caution when that share is low. A stop pass missed through a reporting gap has the same effect on a smaller scale. Excess wait assumes riders arrive at random and doesn't weight by ridership.
 
 **Compared with common practice:** Excess wait follows the approach Transport for London popularized for high-frequency routes, here across every stop rather than sampled timing points. Wait assessment follows the New York style of measure, using a three-minute allowance at all hours; some agencies allow more off-peak. Definitions of bunching vary, and some use a fixed threshold in minutes rather than a share of the headway.
 
@@ -283,7 +302,7 @@ These came out of independent validation against raw data, and each is small eno
 
 ### GPS-only speeds
 
-When a day can't be joined to a schedule, speed comes from straight lines between consecutive reports. Compared with schedule-joined speeds on the same reports, that read 10.2% low in Madison and 5.2% low in King County, and 22% to 26% low on the worst single routes. A few routes read high, up to 9%, so no single correction factor works. Ranking between routes holds up well (rank correlation 0.96 and 0.99). Use these speeds to compare routes and times of day, not as absolute figures.
+When a day can't be joined to a schedule, speed comes from straight lines between consecutive reports. Compared with schedule-joined speeds on the same reports, that read 10.2% low in Madison and 5.2% low in King County, and 22% to 26% low on the worst single routes. A few routes read high, up to 9%, so no single correction factor works. Ranking between routes holds up well (rank correlation 0.96 and 0.99). Use these speeds to compare routes and times of day, not as absolute figures. These pages show speeds only, say why once at the top, and name hotspots by coordinates because there are no stop names.
 
 ## Not calculated
 

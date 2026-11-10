@@ -74,7 +74,12 @@
   const distance = (meters: number) => Number((meters / (app.units === 'imperial' ? 1609.34 : 1000)).toFixed(2));
   const routeList = (routes: string[], limit: number) =>
     routes.length > limit ? `${routes.slice(0, limit).join(', ')} and ${routes.length - limit} more` : routes.join(', ');
-  const stretchName = (h: Hotspot) => (h.from && h.to && h.from !== h.to ? `${h.from} to ${h.to}` : h.from || h.to || 'Unnamed stretch');
+  // With no schedule there are no stop names, so a stretch is named by where it is.
+  const nearCoordinates = (h: Hotspot) => {
+    const middle = h.path[Math.floor(h.path.length / 2)];
+    return middle ? `Stretch near ${middle[1].toFixed(4)}, ${middle[0].toFixed(4)}` : `Stretch ${h.rank}`;
+  };
+  const stretchName = (h: Hotspot) => (h.from && h.to && h.from !== h.to ? `${h.from} to ${h.to}` : h.from || h.to || nearCoordinates(h));
   const csvSpeed = (mps: number | null) => (mps === null ? null : Number(toDisplaySpeed(mps, app.units).toFixed(2)));
   // One scale for every row so lines can be compared, trimmed so a stray hour
   // doesn't flatten the rest.

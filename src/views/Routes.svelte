@@ -7,8 +7,17 @@
   import SpeedLegend from '../components/SpeedLegend.svelte';
   import Term from '../components/Term.svelte';
   import type {RouteScore} from '../engine/types';
-  import {DASH, int, minutes, pct, ratioOf, routeName, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
+  import {DASH, int, pct, ratioOf, routeName, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
   import {app} from '../lib/state.svelte';
+  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, scheduleSuppressed} from '../lib/stats';
+
+  const coverage = $derived(coverageOf(app.overview));
+  const withheld = $derived(scheduleSuppressed(coverage));
+  const caveat = $derived(coverageNote(coverage));
+  const matchText = $derived(coverage.matchRate === null ? '' : `${Math.round(coverage.matchRate * 100)}% trip-ID match`);
+  /** A share over n events: "too few trips" under the minimum, a * for a low sample. */
+  const shownPct = (value: number | null, n: number) => (withheld ? DASH : isShown(n) ? `${pct(value)}${sampleState(n) === 'low' ? '*' : ''}` : TOO_FEW);
+  const minutesBare = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? DASH : (seconds / 60).toFixed(1));
 
   let peak = $state<'peak' | 'am' | 'pm'>('peak');
 
@@ -17,8 +26,8 @@
   const speedCsv = (value: number | null | undefined) => (value === null || value === undefined ? null : Number(toDisplaySpeed(value, app.units).toFixed(2)));
   const minutesCsv = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? null : Number((seconds / 60).toFixed(1)));
   const days = $derived(Math.max(1, app.loadedDates.length));
-  const onTime = (r: RouteScore) => ratioOf(r.on_time.on_time, r.on_time.total);
-  const late = (r: RouteScore) => ratioOf(r.on_time.late, r.on_time.total);
+  const onTime = (r: RouteScore) => (!withheld && isShown(r.on_time.total) ? ratioOf(r.on_time.on_time, r.on_time.total) : null);
+  const late = (r: RouteScore) => (!withheld && isShown(r.on_time.total) ? ratioOf(r.on_time.late, r.on_time.total) : null);
   const sparkDomain = $derived.by(() => {
     const values = app.routes.flatMap(r => r.hourly.slice(5, 24)).filter((v): v is number => v !== null);
     if (!values.length) return [0, 1];
@@ -34,29 +43,34 @@
   const dumbbell = $derived(rows.map(r => ({id: r.id, label: r.label, name: r.long_name, mid: r.speed_mid, peak: peakOf(r)})));
   const byPeak = $derived([...rows].sort((a, b) => (a.speed_peak ?? 99) - (b.speed_peak ?? 99)));
 
-  const columns = $derived<Column<RouteScore>[]>([
+  const allColumns = $derived<Column<RouteScore>[]>([
     {key: 'label', label: 'Route', left: true, value: r => r.label, cell: routeCell, csv: r => r.label},
     {key: 'long', label: 'Name', left: true, clip: true, hint: r => routeName(r.label, r.long_name), value: r => routeName(r.label, r.long_name) || null, format: r => routeName(r.label, r.long_name)},
     {key: 'hourly', label: '5 AM to 11 PM', noSort: true, value: () => null, cell: sparkCell, csv: () => ''},
     {key: 'speed', label: `All day, ${unit}`, descending: true, value: r => r.speed, format: r => speed(r.speed, app.units), csv: r => speedCsv(r.speed)},
-    {key: 'mid', label: 'Midday', title: '10 AM to 2 PM', value: r => r.speed_mid, format: r => speed(r.speed_mid, app.units), csv: r => speedCsv(r.speed_mid)},
-    {key: 'peak', label: 'Peak', title: '7 to 9 AM and 4 to 6 PM', value: r => r.speed_peak, format: r => speed(r.speed_peak, app.units), csv: r => speedCsv(r.speed_peak)},
+    {key: 'mid', label: `Midday, ${unit}`, title: '10 AM to 2 PM', value: r => r.speed_mid, format: r => speed(r.speed_mid, app.units), csv: r => speedCsv(r.speed_mid)},
+    {key: 'peak', label: `Peak, ${unit}`, title: '7 to 9 AM and 4 to 6 PM', value: r => r.speed_peak, format: r => speed(r.speed_peak, app.units), csv: r => speedCsv(r.speed_peak)},
     {key: 'change', label: 'Change', title: 'Peak speed against midday, with a 95% interval from resampling days', value: r => r.peak_change, cell: changeCell, csv: r => r.peak_change},
-    {key: 'otp', label: 'On time', title: 'Departures at timepoints within the on-time window', value: onTime, format: r => pct(onTime(r))},
-    {key: 'late', label: 'Late', descending: true, value: late, format: r => pct(late(r))},
-    {key: 'bunched', label: 'Bunched', title: 'Share of vehicles under a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => r.headways?.bunched ?? null, format: r => pct(r.headways?.bunched)},
-    {key: 'ewt', label: 'Excess wait', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true, value: r => r.headways?.excess_wait_s ?? null, format: r => (r.headways ? minutes(r.headways.excess_wait_s, 1) : DASH), csv: r => minutesCsv(r.headways?.excess_wait_s)},
-    {key: 'slowest', label: 'Slowest half mile at peak', left: true, clip: true, hint: r => (r.slowest ? `${r.slowest.from} to ${r.slowest.to}` : ''), value: r => r.slowest?.speed ?? null, cell: slowestCell, csv: r => (r.slowest ? `${speedCsv(r.slowest.speed)} ${unit}, ${r.slowest.from} to ${r.slowest.to}` : '')},
-    {key: 'trips', label: 'Trips a day', descending: true, value: r => r.trips_observed / days, format: r => int(r.trips_observed / days)},
-    {key: 'observed', label: 'Observed', title: 'Share of scheduled trips seen in the realtime feed', descending: true, value: r => ratioOf(r.trips_observed, r.trips_scheduled), format: r => pct(ratioOf(r.trips_observed, r.trips_scheduled))},
-    {key: 'am', label: 'AM', value: r => r.speed_am, format: r => speed(r.speed_am, app.units), csv: r => speedCsv(r.speed_am)},
-    {key: 'pm', label: 'PM', value: r => r.speed_pm, format: r => speed(r.speed_pm, app.units), csv: r => speedCsv(r.speed_pm)},
-    {key: 'sched', label: 'Scheduled', title: 'Speed implied by the schedule', value: r => r.scheduled_speed, format: r => speed(r.scheduled_speed, app.units), csv: r => speedCsv(r.scheduled_speed)},
-    {key: 'run', label: 'Run time', title: 'Median time to run the main pattern end to end', descending: true, value: r => r.run_p50_s, format: r => minutes(r.run_p50_s), csv: r => minutesCsv(r.run_p50_s)},
-    {key: 'p90', label: '90th pct', title: 'One run in ten takes longer than this', descending: true, value: r => r.run_p90_s, format: r => minutes(r.run_p90_s), csv: r => minutesCsv(r.run_p90_s)},
+    {key: 'otp', label: 'On time', title: `Departures at timepoints within the on-time window (default \u22121 / +5 min). Shown from ${MIN_EVENTS} departures; * marks fewer than 100. ${coverage.mode === 'partial' ? `Partial: ${matchText || 'some days lack a schedule'}.` : ''}`, value: onTime, format: r => shownPct(onTime(r), r.on_time.total)},
+    {key: 'timed', label: 'Timed departures (n)', title: 'Departures at timepoints behind the on-time share', descending: true, value: r => (withheld ? null : r.on_time.total), format: r => (withheld ? DASH : int(r.on_time.total))},
+    {key: 'late', label: 'Late', descending: true, value: late, format: r => shownPct(late(r), r.on_time.total)},
+    {key: 'bunched', label: 'Bunched', title: 'Share of vehicles under a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => r.headways?.bunched ?? null, format: r => (r.headways ? shownPct(r.headways.bunched, r.headways.count) : DASH)},
+    {key: 'ewt', label: 'Excess wait, min', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true, value: r => r.headways?.excess_wait_s ?? null, format: r => (r.headways && isShown(r.headways.count) && !withheld ? minutesBare(r.headways.excess_wait_s) : r.headways ? TOO_FEW : DASH), csv: r => minutesCsv(r.headways?.excess_wait_s)},
+    {key: 'slowest', label: `Slowest half mile at peak, ${unit}`, left: true, clip: true, hint: r => (r.slowest ? `${r.slowest.from} to ${r.slowest.to}` : ''), value: r => r.slowest?.speed ?? null, cell: slowestCell, csv: r => (r.slowest ? `${speedCsv(r.slowest.speed)} ${unit}, ${r.slowest.from} to ${r.slowest.to}` : '')},
+    {key: 'trips', label: 'Trips a day (avg)', title: 'Trips observed per selected day, averaged', descending: true, value: r => r.trips_observed / days, format: r => int(r.trips_observed / days)},
+    {key: 'observed', label: 'Share observed', title: DEFINITIONS.observed, descending: true, value: r => (withheld ? null : ratioOf(r.trips_observed, r.trips_scheduled)), format: r => (withheld ? DASH : pct(ratioOf(r.trips_observed, r.trips_scheduled)))},
+    {key: 'am', label: `AM, ${unit}`, value: r => r.speed_am, format: r => speed(r.speed_am, app.units), csv: r => speedCsv(r.speed_am)},
+    {key: 'pm', label: `PM, ${unit}`, value: r => r.speed_pm, format: r => speed(r.speed_pm, app.units), csv: r => speedCsv(r.speed_pm)},
+    {key: 'sched', label: `Scheduled, ${unit}`, title: DEFINITIONS.scheduledSpeed, value: r => r.scheduled_speed, format: r => speed(r.scheduled_speed, app.units), csv: r => speedCsv(r.scheduled_speed)},
+    {key: 'run', label: 'Run time, min', title: 'Median time to run the main pattern end to end', descending: true, value: r => r.run_p50_s, format: r => minutesBare(r.run_p50_s), csv: r => minutesCsv(r.run_p50_s)},
+    {key: 'p90', label: '90th pct run time, min', title: 'One run in ten takes longer than this', descending: true, value: r => r.run_p90_s, format: r => minutesBare(r.run_p90_s), csv: r => minutesCsv(r.run_p90_s)},
     {key: 'stopped', label: 'Stopped', title: 'Share of measured time moving under 2 mph', descending: true, value: r => r.stopped_share, format: r => pct(r.stopped_share)},
-    {key: 'veh', label: 'Vehicles', title: 'Peak vehicles in an hour', descending: true, value: r => r.peak_vehicles, format: r => r.peak_vehicles.toFixed(1)},
+    {key: 'veh', label: 'Peak vehicles', title: 'Most vehicles in service in any hour, averaged over the selected days', descending: true, value: r => r.peak_vehicles, format: r => r.peak_vehicles.toFixed(1)},
   ]);
+
+  // With no schedule joined, these columns have nothing to measure against.
+  const NEEDS_SCHEDULE = new Set(['otp', 'timed', 'late', 'bunched', 'ewt', 'trips', 'observed', 'sched', 'run', 'p90']);
+  const columns = $derived(coverage.mode === 'gps' ? allColumns.filter(c => !NEEDS_SCHEDULE.has(c.key)) : allColumns);
 </script>
 
 {#snippet routeCell(r: RouteScore)}<RouteBadge label={r.label} color={r.color} textColor={r.text_color} />{/snippet}
@@ -82,6 +96,9 @@
   </div>
 
   <section class="section">
+    {#if caveat}
+      <p class="banner caution" role="note" data-coverage={coverage.mode}>{#if coverage.mode === 'gps'}<strong>Speeds only.</strong> {/if}{caveat}</p>
+    {/if}
     <DataTable
       {columns}
       {rows}
@@ -95,7 +112,7 @@
       maxHeight="72vh"
     />
     {#if unobserved}<p class="note"><strong>{unobserved} {unobserved === 1 ? 'route has' : 'routes have'} scheduled trips but no observations.</strong> They appear in the table with blank figures. That can mean the service didn't run, or that the feed didn't report it.</p>{/if}
-    <p class="note">Speeds count time at stops and red lights and exclude terminal layovers. Without five or more days, intervals aren't shown. On-time performance and headways appear only where the data supports them. <Term topic="speed">How these are calculated</Term>.</p>
+    <p class="note">Speeds count time at stops and red lights and exclude terminal layovers. Without five or more days, intervals aren't shown. Units sit in the column heading: speeds in {unit}, waits and run times in minutes, shares in percent, trips per day. On-time performance and headways read "{TOO_FEW}" under {MIN_EVENTS} events, and a * marks fewer than 100. <Term topic="speed">How these are calculated</Term>.</p>
   </section>
 
   <section class="section">

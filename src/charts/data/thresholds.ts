@@ -20,5 +20,6 @@ export const THRESHOLDS = {
   segments: {cell_m: 200, sectors: 8, sliver_merge_m: 40, minimum_measurements: 'the larger of 2 and the number of days'},
   stretches: {window_m: 800, end_margin_m: 1609},
   hotspots: {reference_percentile: 0.85, minimum_hours: 3, extend_density_share: 0.35, maximum_length_m: 1500, listed: 40},
+  sample: {withhold_below_events: 20, low_sample_below_events: 100, hourly_headways_minimum: 100, headline_hour_service_share: 0.5, partial_below_trip_match: 0.8, withhold_below_trip_match: 0.25},
   intervals: {bootstrap_rounds: 1000, minimum_days: 5, level: 0.95},
 } as const;
