@@ -1,6 +1,6 @@
 <script lang="ts">
   import {bytes, plural} from '../lib/format';
-  import {estimateLoad, isIndeterminate} from '../lib/progress';
+  import {estimateLoad} from '../lib/progress';
   import {app} from '../lib/state.svelte';
   import type {Mode} from '../engine/types';
   import AgencyPicker from './AgencyPicker.svelte';
@@ -20,10 +20,6 @@
     app.writeUrl();
     app.refresh();
   }
-
-  // The monotonic figure, so the bar never jumps back during schedule stages.
-  const fraction = $derived(Math.round((app.progress?.fraction ?? 0) * 100));
-  const waiting = $derived(app.progress ? isIndeterminate(app.progress) : true);
 </script>
 
 <header class="topbar">
@@ -58,11 +54,6 @@
       <span class="fine local"><span class="dot"></span>Analyzed on this device</span>
     {/if}
   </div>
-  {#if app.running && app.stage}
-    <div class="progress" class:indeterminate={waiting} role="progressbar" aria-label="Analysis progress" aria-valuenow={waiting ? undefined : fraction} aria-valuemin={0} aria-valuemax={100}>
-      <span style:width={waiting ? undefined : `${fraction}%`}></span>
-    </div>
-  {/if}
 </header>
 
 <style>
@@ -81,11 +72,6 @@
   .stalled { display: block; font-size: 12px; color: var(--danger); }
   .local { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-  .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
-  .progress span { display: block; height: 100%; background: var(--copper); transition: width 300ms ease-out; }
-  .progress.indeterminate span { width: 35%; animation: sweep 1.4s ease-in-out infinite; }
-  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-  @media (prefers-reduced-motion: reduce) { .progress.indeterminate span { width: 100%; opacity: .4; animation: none; } }
   @media (max-width: 860px) {
     /* A sticky bar would take a fifth of a phone screen. The report links stay reachable. */
     .topbar { position: relative; padding-left: var(--gutter); }
