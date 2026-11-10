@@ -87,6 +87,7 @@
     <summary>Confidence intervals</summary>
     <div class="body">
       <p>With five or more days selected, the route scorecard shows a 95% interval on peak speed and on the change from midday. Days are resampled with replacement 1,000 times, using each route’s pooled daily speeds, so it reflects how much the result would move with a different set of days. It does not capture error in individual GPS reports. Because the interval uses pooled speeds, a fixed-segment estimate can fall just outside it.</p>
+      <p>Shares of on-time departures, bunching and gaps are printed with their sample size. Under 20 events they read “too few trips”; under 100 they are marked as a low sample. When under 80% of realtime trip IDs match the schedule the figures are labelled partial with the match rate, and under 25% they are withheld. Days with no schedule show speeds only.</p>
     </div>
   </details>
 

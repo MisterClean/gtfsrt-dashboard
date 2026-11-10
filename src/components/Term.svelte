@@ -4,10 +4,11 @@
   import type {Snippet} from 'svelte';
   import {app, type MethodTopic} from '../lib/state.svelte';
 
-  let {topic, children}: {topic: MethodTopic; children: Snippet} = $props();
+  // `def` is the one-line definition shown on hover or focus; the click still opens the full method.
+  let {topic, def, children}: {topic: MethodTopic; def?: string; children: Snippet} = $props();
 </script>
 
-<button class="term" title="How this is calculated" onclick={() => app.showMethod(topic)}>{@render children()}</button>
+<button class="term" title={def ? `${def} Select for the full method.` : 'How this is calculated'} onclick={() => app.showMethod(topic)}>{@render children()}</button>
 
 <style>
   .term {

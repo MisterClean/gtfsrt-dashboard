@@ -7,8 +7,9 @@
   import {engine} from '../engine/client';
   import type {DayRow, HourRow, NetworkMap} from '../engine/types';
   import {findings, scopeLine} from '../lib/findings';
-  import {dateLabel, datesLabel, int, minutes, pct, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
+  import {DASH, dateLabel, datesLabel, int, minutes, pct, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
   import {HOURS} from '../lib/scale';
+  import {DEFINITIONS, MIN_EVENTS, coverageNote, coverageOf, isShown, sampleText, scheduleSuppressed, share as shareOf} from '../lib/stats';
   import {app, errorText, feedLabel} from '../lib/state.svelte';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
@@ -49,11 +50,21 @@
   });
   const unit = $derived(speedUnit(app.units));
   const toSpeed = (v: number | null) => (v === null ? null : toDisplaySpeed(v, app.units));
+  // Whole-day shares are shown whatever the count; hours and routes go through shareOf.
   const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
 
-  const onTimeShare = $derived(o ? share(o.on_time.on_time, o.on_time.total) : null);
-  const lateShare = $derived(o ? share(o.on_time.late, o.on_time.total) : null);
-  const observedShare = $derived(o ? share(o.trips_observed_per_day, o.trips_scheduled_per_day) : null);
+  const coverage = $derived(coverageOf(o));
+  const speedsOnly = $derived(coverage.mode === 'gps');
+  const withheld = $derived(scheduleSuppressed(coverage));
+  const caveat = $derived(coverageNote(coverage));
+  const matchText = $derived(coverage.matchRate === null ? '' : `${Math.round(coverage.matchRate * 100)}% trip-ID match`);
+  const onTimeShown = $derived(!!o && !withheld && isShown(o.on_time.total));
+  const onTimeShare = $derived(o && onTimeShown ? share(o.on_time.on_time, o.on_time.total) : null);
+  const lateShare = $derived(o && onTimeShown ? share(o.on_time.late, o.on_time.total) : null);
+  const windowShort = $derived(`${app.earlyS === 0 ? '0' : `\u2212${Math.abs(app.earlyS) / 60}`} / +${app.lateS / 60} min`);
+  const onTimeDef = $derived(DEFINITIONS.ontime(app.earlyS === 0 ? 'on time (no early allowance)' : `${Math.abs(app.earlyS) / 60} min early`, `${app.lateS / 60} min late`));
+  const observedShare = $derived(o && !withheld ? share(o.trips_observed_per_day, o.trips_scheduled_per_day) : null);
+  const headwaysShown = $derived(!!o?.headways && !withheld && isShown(o.headways.count));
   const peakChange = $derived(o?.speed_peak && o?.speed_mid ? o.speed_peak / o.speed_mid - 1 : null);
 
   const dumbbellRows = $derived(app.routes.map(r => ({id: r.id, label: r.label, name: r.long_name, mid: r.speed_mid, peak: r.speed_peak})));
@@ -62,10 +73,13 @@
     {key: 'date', label: 'Service day', left: true, value: d => d.date, format: d => dateLabel(d.date)},
     {key: 'speed', label: `Speed, ${unit}`, value: d => d.speed, format: d => speed(d.speed, app.units), csv: d => (d.speed === null ? null : Number(toDisplaySpeed(d.speed, app.units).toFixed(2))), descending: true},
     {key: 'peak', label: `Peak, ${unit}`, value: d => d.peak_speed, format: d => speed(d.peak_speed, app.units), csv: d => (d.peak_speed === null ? null : Number(toDisplaySpeed(d.peak_speed, app.units).toFixed(2))), descending: true},
-    {key: 'ontime', label: 'On time', value: d => share(d.on_time.on_time, d.on_time.total), format: d => pct(share(d.on_time.on_time, d.on_time.total)), descending: true},
-    {key: 'observed', label: 'Trips observed', value: d => d.trips_observed, format: d => int(d.trips_observed), descending: true},
-    {key: 'scheduled', label: 'Scheduled', value: d => d.trips_scheduled, format: d => int(d.trips_scheduled), descending: true},
-    {key: 'share', label: 'Share observed', value: d => share(d.trips_observed, d.trips_scheduled), format: d => pct(share(d.trips_observed, d.trips_scheduled)), descending: true},
+    ...(speedsOnly ? [] : [
+      {key: 'ontime', label: 'On time', title: `Departures at timepoints, ${windowShort}. Withheld under ${MIN_EVENTS} departures.`, value: (d: DayRow) => shareOf(d.on_time.on_time, d.on_time.total), format: (d: DayRow) => (isShown(d.on_time.total) ? pct(shareOf(d.on_time.on_time, d.on_time.total)) : DASH), descending: true},
+      {key: 'timed', label: 'Timed departures', title: 'Sample size behind the on-time share', value: (d: DayRow) => d.on_time.total, format: (d: DayRow) => int(d.on_time.total), descending: true},
+      {key: 'observed', label: 'Trips observed', value: (d: DayRow) => d.trips_observed, format: (d: DayRow) => int(d.trips_observed), descending: true},
+      {key: 'scheduled', label: 'Trips scheduled', value: (d: DayRow) => d.trips_scheduled, format: (d: DayRow) => int(d.trips_scheduled), descending: true},
+      {key: 'share', label: 'Share observed', value: (d: DayRow) => share(d.trips_observed, d.trips_scheduled), format: (d: DayRow) => pct(share(d.trips_observed, d.trips_scheduled)), descending: true},
+    ] as Column<DayRow>[]),
     {key: 'gaps', label: 'Capture gaps', title: 'Five-minute periods during scheduled service with no archived feed capture', value: d => d.empty_buckets, format: d => (d.service_buckets === 0 ? '—' : d.empty_buckets ? `${(d.empty_buckets * 5).toLocaleString('en-US')} min` : 'None')},
     {key: 'status', label: 'Status', left: true, value: d => (d.status === 'Partial' ? 'Partial' : 'Complete'), format: d => (d.status === 'Partial' ? 'Partial, see note above' : d.empty_buckets > 0 ? 'Complete, with gaps' : 'Complete')},
   ]);
@@ -88,38 +102,57 @@
       <p class="fine scope">{datesLabel(o.dates.map(d => Number(d.replaceAll('-', ''))))} · {scopeLine(o)}</p>
     </div>
 
+    {#if caveat}
+      <p class="banner caution" role="note" data-coverage={coverage.mode}>
+        {#if speedsOnly}<strong>Speeds only.</strong> {/if}{caveat}
+        {#if speedsOnly} On-time, trips observed, headways and run times need a schedule, so they are not shown rather than shown as zero.{/if}
+      </p>
+    {/if}
+
     <dl class="stats">
       <div class="stat">
-        <dt><Term topic="speed">Operating speed</Term></dt>
+        <dt><Term topic="speed" def={DEFINITIONS.speed}>Operating speed</Term></dt>
         <dd>{speed(o.speed, app.units)} <small>{unit}</small></dd>
-        <div class="sub">{speed(o.scheduled_speed, app.units)} scheduled, stops included</div>
+        <div class="sub">{speedsOnly ? 'GPS only, no schedule to compare' : `${speed(o.scheduled_speed, app.units)} scheduled, stops included`}</div>
       </div>
       <div class="stat">
         <dt><Term topic="period">Peak speed</Term></dt>
         <dd>{speed(o.speed_peak, app.units)} <small>{unit}</small></dd>
         <div class="sub">{signedPct(peakChange)} against midday</div>
       </div>
-      <div class="stat">
-        <dt><Term topic="ontime">On-time departures</Term></dt>
-        <dd>{pct(onTimeShare)}</dd>
-        <div class="sub">{pct(lateShare)} late, at timepoints</div>
-      </div>
-      <div class="stat">
-        <dt><Term topic="service">Trips observed</Term></dt>
-        {#if o.trips_scheduled_per_day > 0}
-          <dd>{int(o.trips_observed_per_day)} <small>a day</small></dd>
-          <div class="sub">{pct(observedShare, 1)} of {int(o.trips_scheduled_per_day)} scheduled</div>
-        {:else}
-          <dd>—</dd>
-          <div class="sub">No schedule to compare with</div>
-        {/if}
-      </div>
-      {#if o.headways}
-        <div class="stat">
-          <dt><Term topic="headways">Excess wait</Term></dt>
-          <dd>{minutes(o.headways.excess_wait_s, 1)}</dd>
-          <div class="sub">{pct(o.headways.bunched)} bunched</div>
+      {#if !speedsOnly}
+        <div class="stat" data-partial={coverage.mode === 'partial' || undefined}>
+          <dt><Term topic="ontime" def={onTimeDef}>On-time departures</Term></dt>
+          {#if onTimeShown}
+            <dd>{pct(onTimeShare)}{#if coverage.mode === 'partial'} <small>partial</small>{/if}</dd>
+            <div class="sub">{windowShort} at timepoints · {pct(lateShare)} late · {sampleText(o.on_time.total)}{#if matchText} · {matchText}{/if}</div>
+          {:else}
+            <dd>—</dd>
+            <div class="sub">{withheld ? `withheld, ${matchText || 'schedule match too low'}` : sampleText(o.on_time.total)}</div>
+          {/if}
         </div>
+        <div class="stat" data-partial={coverage.mode === 'partial' || undefined}>
+          <dt><Term topic="service" def={DEFINITIONS.observed}>Trips observed</Term></dt>
+          {#if o.trips_scheduled_per_day > 0 && !withheld}
+            <dd>{int(o.trips_observed_per_day)} <small>a day{#if coverage.mode === 'partial'}, partial{/if}</small></dd>
+            <div class="sub">{pct(observedShare, 1)} of {int(o.trips_scheduled_per_day)} scheduled{#if matchText} · {matchText}{/if}</div>
+          {:else}
+            <dd>—</dd>
+            <div class="sub">{withheld ? `withheld, ${matchText || 'schedule match too low'}` : 'No schedule to compare with'}</div>
+          {/if}
+        </div>
+        {#if o.headways}
+          <div class="stat">
+            <dt><Term topic="headways" def={DEFINITIONS.excessWait}>Excess wait</Term></dt>
+            {#if headwaysShown}
+              <dd>{minutes(o.headways.excess_wait_s, 1)}</dd>
+              <div class="sub">{pct(o.headways.bunched)} bunched · {sampleText(o.headways.count)} headways</div>
+            {:else}
+              <dd>—</dd>
+              <div class="sub">{withheld ? 'withheld, schedule match too low' : sampleText(o.headways.count)}</div>
+            {/if}
+          </div>
+        {/if}
       {/if}
       <div class="stat">
         <dt><Term topic="service">Vehicles at peak</Term></dt>
@@ -151,7 +184,7 @@
 
     <section class="section">
       <div class="section-head">
-        <div><h2>Through the day</h2><p class="note">Pointing at any chart moves all four. Shaded bands mark the 7–9 AM and 4–6 PM peaks.</p></div>
+        <div><h2>Through the day</h2><p class="note">Pointing at any chart moves all of them. Hours with fewer than {MIN_EVENTS} timed departures are left off the on-time chart. Shaded bands mark the 7–9 AM and 4–6 PM peaks.</p></div>
       </div>
       <div class="small-multiples">
         <figure>
@@ -167,6 +200,7 @@
             ]}
           />
         </figure>
+        {#if !speedsOnly}
         <figure>
           <figcaption><h3><Term topic="ontime">On-time departures at timepoints</Term></h3></figcaption>
           <LineChart
@@ -175,9 +209,10 @@
             yMin={0}
             yMax={1}
             format={v => `${(v * 100).toFixed(0)}%`}
-            series={[{key: 'otp', label: 'On time', color: 'var(--blue)', values: at(r => (r.on_time.total >= 10 ? share(r.on_time.on_time, r.on_time.total) : null))}, {key: 'late', label: 'Late', color: 'var(--orange)', values: at(r => (r.on_time.total >= 10 ? share(r.on_time.late, r.on_time.total) : null))}]}
+            series={[{key: 'otp', label: 'On time', color: 'var(--blue)', values: at(r => (isShown(r.on_time.total) ? share(r.on_time.on_time, r.on_time.total) : null))}, {key: 'late', label: 'Late', color: 'var(--orange)', values: at(r => (isShown(r.on_time.total) ? share(r.on_time.late, r.on_time.total) : null))}]}
           />
         </figure>
+        {#if !speedsOnly}
         <figure>
           <figcaption><h3><Term topic="service">Trips starting per hour</Term></h3></figcaption>
           <LineChart
@@ -191,6 +226,8 @@
             ]}
           />
         </figure>
+        {/if}
+        {/if}
         <figure>
           <figcaption><h3><Term topic="service">Vehicles in service</Term></h3></figcaption>
           <LineChart
