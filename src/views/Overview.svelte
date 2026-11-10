@@ -14,14 +14,16 @@
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
-  let network = $state<NetworkMap | null>(null);
+  // Raw: this is megabytes of geometry for a big agency, and deep reactivity would wrap all of it.
+  let network = $state.raw<NetworkMap | null>(null);
   let mapFailure = $state<string | null>(null);
   let hover = $state<number | null>(null);
   let mapRequest = 0;
 
   $effect(() => {
     app.version;
-    if (!app.hasResults) return;
+    // The overview arrives once the days are merged. Asking sooner finds no selection yet.
+    if (!app.hasResults || !app.overview) return;
     const request = ++mapRequest;
     engine.networkMap().then(
       result => {

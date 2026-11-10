@@ -1,8 +1,10 @@
 <script lang="ts">
   import {bytes, plural} from '../lib/format';
   import {addDays} from '../lib/dates';
-  import {app, feedLabel} from '../lib/state.svelte';
+  import {app} from '../lib/state.svelte';
+  import {loading} from '../lib/loading.svelte';
   import type {Mode} from '../engine/types';
+  import AgencyPicker from './AgencyPicker.svelte';
   import DatePicker from './DatePicker.svelte';
 
   // A rough figure so nobody starts a large download by surprise. About three
@@ -33,26 +35,14 @@
     app.refresh();
   }
 
-  const fraction = $derived(app.stage ? Math.round(app.stage.fraction * 100) : 0);
+  // The monotonic figure, so the bar never jumps back during schedule stages.
+  const fraction = $derived(Math.round((loading.progress?.fraction ?? 0) * 100));
 </script>
 
 <header class="topbar">
   <a class="brand" href="./" aria-label="Transit Almanac home">Transit Almanac</a>
   <div class="selectors">
-    <label class="agency">
-      <span class="sr-only">Transit agency</span>
-      <select
-        class="input"
-        value={app.feedKey}
-        disabled={!app.feeds.length}
-        onchange={event => app.selectFeed(event.currentTarget.value, null)}
-      >
-        {#if !app.feeds.length}<option>Loading agencies…</option>{/if}
-        {#each app.feeds as feed}
-          <option value={feed.base64url}>{feedLabel(feed)}</option>
-        {/each}
-      </select>
-    </label>
+    <AgencyPicker />
     <DatePicker />
     {#if availableModes.length > 2}
       <div class="seg" role="group" aria-label="Transit mode">
@@ -98,8 +88,6 @@
     letter-spacing: .01em; text-decoration: none; white-space: nowrap;
   }
   .selectors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
-  .agency select { width: min(340px, 100%); font-weight: 550; }
-  .agency { min-width: 0; flex: 0 1 340px; }
   .status { display: flex; align-items: center; gap: 12px; min-height: 36px; margin-left: auto; }
   .stage { font-size: 13px; }
   .stage strong { font-weight: 600; }

@@ -369,12 +369,22 @@ export interface ScheduleRecord {
 }
 
 export type EngineEvent =
-  | { event: 'stage'; message: string; fraction: number; dayIndex: number; dayCount: number }
+  | {
+      event: 'stage'; message: string; fraction: number; dayIndex: number; dayCount: number;
+      /** Which part of a run this is, for the explanation under the progress bar. */
+      phase?: 'database' | 'lookup' | 'read' | 'schedule' | 'analyze';
+      /** Archive file bytes scanned so far, by file size and position, and the total. Not network bytes. */
+      bytesDone?: number; bytesTotal?: number;
+      /** The service day being analyzed, when there is one. */
+      date?: number;
+    }
   | { event: 'day'; date: number; cached: boolean }
   | { event: 'unavailable'; date: number; reason: string }
   | { event: 'read'; record: ReadRecord }
   | { event: 'schedule'; record: ScheduleRecord }
-  | { event: 'warning'; message: string };
+  | { event: 'warning'; message: string }
+  /** The browser can't keep results. Sent once per session, not tied to a run. */
+  | { event: 'cache'; message: string };
 
 export interface CachedDays { dates: number[]; bytes: number }
 

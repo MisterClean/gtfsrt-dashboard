@@ -88,7 +88,7 @@
   }
 
   function move(event: PointerEvent) {
-    const target = event.currentTarget as SVGElement;
+    const target = event.currentTarget as HTMLElement;
     hover = hourAt(event.clientX, target.getBoundingClientRect());
     tooltip.show(event, rowsFor(hover));
   }
@@ -112,17 +112,23 @@
   }
 </script>
 
-<div class="chart" use:measure={w => (width = w)}>
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- The wrapper is the focusable control (role application, arrow keys read each hour), so the svg inside stays a plain picture. Svelte does not count application as interactive. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+<div
+  class="chart"
+  use:measure={w => (width = w)}
+  role="application"
+  aria-roledescription="line chart"
+  aria-label="{label}. Use the arrow keys to read each hour."
+  tabindex="0"
+  onpointermove={move}
+  onpointerleave={leave}
+  onkeydown={key}
+  onblur={leave}
+>
   <svg
     viewBox="0 0 {width} {height}"
-    role="img"
-    aria-label="{label}. Use the arrow keys to read each hour."
-    tabindex="0"
-    onpointermove={move}
-    onpointerleave={leave}
-    onkeydown={key}
-    onblur={leave}
+    aria-hidden="true"
   >
     {#if showPeaks}
       {#each PEAKS as [a, b]}

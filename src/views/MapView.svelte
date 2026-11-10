@@ -12,7 +12,8 @@
   import SpeedMap, {type MapMetric, type MapPeriod} from '../map/SpeedMap.svelte';
   import {CLASS_VARS} from '../lib/speed-scale';
 
-  let network = $state<NetworkMap | null>(null);
+  // Raw: this is megabytes of geometry for a big agency, and deep reactivity would wrap all of it.
+  let network = $state.raw<NetworkMap | null>(null);
   let route = $state('');
   let period = $state<MapPeriod>('hour');
   let metric = $state<MapMetric>('speed');
@@ -24,7 +25,7 @@
   $effect(() => {
     app.version;
     const filter = route || undefined;
-    if (!app.hasResults) return;
+    if (!app.hasResults || !app.overview) return;
     const current = ++request;
     engine.networkMap(filter).then(
       result => {

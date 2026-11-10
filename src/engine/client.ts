@@ -3,6 +3,7 @@ import type {
   AnalyzeRequest, AnalyzeResult, CachedDays, EngineEvent, Feed, HotspotReport, NetworkMap, Overview,
   QualityReport, RouteDetail, RouteScore, Selection, StopsReport, StringLineResult,
 } from './types';
+import {EngineError, reviveError} from './errors';
 
 type RunEvent = EngineEvent & {run: number};
 type Pending = {resolve: (value: any) => void; reject: (reason: Error) => void};
@@ -25,14 +26,23 @@ class EngineClient {
       const pending = this.pending.get(data.id);
       if (!pending) return;
       this.pending.delete(data.id);
-      if (data.error) pending.reject(new Error(data.error));
+      if (data.error) pending.reject(reviveError(data.error));
       else pending.resolve(data.result);
     });
     this.worker.addEventListener('error', event => {
-      this.failure = new Error('The analysis engine stopped unexpectedly. Reload the page to continue.');
-      void event;
+      // Keep what the browser said, so a bug report has something to go on.
+      const where = event.filename ? ` at ${event.filename}:${event.lineno}:${event.colno}` : '';
+      const original = event.error instanceof Error ? event.error : new Error(event.message || 'The engine worker crashed');
+      console.error('[transit-almanac] engine worker crashed:', event.message, where, event.error ?? '');
+      this.failure = new EngineError('engine_crash', 'The analysis engine stopped unexpectedly. Reload the page to continue.', {
+        detail: `${event.message || original.message}${where}${original.stack ? `\n${original.stack}` : ''}`,
+        cause: original,
+      });
       for (const pending of this.pending.values()) pending.reject(this.failure);
       this.pending.clear();
+    });
+    this.worker.addEventListener('messageerror', event => {
+      console.error('[transit-almanac] a message from the engine could not be read', event);
     });
   }
 

@@ -1,13 +1,39 @@
 <script lang="ts">
-  // Presets first, then a calendar. Days already analysed on this device are marked,
-  // because adding them costs nothing.
-  import {addDays, dayTypeOf, lastDays, type DayType} from '../lib/dates';
-  import {dateLabel, dateNumber, datesLabel, parseIso, plural} from '../lib/format';
+  // Presets first, then a calendar with three explicit ways to pick: one day, a
+  // range (first click, last click), or several separate days. Days already
+  // analysed on this device are marked, because adding them costs nothing.
+  import {addDays, dayTypeOf, lastDays, rangeDates, type DayType} from '../lib/dates';
+  import {dateLabel, dateNumber, datesLabel, isoDate, parseIso, plural} from '../lib/format';
   import {app} from '../lib/state.svelte';
+  import {loading} from '../lib/loading.svelte';
+  import {DAY_STATUS_LABEL} from '../lib/progress';
 
   let open = $state(false);
   let root = $state<HTMLElement>();
   let cursor = $state('');
+
+  type PickMode = 'day' | 'range' | 'days';
+  const pickModes: {key: PickMode; label: string; hint: string}[] = [
+    {key: 'day', label: 'One day', hint: 'Click a day. Each click replaces the selection.'},
+    {key: 'range', label: 'Range', hint: 'Click the first day, then the last. Every day between is included.'},
+    {key: 'days', label: 'Several days', hint: 'Click days to add or remove them one by one.'},
+  ];
+  let pickMode = $state<PickMode>('day');
+  /** In range mode: the first click, waiting for the last. */
+  let anchor = $state<string | null>(null);
+  let weekdaysOnly = $state(true);
+  const hint = $derived(anchor ? 'Now click the last day of the range.' : pickModes.find(m => m.key === pickMode)!.hint);
+
+  function inferMode(): PickMode {
+    if (app.dates.length <= 1) return 'day';
+    const first = app.dates[0];
+    const last = app.dates[app.dates.length - 1];
+    return app.dates.length > 1 && rangeDates(isoDate(first), isoDate(last)).length === app.dates.length ? 'range' : 'days';
+  }
+  function setPickMode(mode: PickMode) {
+    pickMode = mode;
+    anchor = null;
+  }
 
   const feed = $derived(app.feed);
   const presets: {label: string; type: DayType; count: number}[] = [
@@ -27,6 +53,7 @@
   function toggleOpen() {
     open = !open;
     if (open) {
+      setPickMode(inferMode());
       const last = app.dates[app.dates.length - 1];
       const iso = last ? `${String(last).slice(0, 4)}-${String(last).slice(4, 6)}-01` : feed?.date_max.slice(0, 7) + '-01';
       cursor = iso;
@@ -56,6 +83,18 @@
 
   function toggle(iso: string) {
     const number = dateNumber(iso);
+    if (pickMode === 'day') return app.setDates([number]);
+    if (pickMode === 'range') {
+      if (!anchor) {
+        anchor = iso;
+        return app.setDates([number]);
+      }
+      const [from, to] = anchor <= iso ? [anchor, iso] : [iso, anchor];
+      anchor = null;
+      const all = rangeDates(from, to).filter(d => available(isoDate(d)));
+      const weekdays = all.filter(d => dayTypeOf(isoDate(d)) === 'weekday');
+      return app.setDates(weekdaysOnly && weekdays.length ? weekdays : all);
+    }
     app.setDates(app.dates.includes(number) ? app.dates.filter(d => d !== number) : [...app.dates, number]);
   }
 
@@ -72,6 +111,12 @@
   </button>
   {#if open}
     <div class="panel" role="dialog" aria-label="Choose service days">
+      {#if app.stale?.stale}
+        <p class="stale" role="status">
+          No data near today. {app.feed ? 'This agency' : 'The feed'}'s newest day is {dateLabel(app.stale.latest_day, {month: 'short', day: 'numeric', year: 'numeric'})}.
+          <button class="link-btn" onclick={() => { app.useLatestDay(); open = false; }}>Use that day</button>
+        </p>
+      {/if}
       <ul class="presets">
         {#each presets as preset}
           {@const dates = presetDates(preset)}
@@ -86,6 +131,15 @@
         {/each}
       </ul>
       <div class="calendar">
+        <div class="seg" role="group" aria-label="How to pick days">
+          {#each pickModes as m}
+            <button aria-pressed={pickMode === m.key} onclick={() => setPickMode(m.key)}>{m.label}</button>
+          {/each}
+        </div>
+        <p class="fine hint" aria-live="polite">{hint}</p>
+        {#if pickMode === 'range'}
+          <label class="fine check"><input type="checkbox" bind:checked={weekdaysOnly} /> Weekdays only</label>
+        {/if}
         <div class="month">
           <button class="btn small quiet" aria-label="Previous month" onclick={() => shift(-1)}>
             <svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true"><path d="M13 3l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
@@ -100,14 +154,20 @@
           {#each cells as iso}
             {#if iso}
               {@const number = dateNumber(iso)}
+              {@const status = number in app.unavailableDates ? 'no_data' : loading.dayStatus(number)}
               <button
                 class="day"
                 class:selected={app.dates.includes(number)}
+                class:anchor={anchor === iso}
                 class:weekend={dayTypeOf(iso) !== 'weekday'}
                 class:cached={app.cachedDates.includes(number)}
+                class:failed={status === 'failed'}
+                class:nodata={status === 'no_data'}
+                class:working={status === 'reading' || status === 'analyzing'}
+                class:waiting={status === 'pending'}
                 disabled={!available(iso)}
                 aria-pressed={app.dates.includes(number)}
-                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{app.cachedDates.includes(number) ? ', already on this device' : ''}"
+                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{app.cachedDates.includes(number) ? ', already on this device' : ''}{status && status !== 'done' && status !== 'cached' ? `, ${DAY_STATUS_LABEL[status]}` : ''}"
                 onclick={() => toggle(iso)}
               >{parseIso(iso).getUTCDate()}</button>
             {:else}
@@ -115,7 +175,8 @@
             {/if}
           {/each}
         </div>
-        <p class="fine foot"><span class="dot"></span> Already on this device</p>
+        <p class="fine foot"><strong>Selected:</strong> {app.dates.length ? `${datesLabel(app.dates)} (${plural(app.dates.length, 'day')})` : 'no days'}</p>
+        <p class="fine foot"><span class="dot"></span> Already on this device{#if app.running || loading.failedDates.length || Object.keys(app.unavailableDates).length} · dashed or copper outline: waiting or working, struck through: no data, red outline: failed{/if}</p>
         <p class="fine">Days are local service days. The newest day in the archive is missing its evening until the next file is published.</p>
       </div>
     </div>
@@ -154,8 +215,16 @@
     content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px;
     border-radius: 50%; background: var(--copper);
   }
+  .day.waiting { outline: 1px dashed var(--rule-strong); outline-offset: -1px; }
+  .day.working { outline: 1.5px solid var(--copper); outline-offset: -1.5px; }
+  .day.nodata { text-decoration: line-through; opacity: .55; }
+  .day.failed { outline: 1.5px solid var(--danger); outline-offset: -1.5px; }
   .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--copper); margin-right: 3px; vertical-align: 1px; }
   .foot { padding-top: 2px; }
+  .stale { grid-column: 1 / -1; margin: 0; padding: 8px 12px; font-size: 12.5px; background: var(--caution-pale); color: var(--caution-ink); border-radius: 6px 6px 0 0; }
+  .hint { min-height: 2.6em; }
+  .check { display: flex; gap: 6px; align-items: center; }
+  .day.anchor { outline: 2px solid var(--copper); outline-offset: -2px; }
   @media (max-width: 560px) {
     .panel { grid-template-columns: 1fr; width: min(92vw, 300px); }
     .presets { border-right: 0; border-bottom: 1px solid var(--rule); grid-template-columns: 1fr 1fr; }

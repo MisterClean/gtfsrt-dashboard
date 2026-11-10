@@ -7,6 +7,7 @@
     "dev": "vite",
     "preview": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
+    "validate:feeds": "node scripts/validate-feeds.mjs",
     "verify:release": "node scripts/verify-release.mjs",
     "package": "node scripts/package.mjs",
     "probe": "node spike/run-browser-probe.mjs",
@@ -26,5 +27,9 @@
     "typescript": "6.0.3",
     "vite": "8.3.6"
   },
-  "version": "0.2.0"
+  "version": "0.2.0",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  }
 }
