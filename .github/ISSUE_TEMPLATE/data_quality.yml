@@ -1,0 +1,43 @@
+name: Data-quality report
+description: An agency's feed gives wrong, missing or surprising results.
+labels: [data-quality]
+body:
+  - type: input
+    id: feed
+    attributes:
+      label: Agency feed
+      description: The agency as shown in the picker, or the feed key.
+    validations:
+      required: true
+  - type: input
+    id: dates
+    attributes:
+      label: Dates affected
+    validations:
+      required: true
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What looks wrong
+      options:
+        - Agency won't load or has no data
+        - Only GPS speeds, no schedule join
+        - Low share of scheduled trips observed
+        - Speeds or on-time look implausible
+        - Wrong time zone or service day
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you see, and what you know to be true (for example from the agency's own reports). Say where that comes from.
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Provenance JSON
+      description: From Data & methods, "Download provenance JSON".
+      render: json

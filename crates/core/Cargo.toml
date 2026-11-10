@@ -3,6 +3,7 @@ name = "transit-core"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
+license = "MIT"
 description = "Transit performance analytics: map-matching, stop events and additive service-day rollups"
 
 [dependencies]
