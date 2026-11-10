@@ -7,9 +7,10 @@ import duckWasm from '@duckdb/duckdb-wasm/dist/duckdb-base.wasm?url';
 import duckWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-base.worker.js?url';
 import {ARCHIVE, MAX_METADATA_BYTES, MAX_SCHEDULE_TABLE_BYTES, enforceObjectSize, validateArchiveURL} from './contracts.js';
 import {
-  clearCache, dayKey, deleteEntry, getEntry, listDays, putEntry, scheduleKey,
+  clearCache, dayKey, deleteEntry, getEntry, listDays, onCacheProblem, putEntry, scheduleKey,
   type DayEntry, type DayIndexEntry, type EventsEntry, type FeedEntry, type ScheduleEntry,
 } from './cache';
+import {EngineError, classifyError, serializeError} from './errors';
 import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord} from './types';
 
 /**
@@ -37,7 +38,14 @@ let databaseSetup: Promise<duckdb.AsyncDuckDBConnection> | undefined;
 let engineVersion: string | null = null;
 
 /** Thrown out of any wait once a run has been stopped. */
-class RunStopped extends Error {}
+class RunStopped extends EngineError {
+  constructor() {
+    super('cancelled', 'The analysis was stopped.');
+  }
+}
+
+/** Cache trouble is reported once per session, outside any run. */
+onCacheProblem(message => postMessage({event: 'cache', message, run: 0}));
 
 /**
  * One analysis. It owns everything it touches, so a stopped run can't write into the
@@ -71,10 +79,27 @@ class Run {
     if (!this.cancelled) postMessage({...event, run: this.id});
   }
 
-  stage(message: string, fraction = 0, dayIndex = 0, dayCount = 0) {
-    this.emit({event: 'stage', message, fraction, dayIndex, dayCount});
+  /** What the run is doing now, kept for error reports. */
+  where = 'starting';
+  private last = {fraction: 0, dayIndex: 0, dayCount: 0};
+
+  /**
+   * Reports a stage. Anything left out keeps its last value, and the fraction can only
+   * grow, so stages that don't know their share (the schedule, the database) never pull
+   * the bar back to zero.
+   */
+  stage(message: string, fraction?: number, dayIndex?: number, dayCount?: number, extra: StageExtra = {}) {
+    this.where = message;
+    this.last = {
+      fraction: Math.max(this.last.fraction, fraction ?? 0),
+      dayIndex: Math.max(this.last.dayIndex, dayIndex ?? 0),
+      dayCount: dayCount || this.last.dayCount,
+    };
+    this.emit({event: 'stage', message, ...this.last, ...extra});
   }
 }
+
+type StageExtra = Partial<Pick<Extract<EngineEvent, {event: 'stage'}>, 'phase' | 'bytesDone' | 'bytesTotal' | 'date'>>;
 
 let activeRun: Run | undefined;
 
@@ -93,8 +118,8 @@ async function archiveFetch(url: string, options: RequestInit = {}, timeout = 30
   return fetch(url, {...options, signal: AbortSignal.timeout(timeout), credentials: 'omit', referrerPolicy: 'no-referrer'});
 }
 
-async function archiveJson<T>(path: string): Promise<T> {
-  const response = await archiveFetch(`${ARCHIVE}${path}`);
+async function archiveJson<T>(path: string, timeout = 30_000): Promise<T> {
+  const response = await archiveFetch(`${ARCHIVE}${path}`, {}, timeout);
   if (!response.ok) throw new Error(`The archive's ${path} returned HTTP ${response.status}. Check your connection and try again.`);
   const text = await response.text();
   if (text.length > MAX_METADATA_BYTES) throw new Error(`The archive's ${path} is larger than expected.`);
@@ -202,7 +227,7 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
   const {engine: target} = run;
   const key = choice.key;
   if (target.isCompiled(key)) return;
-  run.stage(`Reading the ${label} schedule`);
+  run.stage(`Reading the ${label} schedule`, undefined, undefined, undefined, {phase: 'schedule'});
   target.beginSchedule(key);
   let timezone: string | null = null;
   for (const base of choice.bases) {
@@ -268,7 +293,7 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
       });
     }
   }
-  run.stage(`Placing stops on the ${label} route lines`);
+  run.stage(`Placing stops on the ${label} route lines`, undefined, undefined, undefined, {phase: 'schedule'});
   const meta = target.finishSchedule();
   await run.wait(putEntry('schedules', scheduleKey(run.feedKey, key), {meta} satisfies ScheduleEntry));
   const record: ScheduleRecord = {
@@ -358,6 +383,7 @@ async function restoreDay(run: Run, date: number) {
     return run.engine.importDay(entry.cube);
   } catch (error) {
     if (error instanceof RunStopped) throw error;
+    console.warn(`[cache] saved results for ${formatDate(date)} were unreadable and will be removed`, error);
     // Unreadable results are worth nothing, so remove them and analyse the day again.
     await Promise.all([deleteEntry('days', key), deleteEntry('events', key), deleteEntry('dayIndex', key)]);
     run.emit({event: 'warning', message: `The saved results for ${formatDate(date)} couldn't be read and were removed. Analyzing that day again.`});
@@ -400,11 +426,11 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   if (!remaining.length) return;
 
   const notes: string[] = [];
-  run.stage('Starting the local database', 0, 0, remaining.length);
+  run.stage('Starting the local database', 0, 0, remaining.length, {phase: 'database'});
   await run.wait(ensureDatabase());
   result.engineVersion = engineVersion;
 
-  run.stage('Looking up this feed in the archive', 0, 0, remaining.length);
+  run.stage('Looking up this feed in the archive', 0, 0, remaining.length, {phase: 'lookup'});
   const metadata = await withFile(run, 'feeds.parquet', `${ARCHIVE}feeds.parquet`, async () => {
     const statement = await run.wait(connection!.prepare(Engine.feedMetadataQuery()));
     const rows = (await run.wait(statement.query(run.feedKey))).toArray().map(row => row.toJSON());
@@ -452,8 +478,15 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   const plan: {files: any[]} = JSON.parse(target.planRead(run.feedKey, JSON.stringify(remaining), dateMax));
   target.clearBuffer();
   const totalFiles = plan.files.length;
+  // Size every file up front, in parallel. It gives the progress bar a byte total
+  // and costs one round trip rather than one per file.
+  run.stage('Checking the archive files', 0, 0, remaining.length, {phase: 'lookup'});
+  // A failed lookup isn't fatal here: that file is sized again, and fails properly, when its turn comes.
+  const sizes: (number | null | undefined)[] = await run.wait(Promise.all(plan.files.map((file: any) =>
+    objectSize(file.url, `Archive ${file.utc_date}`).catch(() => undefined))));
+  const bytesTotal = sizes.reduce<number>((sum, size) => sum + (size ?? 0), 0);
+  let bytesBefore = 0;
   let completedDays = 0;
-  let saveFailed = false;
   const missing: [number, number][] = [];
   const failedSchedules = new Map<string, string>();
   const processed = new Set<number>();
@@ -463,8 +496,9 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
     const label = `${file.utc_date}`;
     const dayIndex = completedDays + 1;
     const progress = (within: number) => (fileIndex + within) / totalFiles;
-    run.stage(`Checking the ${label} archive file`, progress(0), dayIndex, remaining.length);
-    const size = await run.wait(objectSize(file.url, `Archive ${label}`));
+    let size = sizes[fileIndex];
+    if (size === undefined) size = await run.wait(objectSize(file.url, `Archive ${label}`));
+    run.stage(`Checking the ${label} archive file`, progress(0), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore, bytesTotal});
     const record: ReadRecord = {date: file.utc_date, url: file.url, bytes: size ?? 0, status: size === null ? 'missing' : 'read', rows: 0, seconds: 0, sql: ''};
     if (size === null) {
       missing.push([file.ends_at - 86400, file.ends_at]);
@@ -491,11 +525,12 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
             lastReport = now;
             // Files are written in time order, so the clock shows how far along we are.
             const within = Math.min(1, Math.max(0, (fetched[fetched.length - 1] - file.window_start) / (file.window_end - file.window_start)));
-            run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length);
+            run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + within * (size ?? 0), bytesTotal});
           }
         });
       });
     }
+    bytesBefore += size ?? 0;
     record.seconds = (performance.now() - started) / 1000;
     run.emit({event: 'read', record});
 
@@ -508,6 +543,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
           await loadSchedule(run, choice, formatDate(date));
         } catch (error) {
           if (error instanceof RunStopped) throw error;
+          console.warn(`[engine] schedule for ${formatDate(date)} could not be read; falling back to GPS speeds`, error);
           failedSchedules.set(choice.key, error instanceof Error ? error.message : String(error));
         }
       }
@@ -515,7 +551,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       if (failure) dayNotes.push(`The schedule for ${formatDate(date)} couldn't be read: ${failure}`);
       const joined = Boolean(choice) && !failure;
 
-      run.stage(`Analyzing ${formatDate(date)}`, progress(1), dayIndex, remaining.length);
+      run.stage(`Analyzing ${formatDate(date)}`, progress(1), dayIndex, remaining.length, {phase: 'analyze', date, bytesDone: bytesBefore, bytesTotal});
       const match = joined ? target.tripMatchRate(choice!.key) : 0;
       const hasFixes = target.fixCount() > 0;
       if (joined && hasFixes && match >= MIN_TRIP_MATCH && match < NOTE_TRIP_MATCH) {
@@ -543,10 +579,8 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
           saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null));
           if (saved) {
             if (output.events) rememberEvents(date);
-          } else if (!saveFailed) {
-            saveFailed = true;
-            run.emit({event: 'warning', message: "Your browser couldn't save these results, perhaps because its storage is full. They are here for this visit, but will need analyzing again next time."});
           }
+          // A failed save is reported once by the cache itself, as a notice on the page.
         }
         result.analyzed.push(date);
         run.emit({event: 'day', date, cached: false});
@@ -576,7 +610,11 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
   try {
     await execute(run, request, result);
   } catch (error) {
-    if (!(error instanceof RunStopped)) throw error;
+    if (!(error instanceof RunStopped)) {
+      // Say what the run was doing, and keep the original error as the cause.
+      console.error(`[engine] run failed while ${run.where}`, error);
+      throw classifyError(error, run.where);
+    }
     result.stopped = true;
   } finally {
     if (activeRun === run) activeRun = undefined;
@@ -602,7 +640,8 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     return true;
   },
   async catalog() {
-    const data = await archiveJson<Feed[]>('inventory.json');
+    // The catalog is several megabytes, so it gets longer than a small request would.
+    const data = await archiveJson<Feed[]>('inventory.json', 90_000);
     if (!Array.isArray(data) || data.length > 5000) throw new Error('The archive catalog has an unexpected shape.');
     return data;
   },
@@ -664,6 +703,7 @@ addEventListener('message', async (event: MessageEvent) => {
     if (!fn) throw new Error(`Unknown engine method ${method}`);
     postMessage({id, result: await fn(...args)});
   } catch (error) {
-    postMessage({id, error: error instanceof Error ? error.message : String(error)});
+    if (!(error instanceof RunStopped)) console.error(`[engine] ${method} failed`, error);
+    postMessage({id, error: serializeError(error, `calling ${method}`)});
   }
 });
