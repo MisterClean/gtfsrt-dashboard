@@ -4,6 +4,10 @@
   import NavRail from './components/NavRail.svelte';
   import Tooltip from './components/Tooltip.svelte';
   import TopBar from './components/TopBar.svelte';
+  import ErrorNotice from './components/ErrorNotice.svelte';
+  import LoadHeadsUp from './components/LoadHeadsUp.svelte';
+  import LoadProgress from './components/LoadProgress.svelte';
+  import {loading} from './lib/loading.svelte';
   import {app, feedLabel} from './lib/state.svelte';
   import {dateLabel, plural} from './lib/format';
   import Overview from './views/Overview.svelte';
@@ -44,13 +48,18 @@
   <TopBar />
   <NavRail />
   <main id="main">
-    {#if app.catalogError}
-      <div class="page"><div class="banner error" role="alert"><strong>The archive catalog could not be loaded.</strong> {app.catalogError} <button class="btn small" onclick={() => { app.catalogError = null; app.start(); }}>Try again</button></div></div>
+    {#if app.catalogError && loading.catalogFailure}
+      <div class="page"><ErrorNotice failure={loading.catalogFailure} extra="The agency list comes from the archive." onretry={() => { app.catalogError = null; loading.clear(); app.start(); }} /></div>
     {/if}
+    <LoadProgress />
     <FeedNotice />
-    {#if app.error}
-      <div class="notice"><div class="banner error" role="alert"><strong>The analysis stopped.</strong> {app.error} Days already finished are still here.</div></div>
+    {#if loading.failure}
+      <div class="notice"><ErrorNotice failure={loading.failure} onretry={app.pendingDates.length ? () => { loading.clear(); app.analyze(); } : undefined} /></div>
     {/if}
+    {#if loading.cacheNotice}
+      <div class="notice"><div class="banner caution" role="status">{loading.cacheNotice}</div></div>
+    {/if}
+    <LoadHeadsUp />
     {#if app.reportError}
       <div class="notice"><div class="banner error" role="alert"><strong>This report could not be updated, so what's on screen may be out of date.</strong> {app.reportError}</div></div>
     {/if}

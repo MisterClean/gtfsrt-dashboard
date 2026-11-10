@@ -110,6 +110,8 @@
     {#if filename}<button class="btn small quiet" onclick={exportCsv}>Download CSV</button>{/if}
   </div>
 {/if}
+<!-- A scrollable region needs a tab stop so keyboard users can scroll it. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="table-wrap" tabindex="0" role="region" aria-label={caption} style:max-height={!limit || showAll ? maxHeight : undefined}>
   <table class="data">
     <caption class="sr-only">{caption}</caption>

@@ -60,7 +60,7 @@ Finished days are stored in your browser. Reopening a report takes about a secon
 
 ## Getting started
 
-Development needs Node.js 22 or newer and a rustup-managed Rust install. Visitors need only a browser.
+Development needs Node.js 24 and a rustup-managed Rust install. Visitors need only a browser.
 
 ```sh
 npm ci --ignore-scripts
@@ -150,6 +150,14 @@ These reports exist to change something on the street. The natural next steps bu
 - **Rider weighting:** join agency ridership where it's published, to turn vehicle hours into rider hours.
 - **Crowding:** the rollups already keep occupancy where feeds report it, and it needs a report.
 - **Published aggregates:** a static set of prebuilt rollups for instant national comparisons, with no server.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks, the [Code of Conduct](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) for reporting vulnerabilities. Bugs and data-quality reports have issue templates.
+
+## License
+
+[MIT](LICENSE).
 
 ## Credits
 

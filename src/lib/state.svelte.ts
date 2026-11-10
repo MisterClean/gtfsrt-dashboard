@@ -1,12 +1,14 @@
 // Application state. One selection scopes every view, and results are re-read
 // from the worker's merged rollups whenever it changes.
 import {engine} from '../engine/client';
+import {EngineError, friendlyError} from '../engine/errors';
 import type {
   AnalyzeResult, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
 } from '../engine/types';
 import {decodeDates, encodeDates, lastDays} from './dates';
 import {slowestHour} from './findings';
 import {dateNumber, plural, type Units} from './format.ts';
+import {loading} from './loading.svelte';
 import {parseHealthFile, staleness, type FeedHealth} from './health.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
@@ -15,6 +17,8 @@ export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'st
 const STORAGE_KEY = 'transit-notebook-preferences';
 /** With streaming reads, this long without a sign of progress means something is stuck. */
 const STALL_MS = 120_000;
+/** While a run is going, results refresh at most this often. Each refresh redraws every view. */
+const RUN_REFRESH_MS = 20_000;
 
 interface Preferences { units: Units; theme: 'auto' | 'light' | 'dark'; basemap: boolean }
 
@@ -74,7 +78,8 @@ class AppState {
   /** Bumps whenever merged results change. Views re-read their report on it. */
   version = $state(0);
   overview = $state<Overview | null>(null);
-  routes = $state<RouteScore[]>([]);
+  // Raw: nothing mutates these, so there is no need to wrap every row in a reactive proxy.
+  routes = $state.raw<RouteScore[]>([]);
   quality = $state<QualityReport | null>(null);
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -82,6 +87,7 @@ class AppState {
   private currentRun = 0;
   private refreshToken = 0;
   private lastProgress = 0;
+  private lastRefresh = 0;
   private watchdog: ReturnType<typeof setInterval> | undefined;
 
   feed = $derived(this.feeds.find(f => f.base64url === this.feedKey) ?? null);
@@ -156,6 +162,7 @@ class AppState {
       this.readUrl();
     } catch (error) {
       this.catalogError = errorText(error);
+      loading.failCatalog(error);
     }
   }
 
@@ -211,6 +218,8 @@ class AppState {
       this.result = null;
       this.error = null;
       this.reportError = null;
+      this.lastRefresh = 0;
+      loading.clear();
       this.mode = fromUrl ? this.mode : 'All';
       if (!fromUrl) this.routeId = null;
       await engine.openFeed(feedKey);
@@ -278,6 +287,7 @@ class AppState {
     this.stalled = false;
     this.lastProgress = Date.now();
     this.stage = {message: 'Starting', fraction: 0, dayIndex: 0, dayCount: dates.length};
+    loading.begin(dates);
     clearInterval(this.watchdog);
     this.watchdog = setInterval(() => {
       if (this.running) this.stalled = Date.now() - this.lastProgress > STALL_MS;
@@ -286,13 +296,17 @@ class AppState {
       const result = await engine.analyze({run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
       if (run === this.currentRun) this.result = result;
     } catch (error) {
-      if (run === this.currentRun) this.error = errorText(error);
+      if (run === this.currentRun) {
+        this.error = errorText(error);
+        loading.fail(error);
+      }
     } finally {
       if (run === this.currentRun) {
         clearInterval(this.watchdog);
         this.running = false;
         this.stalled = false;
         this.stage = null;
+        loading.end();
         await this.refreshCached();
         await this.refresh();
       }
@@ -326,6 +340,7 @@ class AppState {
   private handleEvent(event: EngineEvent) {
     this.lastProgress = Date.now();
     this.stalled = false;
+    loading.handle(event);
     switch (event.event) {
       case 'stage':
         this.stage = {message: event.message, fraction: event.fraction, dayIndex: event.dayIndex, dayCount: event.dayCount};
@@ -363,7 +378,11 @@ class AppState {
 
   scheduleRefresh() {
     clearTimeout(this.refreshTimer);
-    this.refreshTimer = setTimeout(() => this.refresh(), 120);
+    // The first day shows up at once. After that a run refines the views only now and
+    // then, because redrawing a big agency's map and tables blocks the page for seconds.
+    // The run's end always refreshes.
+    const wait = this.running && this.lastRefresh ? Math.max(120, this.lastRefresh + RUN_REFRESH_MS - Date.now()) : 120;
+    this.refreshTimer = setTimeout(() => this.refresh(), wait);
   }
 
   /** Re-merges the selected days and re-reads the shared reports. */
@@ -371,6 +390,7 @@ class AppState {
     clearTimeout(this.refreshTimer);
     if (!this.feedKey) return;
     const token = ++this.refreshToken;
+    this.lastRefresh = Date.now();
     if (!this.loadedDates.length) {
       this.overview = null;
       this.routes = [];
@@ -435,7 +455,12 @@ async function loadHealth() {
   }
 }
 
+/** Plain-language text for an error: what happened and what to do. */
 export function errorText(error: unknown) {
+  if (error instanceof EngineError) {
+    const friendly = friendlyError(error);
+    return `${friendly.title} ${friendly.advice}`;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 

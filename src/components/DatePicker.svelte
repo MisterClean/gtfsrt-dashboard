@@ -5,6 +5,8 @@
   import {addDays, dayTypeOf, lastDays, rangeDates, type DayType} from '../lib/dates';
   import {dateLabel, dateNumber, datesLabel, isoDate, parseIso, plural} from '../lib/format';
   import {app} from '../lib/state.svelte';
+  import {loading} from '../lib/loading.svelte';
+  import {DAY_STATUS_LABEL} from '../lib/progress';
 
   let open = $state(false);
   let root = $state<HTMLElement>();
@@ -152,15 +154,20 @@
           {#each cells as iso}
             {#if iso}
               {@const number = dateNumber(iso)}
+              {@const status = number in app.unavailableDates ? 'no_data' : loading.dayStatus(number)}
               <button
                 class="day"
                 class:selected={app.dates.includes(number)}
                 class:anchor={anchor === iso}
                 class:weekend={dayTypeOf(iso) !== 'weekday'}
                 class:cached={app.cachedDates.includes(number)}
+                class:failed={status === 'failed'}
+                class:nodata={status === 'no_data'}
+                class:working={status === 'reading' || status === 'analyzing'}
+                class:waiting={status === 'pending'}
                 disabled={!available(iso)}
                 aria-pressed={app.dates.includes(number)}
-                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{app.cachedDates.includes(number) ? ', already on this device' : ''}"
+                aria-label="{dateLabel(iso, {weekday: 'long', month: 'long', day: 'numeric'})}{app.cachedDates.includes(number) ? ', already on this device' : ''}{status && status !== 'done' && status !== 'cached' ? `, ${DAY_STATUS_LABEL[status]}` : ''}"
                 onclick={() => toggle(iso)}
               >{parseIso(iso).getUTCDate()}</button>
             {:else}
@@ -169,7 +176,7 @@
           {/each}
         </div>
         <p class="fine foot"><strong>Selected:</strong> {app.dates.length ? `${datesLabel(app.dates)} (${plural(app.dates.length, 'day')})` : 'no days'}</p>
-        <p class="fine foot"><span class="dot"></span> Already on this device</p>
+        <p class="fine foot"><span class="dot"></span> Already on this device{#if app.running || loading.failedDates.length || Object.keys(app.unavailableDates).length} · dashed or copper outline: waiting or working, struck through: no data, red outline: failed{/if}</p>
         <p class="fine">Days are local service days. The newest day in the archive is missing its evening until the next file is published.</p>
       </div>
     </div>
@@ -208,6 +215,10 @@
     content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px;
     border-radius: 50%; background: var(--copper);
   }
+  .day.waiting { outline: 1px dashed var(--rule-strong); outline-offset: -1px; }
+  .day.working { outline: 1.5px solid var(--copper); outline-offset: -1.5px; }
+  .day.nodata { text-decoration: line-through; opacity: .55; }
+  .day.failed { outline: 1.5px solid var(--danger); outline-offset: -1.5px; }
   .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--copper); margin-right: 3px; vertical-align: 1px; }
   .foot { padding-top: 2px; }
   .stale { grid-column: 1 / -1; margin: 0; padding: 8px 12px; font-size: 12.5px; background: var(--caution-pale); color: var(--caution-ink); border-radius: 6px 6px 0 0; }
