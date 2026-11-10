@@ -1,12 +1,28 @@
 // The visitor's own results, kept in their browser so a day is only ever
 // analysed once. Holds derived rollups, never raw vehicle data. Every read and write
-// tolerates storage being unavailable: the app then simply re-analyses.
+// tolerates storage being unavailable: the app then simply re-analyses. It never does
+// so silently, though: each failure is logged, and the first one is reported so the
+// page can say once that results won't be kept.
 // Keep the original database name so analyzed days survive the rename.
 const DB_NAME = 'transit-notebook';
 const STORES = ['schedules', 'days', 'events', 'feeds', 'dayIndex'] as const;
 type Store = (typeof STORES)[number];
 
 let opening: Promise<IDBDatabase | null> | undefined;
+let listener: ((message: string) => void) | undefined;
+let reported = false;
+
+/** Registers who hears about cache trouble. Only the first problem is passed on. */
+export function onCacheProblem(callback: (message: string) => void) {
+  listener = callback;
+}
+
+function problem(operation: string, error?: unknown) {
+  console.warn(`[cache] ${operation} failed; falling back to analysing without saved results`, error ?? '');
+  if (reported) return;
+  reported = true;
+  listener?.("This browser isn't keeping saved results, perhaps because storage is blocked, full, or switched off (private windows often do this). Days will work for this visit but have to be downloaded and analyzed again next time.");
+}
 
 function open(): Promise<IDBDatabase | null> {
   opening ??= new Promise(resolve => {
@@ -18,9 +34,16 @@ function open(): Promise<IDBDatabase | null> {
         }
       };
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
-      request.onblocked = () => resolve(null);
-    } catch {
+      request.onerror = () => {
+        problem('opening the database', request.error);
+        resolve(null);
+      };
+      request.onblocked = () => {
+        problem('opening the database (blocked by another tab)');
+        resolve(null);
+      };
+    } catch (error) {
+      problem('opening the database', error);
       resolve(null);
     }
   });
@@ -33,8 +56,12 @@ function run<T>(store: Store, mode: IDBTransactionMode, action: (s: IDBObjectSto
     try {
       const request = action(db.transaction(store, mode).objectStore(store));
       request.onsuccess = () => resolve(request.result ?? null);
-      request.onerror = () => resolve(null);
-    } catch {
+      request.onerror = () => {
+        problem(`reading ${store}`, request.error);
+        resolve(null);
+      };
+    } catch (error) {
+      problem(`reading ${store}`, error);
       resolve(null);
     }
   }));
@@ -51,9 +78,16 @@ export function putEntry(store: Store, key: string, value: unknown): Promise<boo
       const transaction = db.transaction(store, 'readwrite');
       transaction.objectStore(store).put(value, key);
       transaction.oncomplete = () => resolve(true);
-      transaction.onerror = () => resolve(false);
-      transaction.onabort = () => resolve(false);
-    } catch {
+      transaction.onerror = () => {
+        problem(`saving to ${store}`, transaction.error);
+        resolve(false);
+      };
+      transaction.onabort = () => {
+        problem(`saving to ${store}`, transaction.error);
+        resolve(false);
+      };
+    } catch (error) {
+      problem(`saving to ${store}`, error);
       resolve(false);
     }
   }));
@@ -91,8 +125,12 @@ export async function listDays(feed: string, version: number) {
         }
         current.continue();
       };
-      cursor.onerror = () => resolve({dates, bytes});
-    } catch {
+      cursor.onerror = () => {
+        problem('listing saved days', cursor.error);
+        resolve({dates, bytes});
+      };
+    } catch (error) {
+      problem('listing saved days', error);
       resolve(empty);
     }
   });

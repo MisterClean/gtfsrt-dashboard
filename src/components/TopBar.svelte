@@ -2,6 +2,7 @@
   import {bytes, plural} from '../lib/format';
   import {addDays} from '../lib/dates';
   import {app, feedLabel} from '../lib/state.svelte';
+  import {loading} from '../lib/loading.svelte';
   import type {Mode} from '../engine/types';
   import DatePicker from './DatePicker.svelte';
 
@@ -33,7 +34,8 @@
     app.refresh();
   }
 
-  const fraction = $derived(app.stage ? Math.round(app.stage.fraction * 100) : 0);
+  // The monotonic figure, so the bar never jumps back during schedule stages.
+  const fraction = $derived(Math.round((loading.progress?.fraction ?? 0) * 100));
 </script>
 
 <header class="topbar">
