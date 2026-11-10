@@ -14,7 +14,7 @@
   <div class="notice">
     <div class="banner caution" role="status">
       {#if health && (limited || health.note)}
-        <span>{#if limited}<strong>{STATUS_BADGE[health.status]}.</strong> {health.reason}.{/if}{#if health.note} {health.note}{/if}</span>
+        <span>{#if limited}<strong>{STATUS_BADGE[health.status]}.</strong> {health.reason}.{/if}{#if health.note}{' '}{health.note}{/if}</span>
       {/if}
       {#if latest}
         <span>
