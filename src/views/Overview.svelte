@@ -157,7 +157,9 @@
       <div class="stat">
         <dt><Term topic="service">Vehicles at peak</Term></dt>
         <dd>{int(o.peak_vehicles)}</dd>
-        <div class="sub">{int(o.service_hours_observed_per_day)} service hours a day</div>
+        {#if o.service_hours_observed_per_day > 0}
+          <div class="sub">{int(o.service_hours_observed_per_day)} service hours a day</div>
+        {/if}
       </div>
     </dl>
 

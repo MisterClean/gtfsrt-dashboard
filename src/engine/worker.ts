@@ -10,8 +10,9 @@ import {
   clearCache, dayKey, deleteEntry, getEntry, listDays, onCacheProblem, putEntry, scheduleKey,
   type DayEntry, type DayIndexEntry, type EventsEntry, type FeedEntry, type ScheduleEntry,
 } from './cache';
-import {EngineError, classifyError, serializeError} from './errors';
-import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord} from './types';
+import {EngineError, classifyError, isTransient, serializeError} from './errors';
+import {withTripMatch} from './tripmatch';
+import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord, TimingSpan} from './types';
 
 /**
  * Below this share of matching trip IDs the feed and schedule don't belong together,
@@ -20,6 +21,10 @@ import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, Sched
  */
 const MIN_TRIP_MATCH = 0.1;
 const NOTE_TRIP_MATCH = 0.8;
+/** Objects up to this size are downloaded whole, ahead of need. Larger ones are read in place, where row-group pushdown skips most of them. */
+const PREFETCH_MAX_BYTES = 96 * 1024 * 1024;
+const PREFETCH_CHUNK_BYTES = 8 * 1024 * 1024;
+const PREFETCH_STREAMS = 6;
 const SCHEDULE_TABLES = ['agency', 'routes', 'stops', 'shapes', 'calendar', 'calendar_dates', 'trips', 'stop_times'] as const;
 const REQUIRED_TABLES = new Set<string>(['routes', 'stops', 'trips', 'stop_times']);
 /** Stop events for this many days stay in memory. The rest are read back on demand. */
@@ -30,6 +35,8 @@ let engine: Engine | undefined;
 let currentFeed: string | undefined;
 let baseUrl = '';
 let eventDatesInMemory: number[] = [];
+/** Share of realtime trip IDs matching the schedule for each day of the open feed, 0 to 1. */
+let tripMatches = new Map<number, number | null>();
 
 let db: duckdb.AsyncDuckDB | undefined;
 let duckWorkerInstance: Worker | undefined;
@@ -65,8 +72,14 @@ class Run {
     this.settled = new Promise<void>(resolve => (this.finish = resolve));
   }
 
+  /** Aborts this run's own downloads, which DuckDB's terminated worker would not take down. */
+  readonly abort = new AbortController();
+  /** Schedules being fetched ahead of need, by schedule key. */
+  readonly scheduleTables = new Map<string, Map<string, Promise<File | null>>>();
+
   cancel() {
     this.cancelled = true;
+    this.abort.abort();
     this.rejectStopped(new RunStopped());
   }
 
@@ -77,6 +90,22 @@ class Run {
 
   emit(event: EngineEvent) {
     if (!this.cancelled) postMessage({...event, run: this.id});
+  }
+
+  /** Where the time goes, in milliseconds from the start of the run. Spans may overlap. */
+  readonly spans: TimingSpan[] = [];
+  readonly origin = performance.now();
+
+  /** Times `work` under `name`, also leaving a performance measure for the browser's profiler. */
+  async span<T>(name: string, work: () => Promise<T>): Promise<T> {
+    const started = performance.now();
+    try {
+      return await work();
+    } finally {
+      const ended = performance.now();
+      this.spans.push({name, start: Math.round(started - this.origin), end: Math.round(ended - this.origin)});
+      try { performance.measure(name, {start: started, end: ended}); } catch { /* profiling only */ }
+    }
   }
 
   /** What the run is doing now, kept for error reports. */
@@ -118,12 +147,46 @@ async function archiveFetch(url: string, options: RequestInit = {}, timeout = 30
   return fetch(url, {...options, signal: AbortSignal.timeout(timeout), credentials: 'omit', referrerPolicy: 'no-referrer'});
 }
 
-async function archiveJson<T>(path: string, timeout = 30_000): Promise<T> {
-  const response = await archiveFetch(`${ARCHIVE}${path}`, {}, timeout);
-  if (!response.ok) throw new Error(`The archive's ${path} returned HTTP ${response.status}. Check your connection and try again.`);
-  const text = await response.text();
-  if (text.length > MAX_METADATA_BYTES) throw new Error(`The archive's ${path} is larger than expected.`);
-  return JSON.parse(text) as T;
+/**
+ * The archive's small JSON files, kept for a few minutes so a second analysis or a
+ * retry doesn't ask again. After that the browser revalidates with the file's ETag,
+ * which costs a header exchange and no body when nothing changed. A failure is never kept.
+ */
+const JSON_FRESH_MS = 5 * 60_000;
+const jsonCache = new Map<string, {at: number; value: Promise<unknown>}>();
+
+function archiveJson<T>(path: string, timeout = 30_000): Promise<T> {
+  const kept = jsonCache.get(path);
+  if (kept && Date.now() - kept.at < JSON_FRESH_MS) return kept.value as Promise<T>;
+  const value = (async () => {
+    const response = await archiveFetch(`${ARCHIVE}${path}`, {cache: 'no-cache'}, timeout);
+    if (!response.ok) throw new Error(`The archive's ${path} returned HTTP ${response.status}. Check your connection and try again.`);
+    const text = await response.text();
+    if (text.length > MAX_METADATA_BYTES) throw new Error(`The archive's ${path} is larger than expected.`);
+    return JSON.parse(text) as T;
+  })();
+  jsonCache.set(path, {at: Date.now(), value});
+  value.catch(() => {
+    if (jsonCache.get(path)?.value === value) jsonCache.delete(path);
+  });
+  return value;
+}
+
+/**
+ * Fetches a whole object into a File, which DuckDB then reads without any network.
+ * Null when it does not exist. Anything else that goes wrong is an error, never "no data".
+ */
+async function fetchWhole(run: Run, url: string, label: string, maxBytes: number): Promise<File | null> {
+  validateArchiveURL(url);
+  const response = await fetch(url, {signal: AbortSignal.any([run.abort.signal, AbortSignal.timeout(90_000)]), credentials: 'omit', referrerPolicy: 'no-referrer'});
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
+  const length = Number(response.headers.get('content-length'));
+  if (length > maxBytes) {
+    await response.body?.cancel();
+    throw new Error(`${label} is larger than this app reads.`);
+  }
+  return new File([await response.blob()], url.split('/').pop() || 'object.parquet');
 }
 
 /** Object size, or `null` when it does not exist. Other failures are errors, not "no data". */
@@ -196,6 +259,49 @@ const textColumn = (batch: any, name: string) => {
 };
 const numberColumn = (batch: any, name: string) => batch.getChild(name).data[0].values;
 
+/**
+ * Downloads an object in parallel ranges into a File that DuckDB reads without any
+ * network. DuckDB's own reads are one synchronous request at a time, ramping from 16 KB,
+ * so a 34 MB object costs about 28 round trips; a handful of parallel ranges fetches
+ * the same bytes in a few. `onBytes` hears each range as it lands.
+ */
+async function downloadObject(run: Run, url: string, size: number, onBytes: (bytes: number) => void): Promise<File> {
+  validateArchiveURL(url);
+  const ranges: [number, number][] = [];
+  for (let start = 0; start < size; start += PREFETCH_CHUNK_BYTES) ranges.push([start, Math.min(size, start + PREFETCH_CHUNK_BYTES) - 1]);
+  const parts: Blob[] = new Array(ranges.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < ranges.length && !run.cancelled) {
+      const index = next++;
+      const [first, last] = ranges[index];
+      const response = await fetch(url, {
+        headers: {Range: `bytes=${first}-${last}`},
+        signal: AbortSignal.any([run.abort.signal, AbortSignal.timeout(90_000)]),
+        credentials: 'omit', referrerPolicy: 'no-referrer',
+      });
+      if (!response.ok) throw new Error(`Archive ${url.split('/').slice(-3)[0]} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
+      const blob = await response.blob();
+      if (blob.size !== last - first + 1) throw new Error(`The archive returned ${blob.size} bytes for a range of ${last - first + 1}.`);
+      parts[index] = blob;
+      onBytes(blob.size);
+    }
+  };
+  await Promise.all(Array.from({length: Math.min(PREFETCH_STREAMS, ranges.length)}, worker));
+  return new File(parts, 'data.parquet');
+}
+
+/** Registers a file already held in memory for the length of `use`. */
+async function withLocalFile<T>(run: Run, alias: string, file: File, use: () => Promise<T>) {
+  await run.wait(ensureDatabase());
+  await run.wait(db!.registerFileHandle(alias, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true));
+  try {
+    return await use();
+  } finally {
+    if (!run.cancelled) await db?.dropFile(alias).catch(() => {});
+  }
+}
+
 /** Registers an archive file for the length of `use`. */
 async function withFile<T>(run: Run, alias: string, url: string, use: () => Promise<T>) {
   await run.wait(ensureDatabase());
@@ -212,7 +318,33 @@ async function withFile<T>(run: Run, alias: string, url: string, use: () => Prom
 
 interface ScheduleChoice { key: string; bases: string[]; retrieved: string[]; published_before: boolean }
 
-/** Rows from a small table, as plain objects. */
+/** A schedule table already fetched whole, or null when the archive has none. */
+type ScheduleTables = Map<string, Promise<File | null>>;
+
+/**
+ * Starts fetching every table of a schedule at once, without waiting for DuckDB. The
+ * tables are small, so one plain GET each replaces what DuckDB would otherwise do in
+ * a strict sequence of HEAD, footer read, and query per table. The fetches run while
+ * the first archive file is being read, and DuckDB then reads the tables from memory.
+ * A failure waits inside its promise until the table is needed, so it is reported then.
+ */
+function prefetchSchedule(run: Run, choice: ScheduleChoice): ScheduleTables {
+  const existing = run.scheduleTables.get(choice.key);
+  if (existing) return existing;
+  const tables: ScheduleTables = new Map();
+  for (const base of choice.bases) {
+    for (const table of SCHEDULE_TABLES) {
+      const url = `${base}/${table}.parquet`;
+      const fetched = run.span(`schedule ${table} fetch`, () => fetchWhole(run, url, `Schedule table ${table}`, MAX_SCHEDULE_TABLE_BYTES));
+      fetched.catch(() => {});
+      tables.set(url, fetched);
+    }
+  }
+  run.scheduleTables.set(choice.key, tables);
+  return tables;
+}
+
+/** One short query as plain objects. For anything long, read Arrow columns instead. */
 async function rowsOf(run: Run, sql: string) {
   const conn = await run.wait(ensureDatabase());
   return (await run.wait(conn.query(sql))).toArray().map(row => row.toJSON()) as Record<string, any>[];
@@ -222,26 +354,34 @@ const flag = (value: unknown) => Number(value) === 1;
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
 const optional = (value: unknown) => (value === null || value === undefined ? undefined : Number(value));
 
+/** A small table as Arrow columns, read by position instead of turned into an object per row. */
+async function tableOf(run: Run, sql: string) {
+  const conn = await run.wait(ensureDatabase());
+  const result = await run.wait(conn.query(sql));
+  const column = (name: string) => result.getChild(name)!;
+  return {rows: result.numRows, column};
+}
+
 /** Compiles the schedule tables into the engine. */
 async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
   const {engine: target} = run;
   const key = choice.key;
   if (target.isCompiled(key)) return;
   run.stage(`Reading the ${label} schedule`, undefined, undefined, undefined, {phase: 'schedule'});
+  const tables = prefetchSchedule(run, choice);
   target.beginSchedule(key);
   let timezone: string | null = null;
   for (const base of choice.bases) {
     for (const table of SCHEDULE_TABLES) {
       const url = `${base}/${table}.parquet`;
-      const size = await run.wait(objectSize(url, `Schedule table ${table}`));
-      if (size === null) {
+      const file = await run.wait(tables.get(url)!);
+      if (file === null) {
         if (REQUIRED_TABLES.has(table)) target.addScheduleWarning(`One of this agency's schedule sources has no ${table} table, so its trips are left out.`);
         continue;
       }
-      if (size > MAX_SCHEDULE_TABLE_BYTES) throw new Error(`Schedule table ${table} is larger than this app reads.`);
       const alias = `schedule_${table}.parquet`;
-      await withFile(run, alias, url, async () => {
-        const columns = JSON.stringify(await columnsOf(run, alias));
+      await run.span(`schedule ${table}`, () => withLocalFile(run, alias, file, async () => {
+        const columns = JSON.stringify(await run.span(`schedule ${table} describe`, () => columnsOf(run, alias)));
         const sql = Engine.scheduleQuery(table, columns, alias);
         if (table === 'stop_times') {
           await stream(run, sql, batch => {
@@ -259,38 +399,61 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
               numberColumn(batch, 'shape_pt_lat'), numberColumn(batch, 'shape_pt_lon'));
           });
         } else {
-          for (const row of await rowsOf(run, sql)) {
-            switch (table) {
-              case 'agency': {
-                const zone = text(row.agency_timezone);
+          const {rows, column} = await tableOf(run, sql);
+          switch (table) {
+            case 'agency': {
+              const zones = column('agency_timezone');
+              for (let i = 0; i < rows; i++) {
+                const zone = text(zones.get(i));
                 if (zone) {
                   target.setTimezone(zone);
                   timezone ??= zone;
                 }
-                break;
               }
-              case 'routes':
-                target.addRoute(text(row.route_id), text(row.route_short_name), text(row.route_long_name),
-                  optional(row.route_type), text(row.route_color), text(row.route_text_color));
-                break;
-              case 'stops':
-                target.addStop(text(row.stop_id), text(row.stop_code), text(row.stop_name), Number(row.stop_lat), Number(row.stop_lon));
-                break;
-              case 'calendar':
-                target.addCalendar(text(row.service_id), flag(row.monday), flag(row.tuesday), flag(row.wednesday), flag(row.thursday),
-                  flag(row.friday), flag(row.saturday), flag(row.sunday), Number(row.start_date), Number(row.end_date));
-                break;
-              case 'calendar_dates':
-                target.addCalendarDate(text(row.service_id), Number(row.date), Number(row.exception_type));
-                break;
-              case 'trips':
-                target.addTrip(text(row.trip_id), text(row.route_id), text(row.service_id), optional(row.direction_id),
-                  text(row.shape_id) || undefined, text(row.trip_headsign));
-                break;
+              break;
+            }
+            case 'routes': {
+              const id = column('route_id'), short = column('route_short_name'), long = column('route_long_name');
+              const type = column('route_type'), color = column('route_color'), textColor = column('route_text_color');
+              for (let i = 0; i < rows; i++) {
+                target.addRoute(text(id.get(i)), text(short.get(i)), text(long.get(i)), optional(type.get(i)), text(color.get(i)), text(textColor.get(i)));
+              }
+              break;
+            }
+            case 'stops': {
+              const id = column('stop_id'), code = column('stop_code'), name = column('stop_name');
+              const lat = column('stop_lat'), lon = column('stop_lon');
+              for (let i = 0; i < rows; i++) {
+                target.addStop(text(id.get(i)), text(code.get(i)), text(name.get(i)), Number(lat.get(i)), Number(lon.get(i)));
+              }
+              break;
+            }
+            case 'calendar': {
+              const id = column('service_id'), start = column('start_date'), end = column('end_date');
+              const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(column);
+              for (let i = 0; i < rows; i++) {
+                target.addCalendar(text(id.get(i)), flag(days[0].get(i)), flag(days[1].get(i)), flag(days[2].get(i)), flag(days[3].get(i)),
+                  flag(days[4].get(i)), flag(days[5].get(i)), flag(days[6].get(i)), Number(start.get(i)), Number(end.get(i)));
+              }
+              break;
+            }
+            case 'calendar_dates': {
+              const id = column('service_id'), date = column('date'), type = column('exception_type');
+              for (let i = 0; i < rows; i++) target.addCalendarDate(text(id.get(i)), Number(date.get(i)), Number(type.get(i)));
+              break;
+            }
+            case 'trips': {
+              const id = column('trip_id'), route = column('route_id'), service = column('service_id');
+              const direction = column('direction_id'), shape = column('shape_id'), headsign = column('trip_headsign');
+              for (let i = 0; i < rows; i++) {
+                target.addTrip(text(id.get(i)), text(route.get(i)), text(service.get(i)), optional(direction.get(i)),
+                  text(shape.get(i)) || undefined, text(headsign.get(i)));
+              }
+              break;
             }
           }
         }
-      });
+      }));
     }
   }
   run.stage(`Placing stops on the ${label} route lines`, undefined, undefined, undefined, {phase: 'schedule'});
@@ -300,19 +463,21 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
     key, bases: choice.bases, retrieved: choice.retrieved, published_before: choice.published_before,
     timezone: timezone ?? target.scheduleTimezone() ?? null, warnings: JSON.parse(target.scheduleWarnings()),
   };
+  run.scheduleTables.delete(key);
   run.emit({event: 'schedule', record});
 }
 
-/** Reads the time zone cheaply when no schedule has been compiled yet. */
+/** Reads the time zone from the schedule's agency table, fetched once and shared with `loadSchedule`. */
 async function timezoneOf(run: Run, choice: ScheduleChoice): Promise<string | null> {
+  const tables = prefetchSchedule(run, choice);
   for (const base of choice.bases) {
+    const file = await run.wait(tables.get(`${base}/agency.parquet`)!);
+    if (file === null) continue;
     const alias = 'schedule_agency_tz.parquet';
-    const url = `${base}/agency.parquet`;
-    if ((await run.wait(objectSize(url, 'Schedule agency table'))) === null) continue;
-    const zone = await withFile(run, alias, url, async () => {
+    const zone = await withLocalFile(run, alias, file, async () => {
       const columns = JSON.stringify(await columnsOf(run, alias));
-      const rows = await rowsOf(run, Engine.scheduleQuery('agency', columns, alias));
-      return text(rows[0]?.agency_timezone);
+      const {rows, column} = await tableOf(run, Engine.scheduleQuery('agency', columns, alias));
+      return rows ? text(column('agency_timezone').get(0)) : '';
     });
     if (zone) return zone;
   }
@@ -365,6 +530,7 @@ function openFeedEngine(feedKey: string) {
   engine = new Engine();
   currentFeed = feedKey;
   eventDatesInMemory = [];
+  tripMatches = new Map();
   return engine;
 }
 
@@ -380,7 +546,11 @@ async function restoreDay(run: Run, date: number) {
       if (!schedule || !run.engine.importSchedule(schedule.meta)) return false;
     }
     // Stop events load on demand, because most days are never drawn as a string line.
-    return run.engine.importDay(entry.cube);
+    const imported = run.engine.importDay(entry.cube);
+    // Days saved before the rate was kept have none, and are read from their notes.
+    if (imported && entry.tripMatch !== undefined) tripMatches.set(date, entry.tripMatch);
+    else tripMatches.delete(date);
+    return imported;
   } catch (error) {
     if (error instanceof RunStopped) throw error;
     console.warn(`[cache] saved results for ${formatDate(date)} were unreadable and will be removed`, error);
@@ -395,11 +565,11 @@ async function restoreDay(run: Run, date: number) {
  * Saves a finished day, last of all writing the entry that makes it visible, so a
  * partly saved day can never be restored as if it were whole.
  */
-async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null) {
+async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null, tripMatch: number | null) {
   const version = Engine.metricVersion();
   const key = dayKey(run.feedKey, date, version);
   if (events && !(await run.wait(putEntry('events', key, {events} satisfies EventsEntry)))) return false;
-  if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString()} satisfies DayEntry)))) return false;
+  if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString(), tripMatch} satisfies DayEntry)))) return false;
   return run.wait(putEntry('dayIndex', key, {bytes: cube.byteLength} satisfies DayIndexEntry));
 }
 
@@ -426,17 +596,20 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   if (!remaining.length) return;
 
   const notes: string[] = [];
+  // The schedule catalog needs no database, so it is fetched while the database starts.
+  const catalogs = run.span('schedules.json', () => archiveJson<unknown[]>('schedules.json').then(data => JSON.stringify(data)));
+  catalogs.catch(() => {});
   run.stage('Starting the local database', 0, 0, remaining.length, {phase: 'database'});
-  await run.wait(ensureDatabase());
+  await run.span('database', () => run.wait(ensureDatabase()));
   result.engineVersion = engineVersion;
 
   run.stage('Looking up this feed in the archive', 0, 0, remaining.length, {phase: 'lookup'});
-  const metadata = await withFile(run, 'feeds.parquet', `${ARCHIVE}feeds.parquet`, async () => {
+  const metadata = await run.span('feeds.parquet', () => withFile(run, 'feeds.parquet', `${ARCHIVE}feeds.parquet`, async () => {
     const statement = await run.wait(connection!.prepare(Engine.feedMetadataQuery()));
     const rows = (await run.wait(statement.query(run.feedKey))).toArray().map(row => row.toJSON());
     await run.wait(statement.close());
     return rows;
-  });
+  }));
   const row = metadata[0] ?? {};
   let scheduleUrls: string[] = [];
   try {
@@ -445,7 +618,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
     notes.push("The archive's list of schedules for this feed couldn't be read.");
   }
   if (!scheduleUrls.length && row.schedule_url) scheduleUrls = [String(row.schedule_url)];
-  target.setScheduleCatalogs(await run.wait(archiveJson<unknown[]>('schedules.json').then(data => JSON.stringify(data))));
+  target.setScheduleCatalogs(await run.wait(catalogs));
   const urlsJson = JSON.stringify(scheduleUrls);
 
   // A day with no covering schedule still gets GPS speeds. Only the time zone has
@@ -455,6 +628,10 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
     const choice: ScheduleChoice | null = JSON.parse(target.chooseSchedule(urlsJson, date));
     if (choice) choices.set(date, choice);
   }
+  // Start fetching the schedule tables now. They arrive while the archive files are read.
+  for (const choice of choices.values()) {
+    if (!target.isCompiled(choice.key)) prefetchSchedule(run, choice);
+  }
 
   // The time zone comes first: service days can't be located in UTC files without it.
   // A schedule's own zone always wins over an estimate saved earlier.
@@ -463,7 +640,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   let timezone: string | null = null;
   let estimated = false;
   if (firstChoice) {
-    timezone = savedZone && !savedZone.estimated ? savedZone.timezone : await timezoneOf(run, firstChoice);
+    timezone = savedZone && !savedZone.estimated ? savedZone.timezone : await run.span('timezone', () => timezoneOf(run, firstChoice));
     if (timezone) await run.wait(putEntry('feeds', run.feedKey, {timezone, estimated: false} satisfies FeedEntry));
   }
   if (!timezone) {
@@ -482,14 +659,28 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   // and costs one round trip rather than one per file.
   run.stage('Checking the archive files', 0, 0, remaining.length, {phase: 'lookup'});
   // A failed lookup isn't fatal here: that file is sized again, and fails properly, when its turn comes.
-  const sizes: (number | null | undefined)[] = await run.wait(Promise.all(plan.files.map((file: any) =>
-    objectSize(file.url, `Archive ${file.utc_date}`).catch(() => undefined))));
+  const sizes: (number | null | undefined)[] = await run.span('sizes', () => run.wait(Promise.all(plan.files.map((file: any) =>
+    objectSize(file.url, `Archive ${file.utc_date}`).catch(() => undefined)))));
   const bytesTotal = sizes.reduce<number>((sum, size) => sum + (size ?? 0), 0);
   let bytesBefore = 0;
   let completedDays = 0;
   const missing: [number, number][] = [];
   const failedSchedules = new Map<string, string>();
   const processed = new Set<number>();
+
+  // Download each archive file whole, one ahead of the one being read, so the network
+  // works while DuckDB decodes. At most the current file and the next one are held.
+  const downloads: (Promise<File> | undefined)[] = [];
+  const downloaded: number[] = plan.files.map(() => 0);
+  const startDownload = (index: number) => {
+    const size = sizes[index];
+    if (index >= totalFiles || downloads[index] || !size || size > PREFETCH_MAX_BYTES) return;
+    const label = `${plan.files[index].utc_date}`;
+    const after = downloads[index - 1]?.catch(() => {}) ?? Promise.resolve();
+    const started = after.then(() => run.span(`file ${label} download`, () => downloadObject(run, plan.files[index].url, size, bytes => (downloaded[index] += bytes))));
+    started.catch(() => {});
+    downloads[index] = started;
+  };
 
   for (const [fileIndex, file] of plan.files.entries()) {
     const started = performance.now();
@@ -498,18 +689,20 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
     const progress = (within: number) => (fileIndex + within) / totalFiles;
     let size = sizes[fileIndex];
     if (size === undefined) size = await run.wait(objectSize(file.url, `Archive ${label}`));
+    startDownload(fileIndex);
+    startDownload(fileIndex + 1);
     run.stage(`Checking the ${label} archive file`, progress(0), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore, bytesTotal});
     const record: ReadRecord = {date: file.utc_date, url: file.url, bytes: size ?? 0, status: size === null ? 'missing' : 'read', rows: 0, seconds: 0, sql: ''};
     if (size === null) {
       missing.push([file.ends_at - 86400, file.ends_at]);
     } else {
       enforceObjectSize(size, `Archive ${label}`);
-      await withFile(run, file.alias, file.url, async () => {
-        const columns = await columnsOf(run, file.alias);
+      const read = async () => {
+        const columns = await run.span(`file ${label} describe`, () => columnsOf(run, file.alias));
         const sql = Engine.fixesQuery(JSON.stringify(columns), file.alias, file.window_start, file.window_end);
         record.sql = sql;
         let lastReport = 0;
-        await stream(run, sql, batch => {
+        await run.span(`file ${label} query`, () => stream(run, sql, batch => {
           const fetched = numberColumn(batch, 'fetch') as Float64Array;
           const [tripOffsets, tripBytes] = textColumn(batch, 'trip_id');
           const [vehicleOffsets, vehicleBytes] = textColumn(batch, 'vehicle_id');
@@ -527,7 +720,25 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
             const within = Math.min(1, Math.max(0, (fetched[fetched.length - 1] - file.window_start) / (file.window_end - file.window_start)));
             run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + within * (size ?? 0), bytesTotal});
           }
-        });
+        }));
+      };
+      const pending = downloads[fileIndex];
+      await run.span(`file ${label}`, async () => {
+        if (!pending) return withFile(run, file.alias, file.url, read);
+        // Show the download while it is the only thing happening, as the first half of the file.
+        const ticker = setInterval(() => {
+          const share = downloaded[fileIndex] / (size ?? 1);
+          run.stage(`Downloading ${label} from the archive`, progress(share / 2), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + downloaded[fileIndex], bytesTotal});
+        }, 250);
+        let local: File;
+        try {
+          local = await run.wait(pending);
+        } finally {
+          clearInterval(ticker);
+        }
+        downloads[fileIndex] = undefined;
+        startDownload(fileIndex + 2);
+        return withLocalFile(run, file.alias, local, read);
       });
     }
     bytesBefore += size ?? 0;
@@ -540,9 +751,14 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
       const choice = choices.get(date);
       if (choice && !failedSchedules.has(choice.key)) {
         try {
-          await loadSchedule(run, choice, formatDate(date));
+          await run.span('schedule', () => loadSchedule(run, choice, formatDate(date)));
         } catch (error) {
           if (error instanceof RunStopped) throw error;
+          // A dropped connection says nothing about the schedule. Falling back to GPS speeds
+          // here would show, and save, a day that is worse than the one the visitor asked
+          // for. Stop with a retryable error instead, and keep what finished before it.
+          const classified = classifyError(error, `reading the ${formatDate(date)} schedule`);
+          if (isTransient(classified)) throw classified;
           console.warn(`[engine] schedule for ${formatDate(date)} could not be read; falling back to GPS speeds`, error);
           failedSchedules.set(choice.key, error instanceof Error ? error.message : String(error));
         }
@@ -558,11 +774,17 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
         dayNotes.push(`${formatDate(date)}: ${(match * 100).toFixed(0)}% of realtime trip IDs match the schedule, and the rest are left out. This is normal for a feed shared with other agencies, but check the share of scheduled trips observed.`);
       }
       const useSchedule = joined && (!hasFixes || match >= MIN_TRIP_MATCH);
+      // Measured whenever positions were compared with a schedule, even if the match was
+      // too low to use it. Null when there was nothing to compare.
+      const tripMatch = joined && hasFixes ? match : null;
+      tripMatches.set(date, tripMatch);
       const missingJson = JSON.stringify(missing);
       const notesJson = JSON.stringify(dayNotes);
+      const analysisStarted = performance.now();
       const output = (useSchedule
         ? target.processDay(date, choice!.key, file.ends_at, missingJson, notesJson)
         : target.processGpsDay(date, file.ends_at, missingJson, notesJson)) as {status: string; cube?: Uint8Array; events?: Uint8Array; meta?: Uint8Array; digest?: string};
+      run.spans.push({name: `process ${formatDate(date)}`, start: Math.round(analysisStarted - run.origin), end: Math.round(performance.now() - run.origin)});
       completedDays += 1;
 
       if (output.status === 'no_data') {
@@ -576,7 +798,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
           const digest = useSchedule ? choice!.key : output.digest!;
           let saved = true;
           if (output.meta) saved = await run.wait(putEntry('schedules', scheduleKey(run.feedKey, digest), {meta: output.meta} satisfies ScheduleEntry));
-          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null));
+          saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null, tripMatch));
           if (saved) {
             if (output.events) rememberEvents(date);
           }
@@ -608,7 +830,7 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
   activeRun = run;
   const result: AnalyzeResult = {analyzed: [], cached: [], unavailable: [], stopped: false, engineVersion};
   try {
-    await execute(run, request, result);
+    await run.span('total', () => execute(run, request, result));
   } catch (error) {
     if (!(error instanceof RunStopped)) {
       // Say what the run was doing, and keep the original error as the cause.
@@ -617,6 +839,7 @@ async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
     }
     result.stopped = true;
   } finally {
+    result.timings = run.spans;
     if (activeRun === run) activeRun = undefined;
     run.finish();
   }
@@ -661,6 +884,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
       engine = undefined;
       currentFeed = undefined;
       eventDatesInMemory = [];
+      tripMatches = new Map();
     }
     return true;
   },
@@ -673,7 +897,7 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     engine?.select(selection);
     return true;
   },
-  overview: () => JSON.parse(engine!.overview()),
+  overview: () => withTripMatch(JSON.parse(engine!.overview()), tripMatches),
   routes: () => JSON.parse(engine!.routes()),
   networkMap: (route?: string) => JSON.parse(engine!.networkMap(route)),
   hotspots: () => JSON.parse(engine!.hotspots()),

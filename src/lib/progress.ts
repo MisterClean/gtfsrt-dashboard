@@ -148,3 +148,29 @@ export function durationLabel(seconds: number): string {
   if (seconds < 90) return `about ${Math.max(10, Math.round(seconds / 10) * 10)} seconds`;
   return `about ${Math.round(seconds / 60)} minutes`;
 }
+
+// ---- What the progress panel says about size ---------------------------------
+
+export interface SizeReport {
+  /** Archive bytes expected: the files' real sizes once known, else the catalog estimate. */
+  total: number;
+  /** True when `total` is the sum of real file sizes rather than the catalog estimate. */
+  exact: boolean;
+  /** Bytes scanned so far. Null until the first bytes arrive, so "0 KB" is never shown. */
+  done: number | null;
+}
+
+/**
+ * One size source for the whole page: the catalog estimate (the same figure as the top
+ * bar) until the files have been sized, then their real total. Nothing is reported as
+ * done before anything has been.
+ */
+export function sizeReport(progress: Pick<Progress, 'bytesDone' | 'bytesTotal'>, estimate: number): SizeReport {
+  const exact = progress.bytesTotal !== null && progress.bytesTotal > 0;
+  const total = exact ? progress.bytesTotal! : estimate;
+  const done = progress.bytesDone !== null && progress.bytesDone > 0 ? Math.min(progress.bytesDone, total || progress.bytesDone) : null;
+  return {total, exact, done};
+}
+
+/** No share to show yet: before the first bytes arrive a bar can only say "working". */
+export const isIndeterminate = (progress: Pick<Progress, 'fraction'>) => progress.fraction <= 0;

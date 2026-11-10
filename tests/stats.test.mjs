@@ -1,13 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MIN_EVENTS, SOLID_EVENTS, coverageNote, coverageOf, headlineHours, isShown, isSolid, matchRateFromNotes,
+  MIN_EVENTS, SOLID_EVENTS, coverageNote, coverageOf, headlineHours, isShown, isSolid,
   sampleState, sampleText, scheduleSuppressed, share, wilson,
 } from '../src/lib/stats.ts';
 
-const day = (over = {}) => ({trips_scheduled: 500, on_time: {total: 900, early: 0, on_time: 700, late: 200}, warnings: [], ...over});
-const gps = () => day({trips_scheduled: 0, on_time: {total: 0, early: 0, on_time: 0, late: 0}, warnings: ['this day could not be joined to a schedule']});
-const matched = pct => day({warnings: [`Fri, Nov 6: ${pct}% of realtime trip IDs match the schedule, and the rest are left out.`]});
+const day = (over = {}) => ({trips_scheduled: 500, on_time: {total: 900, early: 0, on_time: 700, late: 200}, trip_match: 0.97, warnings: [], ...over});
+const gps = () => day({trips_scheduled: 0, on_time: {total: 0, early: 0, on_time: 0, late: 0}, trip_match: null, warnings: ['this day could not be joined to a schedule']});
+const matched = pct => day({trip_match: pct / 100});
 
 test('sample thresholds sit at their boundaries', () => {
   assert.equal(sampleState(MIN_EVENTS - 1), 'withheld');
@@ -39,9 +39,10 @@ test('wilson interval brackets the estimate and stays inside 0 to 1', () => {
   assert.deepEqual(wilson(6, 5), null);
 });
 
-test('reads the trip-ID match rate out of a day note', () => {
-  assert.equal(matchRateFromNotes(['Fri, Nov 6: 39% of realtime trip IDs match the schedule, and the rest are left out.']), 0.39);
-  assert.equal(matchRateFromNotes(['something else']), null);
+test('coverage reads the numeric match rate and ignores note text', () => {
+  const worded = day({trip_match: null, warnings: ['Fri, Nov 6: 12% of realtime trip IDs match the schedule, and the rest are left out.']});
+  assert.equal(coverageOf({days: [worded]}).matchRate, null);
+  assert.equal(coverageOf({days: [matched(39), matched(60), day({trip_match: null})]}).matchRate, 0.39);
 });
 
 test('coverage: full, partial, suppressed and GPS-only days', () => {

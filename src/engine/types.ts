@@ -39,6 +39,11 @@ export interface DayRow {
   empty_buckets: number;
   service_buckets: number;
   status: DayStatus;
+  /**
+   * Share of realtime trip IDs found in the schedule, 0 to 1. Null when it was not
+   * measured: a day with no schedule, or a saved day from before it was kept.
+   */
+  trip_match: number | null;
   warnings: string[];
 }
 
@@ -388,7 +393,12 @@ export type EngineEvent =
 
 export interface CachedDays { dates: number[]; bytes: number }
 
+/** One timed stage of a run, in milliseconds from its start. Spans can overlap. */
+export interface TimingSpan { name: string; start: number; end: number }
+
 export interface AnalyzeResult {
+  /** Where the time went, for the benchmark script and bug reports. */
+  timings?: TimingSpan[];
   analyzed: number[];
   cached: number[];
   unavailable: { date: number; reason: string }[];

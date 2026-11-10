@@ -83,6 +83,24 @@ export function classifyError(error: unknown, context?: string): EngineError {
   return new EngineError('unknown', text, options);
 }
 
+/**
+ * Whether a failure is about the connection or the archive's availability right now,
+ * rather than about the data. Trying again can fix these, so they must never be turned
+ * into a quieter result (such as a day measured from GPS alone) that gets saved.
+ */
+export function isTransient(error: EngineError): boolean {
+  switch (error.kind) {
+    case 'offline':
+    case 'timeout':
+      return true;
+    case 'http':
+      // A 404 or 410 is a statement about the object. Everything else is trouble that passes.
+      return error.status !== 404 && error.status !== 410;
+    default:
+      return false;
+  }
+}
+
 export function serializeError(error: unknown, context?: string): SerializedError {
   const classified = classifyError(error, context);
   return {
