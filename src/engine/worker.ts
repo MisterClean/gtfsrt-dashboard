@@ -142,6 +142,18 @@ async function stopActiveRun() {
 
 // ---- Network helpers -------------------------------------------------------
 
+/** The run's abort signal plus a timeout. AbortSignal.any arrived in Safari 17.4 and Firefox 124, so older engines get a manual merge. */
+function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout]);
+  const merged = new AbortController();
+  for (const source of [signal, timeout]) {
+    if (source.aborted) merged.abort(source.reason);
+    else source.addEventListener('abort', () => merged.abort(source.reason), {once: true});
+  }
+  return merged.signal;
+}
+
 async function archiveFetch(url: string, options: RequestInit = {}, timeout = 30_000) {
   validateArchiveURL(url);
   return fetch(url, {...options, signal: AbortSignal.timeout(timeout), credentials: 'omit', referrerPolicy: 'no-referrer'});
@@ -178,7 +190,7 @@ function archiveJson<T>(path: string, timeout = 30_000): Promise<T> {
  */
 async function fetchWhole(run: Run, url: string, label: string, maxBytes: number): Promise<File | null> {
   validateArchiveURL(url);
-  const response = await fetch(url, {signal: AbortSignal.any([run.abort.signal, AbortSignal.timeout(90_000)]), credentials: 'omit', referrerPolicy: 'no-referrer'});
+  const response = await fetch(url, {signal: withTimeout(run.abort.signal, 90_000), credentials: 'omit', referrerPolicy: 'no-referrer'});
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
   const length = Number(response.headers.get('content-length'));
@@ -277,7 +289,7 @@ async function downloadObject(run: Run, url: string, size: number, onBytes: (byt
       const [first, last] = ranges[index];
       const response = await fetch(url, {
         headers: {Range: `bytes=${first}-${last}`},
-        signal: AbortSignal.any([run.abort.signal, AbortSignal.timeout(90_000)]),
+        signal: withTimeout(run.abort.signal, 90_000),
         credentials: 'omit', referrerPolicy: 'no-referrer',
       });
       if (!response.ok) throw new Error(`Archive ${url.split('/').slice(-3)[0]} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);

@@ -44,7 +44,8 @@
   $effect(() => {
     app.version;
     const id = app.routeId;
-    if (!id || !app.hasResults) {
+    // Results can be flagged while the engine's selection is being rebuilt; wait for the overview.
+    if (!id || !app.hasResults || !app.overview) {
       detail = null;
       network = null;
       loaded = null;
