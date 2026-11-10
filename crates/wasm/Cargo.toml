@@ -3,6 +3,7 @@ name = "transit-wasm"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
+license = "MIT"
 description = "Browser bindings for transit-core"
 
 [lib]
