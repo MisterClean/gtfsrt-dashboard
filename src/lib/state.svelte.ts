@@ -8,15 +8,15 @@ import type {
 import {decodeDates, encodeDates, lastDays} from './dates';
 import {slowestHour} from './findings';
 import {dateNumber, plural, type Units} from './format.ts';
-import {loading} from './loading.svelte';
 import {parseHealthFile, staleness, type FeedHealth} from './health.ts';
+import {datesWhere, dayOf, inFlight, isPending, markSaved, queueDays, reduceDays, releaseDays, settleDays, type Days, type Outcome} from './days.ts';
+import {IDLE, checkStall, endRun, failRun, runEvent, selectionChanged, startRun, type RunState} from './run.ts';
+import {bootFailed, isBooting, type Boot, type BootStep} from './startup.ts';
 
 export type View = 'overview' | 'map' | 'routes' | 'route' | 'reliability' | 'stops' | 'hotspots' | 'data';
 
 // Keep the original key so saved preferences survive the rename.
 const STORAGE_KEY = 'transit-notebook-preferences';
-/** With streaming reads, this long without a sign of progress means something is stuck. */
-const STALL_MS = 120_000;
 /** While a run is going, results refresh at most this often. Each refresh redraws every view. */
 const RUN_REFRESH_MS = 20_000;
 
@@ -32,19 +32,22 @@ function loadPreferences(): Preferences {
 }
 
 class AppState {
+  /** Where startup has got to. See startup.ts. */
+  boot = $state.raw<Boot>({step: 'engine'});
   feeds = $state<Feed[]>([]);
   feedKey = $state<string | null>(null);
-  catalogError = $state<string | null>(null);
   /** Generated feed health, keyed by feed. Empty when the file is missing; every feed then stays selectable. */
   health = $state<Record<string, FeedHealth>>({});
   showAllFeeds = $state(false);
 
   dates = $state<number[]>([]);
-  cachedDates = $state<number[]>([]);
+  /** Every day of the open agency that has something to say about it. See days.ts. */
+  days = $state.raw<Days>({});
   cachedBytes = $state(0);
-  analyzedDates = $state<number[]>([]);
-  /** Days the archive has nothing for. They aren't results, and aren't pending either. */
-  unavailableDates = $state<Record<number, string>>({});
+  /** The analysis run: idle, running, stopped or failed. See run.ts. */
+  run = $state.raw<RunState>(IDLE);
+  /** The browser can't keep results. Said once, not per day. */
+  cacheNotice = $state<string | null>(null);
 
   mode = $state<Mode>('All');
   earlyS = $state(-60);
@@ -64,12 +67,7 @@ class AppState {
   basemap = $state(true);
   darkActive = $state(false);
 
-  running = $state(false);
-  stage = $state<{message: string; fraction: number; dayIndex: number; dayCount: number} | null>(null);
-  error = $state<string | null>(null);
   reportError = $state<string | null>(null);
-  /** No sign of progress for a while, usually a stalled connection. */
-  stalled = $state(false);
   warnings = $state<string[]>([]);
   reads = $state<ReadRecord[]>([]);
   schedules = $state<ScheduleRecord[]>([]);
@@ -86,7 +84,6 @@ class AppState {
   /** Results from a run or a refresh that has been superseded are ignored. */
   private currentRun = 0;
   private refreshToken = 0;
-  private lastProgress = 0;
   private lastRefresh = 0;
   private watchdog: ReturnType<typeof setInterval> | undefined;
 
@@ -99,10 +96,31 @@ class AppState {
     if (this.mode !== 'All') return this.mode;
     return (this.overview?.speed ?? 0) > 9 ? 'Rail' : 'Bus';
   });
-  loadedDates = $derived(this.dates.filter(d => this.analyzedDates.includes(d)));
-  pendingDates = $derived(this.dates.filter(d => !this.analyzedDates.includes(d) && !(d in this.unavailableDates)));
+
+  // Everything below is read off `days` and `run`. None of it is stored separately.
+  cachedDates = $derived(datesWhere(this.days, day => day.saved));
+  analyzedDates = $derived(datesWhere(this.days, day => day.status === 'loaded'));
+  /** Days the archive has nothing for, with why. They aren't results, and aren't pending either. */
+  unavailableDates = $derived<Record<number, string>>(Object.fromEntries(
+    datesWhere(this.days, day => day.status === 'no_data').map(date => [date, this.days[date].reason ?? 'The archive has no data for this day.']),
+  ));
+  loadedDates = $derived(this.dates.filter(d => dayOf(this.days, d).status === 'loaded'));
+  pendingDates = $derived(this.dates.filter(d => isPending(dayOf(this.days, d))));
+  /** Selected days that are saved here and will load by themselves once the current run is done. */
+  queuedNext = $derived.by(() => {
+    const run = this.run;
+    return run.phase === 'running' ? this.dates.filter(d => dayOf(this.days, d).status === 'queued' && !run.dates.includes(d)) : [];
+  });
   hasResults = $derived(this.loadedDates.length > 0);
-  uncachedDates = $derived(this.dates.filter(d => !this.cachedDates.includes(d)));
+  uncachedDates = $derived(this.dates.filter(d => !dayOf(this.days, d).saved));
+
+  running = $derived(this.run.phase === 'running');
+  progress = $derived(this.run.phase === 'running' ? this.run.progress : null);
+  stage = $derived(this.run.phase === 'running' ? this.run.progress : null);
+  /** No sign of progress for a while, usually a stalled connection. */
+  stalled = $derived(this.run.phase === 'running' && this.run.stalled);
+  /** The last run's failure in words, while its notice is up. */
+  error = $derived(this.run.phase === 'failed' ? errorText(this.run.failure) : null);
 
   constructor() {
     const preferences = loadPreferences();
@@ -112,7 +130,9 @@ class AppState {
     this.applyTheme();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
     engine.onEvent(event => {
-      if (event.run === this.currentRun) this.handleEvent(event);
+      // Cache trouble can happen outside a run, so it isn't tied to the current one.
+      if (event.event === 'cache') this.cacheNotice ??= event.message;
+      else if (event.run === this.currentRun) this.handleEvent(event);
     });
   }
 
@@ -151,18 +171,27 @@ class AppState {
   // ---- Startup --------------------------------------------------------------
 
   async start() {
+    let step: BootStep = 'engine';
     try {
+      this.boot = {step};
       await engine.init();
+      this.boot = {step: (step = 'catalog')};
       const feeds = await engine.catalog();
       this.feeds = feeds
         .filter(f => f.feed_type === 'vehicle_positions' && /^[A-Za-z0-9_-]+$/.test(f.base64url))
         .sort((a, b) => feedLabel(a).localeCompare(feedLabel(b)));
       if (!this.feeds.length) throw new Error('The catalog lists no vehicle-position feeds. Try again later.');
       this.health = await loadHealth();
-      this.readUrl();
+      this.boot = {step: (step = 'opening')};
+      // Becomes ready inside, as soon as the days are chosen: loading saved days can take a while.
+      await this.readUrl();
     } catch (error) {
-      this.catalogError = errorText(error);
-      loading.failCatalog(error);
+      if (isBooting(this.boot)) {
+        this.boot = bootFailed(step, error);
+        console.error('[transit-almanac] startup failed while', this.boot.step === 'failed' ? this.boot.failure.context : step, error);
+      } else {
+        console.error('[transit-almanac] opening the first agency failed', error);
+      }
     }
   }
 
@@ -179,7 +208,7 @@ class AppState {
     const mode = params.get('mode') as Mode | null;
     if (mode && ['All', 'Bus', 'Rail', 'Ferry', 'Other', 'Unknown'].includes(mode)) this.mode = mode;
     const dates = decodeDates(params);
-    this.selectFeed(feed.base64url, dates.length ? dates : null, true);
+    return this.selectFeed(feed.base64url, dates.length ? dates : null, true);
   }
 
   writeUrl() {
@@ -202,24 +231,9 @@ class AppState {
     this.feedKey = feedKey;
     if (changed) {
       // Nothing from the previous agency may land here from now on.
-      this.currentRun += 1;
-      this.refreshToken += 1;
-      clearTimeout(this.refreshTimer);
-      this.running = false;
-      this.stage = null;
-      this.analyzedDates = [];
-      this.unavailableDates = {};
-      this.overview = null;
-      this.routes = [];
-      this.quality = null;
-      this.reads = [];
-      this.schedules = [];
+      this.resetFeed();
       this.warnings = [];
       this.result = null;
-      this.error = null;
-      this.reportError = null;
-      this.lastRefresh = 0;
-      loading.clear();
       this.mode = fromUrl ? this.mode : 'All';
       if (!fromUrl) this.routeId = null;
       await engine.openFeed(feedKey);
@@ -239,10 +253,39 @@ class AppState {
       this.dates = kept ? [...previousDates] : staleness(feed, new Date().toISOString().slice(0, 10)).stale ? [] : lastDays(feed.date_min, feed.date_max, 'weekday', 5);
     }
     this.writeUrl();
+    if (isBooting(this.boot)) this.boot = {step: 'ready'};
     // Days already on this device load without asking. New downloads wait for a click.
-    if (this.dates.some(d => this.cachedDates.includes(d))) {
-      await this.analyze(this.dates.filter(d => this.cachedDates.includes(d)));
-    }
+    await this.analyze(this.savedToLoad());
+  }
+
+  /**
+   * Everything that belongs to one agency's results and the run making them. Changing
+   * agency and clearing saved results both start from here, so neither can leave a
+   * piece of the old state behind.
+   */
+  private resetFeed() {
+    this.currentRun += 1;
+    this.refreshToken += 1;
+    clearTimeout(this.refreshTimer);
+    clearInterval(this.watchdog);
+    this.run = IDLE;
+    this.days = {};
+    this.cachedBytes = 0;
+    this.overview = null;
+    this.routes = [];
+    this.quality = null;
+    this.reads = [];
+    this.schedules = [];
+    this.reportError = null;
+    this.lastRefresh = 0;
+  }
+
+  /** Selected days that are saved on this device and not in memory yet. */
+  private savedToLoad() {
+    return this.dates.filter(d => {
+      const day = dayOf(this.days, d);
+      return day.saved && isPending(day);
+    });
   }
 
   /** A shared link can name anything, so keep only real days this feed has. */
@@ -259,8 +302,10 @@ class AppState {
 
   async refreshCached() {
     if (!this.feedKey) return;
-    const cached = await engine.cachedDays(this.feedKey);
-    this.cachedDates = cached.dates;
+    const feedKey = this.feedKey;
+    const cached = await engine.cachedDays(feedKey);
+    if (feedKey !== this.feedKey) return;
+    this.days = markSaved(this.days, cached.dates);
     this.cachedBytes = cached.bytes;
   }
 
@@ -271,10 +316,19 @@ class AppState {
 
   setDates(dates: number[]) {
     this.dates = [...new Set(dates)].sort((a, b) => a - b);
+    // A notice about days that are no longer selected has nothing left to say.
+    this.run = selectionChanged(this.run, this.dates);
     this.writeUrl();
     this.scheduleRefresh();
-    const known = this.dates.filter(d => this.cachedDates.includes(d) && !this.analyzedDates.includes(d));
-    if (known.length && !this.running) this.analyze(known);
+    if (this.run.phase === 'running') {
+      // Saved days can't join a run that is under way, so they wait for it and then load
+      // by themselves. Ones deselected while waiting leave the line.
+      const scope = this.run.dates;
+      const waiting = datesWhere(this.days, day => day.status === 'queued').filter(d => !scope.includes(d));
+      this.days = queueDays(releaseDays(this.days, waiting.filter(d => !this.dates.includes(d))), this.savedToLoad());
+    } else {
+      this.analyze(this.savedToLoad());
+    }
   }
 
   // ---- Running --------------------------------------------------------------
@@ -282,34 +336,40 @@ class AppState {
   async analyze(dates = this.pendingDates) {
     if (!this.feedKey || !this.feed || this.running || !dates.length) return;
     const run = ++this.currentRun;
-    this.running = true;
-    this.error = null;
-    this.stalled = false;
-    this.lastProgress = Date.now();
-    this.stage = {message: 'Starting', fraction: 0, dayIndex: 0, dayCount: dates.length};
-    loading.begin(dates);
+    // A notice from the run before this one comes back afterwards for whatever it still applies to.
+    const earlier = this.run;
+    this.days = queueDays(this.days, dates);
+    this.run = startRun(run, dates);
     clearInterval(this.watchdog);
-    this.watchdog = setInterval(() => {
-      if (this.running) this.stalled = Date.now() - this.lastProgress > STALL_MS;
-    }, 5000);
+    this.watchdog = setInterval(() => (this.run = checkStall(this.run)), 5000);
+    let stopped = false;
+    let failure: unknown;
     try {
       const result = await engine.analyze({run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
       if (run === this.currentRun) this.result = result;
+      stopped = result.stopped;
     } catch (error) {
-      if (run === this.currentRun) {
-        this.error = errorText(error);
-        loading.fail(error);
-      }
-    } finally {
-      if (run === this.currentRun) {
-        clearInterval(this.watchdog);
-        this.running = false;
-        this.stalled = false;
-        this.stage = null;
-        loading.end();
-        await this.refreshCached();
-        await this.refresh();
-      }
+      failure = error ?? new Error('The analysis failed.');
+    }
+    // An agency change or a cleared cache has already reset everything this run touched.
+    if (run !== this.currentRun) return;
+    clearInterval(this.watchdog);
+    const left = dates.filter(d => inFlight(dayOf(this.days, d)));
+    let next = failure === undefined ? endRun(this.run, stopped, left) : failRun(this.run, failure, left);
+    const outcome: Outcome = next.phase === 'failed' ? {kind: 'failed', reason: friendlyError(next.failure).title}
+      : next.phase === 'stopped' ? {kind: 'stopped'} : {kind: 'finished'};
+    if (next.phase === 'failed') console.error('[transit-almanac] run failed:', next.failure.kind, next.failure.message, next.failure.cause ?? '');
+    this.days = settleDays(this.days, outcome, dates);
+    if (next.phase === 'idle' && (earlier.phase === 'failed' || earlier.phase === 'stopped')) {
+      next = selectionChanged(earlier, this.pendingDates);
+    }
+    this.run = next;
+    await this.refreshCached();
+    await this.refresh();
+    // Saved days selected while this run was going load now, however it ended: they need
+    // nothing from the archive. A notice this run left comes back once they are in.
+    if (run === this.currentRun) {
+      await this.analyze(this.dates.filter(d => dayOf(this.days, d).status === 'queued'));
     }
   }
 
@@ -318,16 +378,19 @@ class AppState {
     await engine.stop();
   }
 
+  /** Puts a stopped or failed run's notice away without acting on it. */
+  dismissRun() {
+    if (this.run.phase === 'stopped' || this.run.phase === 'failed') this.run = IDLE;
+  }
+
+  /** Asks the archive again for selected days it had nothing for. */
+  recheck() {
+    return this.analyze(this.dates.filter(d => dayOf(this.days, d).status === 'no_data'));
+  }
+
   async clearCache(all = false) {
     await engine.clearCache(all ? undefined : this.feedKey ?? undefined);
-    this.currentRun += 1;
-    this.running = false;
-    this.stage = null;
-    this.analyzedDates = [];
-    this.unavailableDates = {};
-    this.overview = null;
-    this.routes = [];
-    this.quality = null;
+    this.resetFeed();
     this.version += 1;
     if (this.feedKey) await engine.openFeed(this.feedKey);
     await this.refreshCached();
@@ -338,19 +401,13 @@ class AppState {
   }
 
   private handleEvent(event: EngineEvent) {
-    this.lastProgress = Date.now();
-    this.stalled = false;
-    loading.handle(event);
+    if (this.run.phase !== 'running') return;
+    const scope = this.run.dates;
+    this.run = runEvent(this.run, event);
+    this.days = reduceDays(this.days, event, scope);
     switch (event.event) {
-      case 'stage':
-        this.stage = {message: event.message, fraction: event.fraction, dayIndex: event.dayIndex, dayCount: event.dayCount};
-        break;
       case 'day':
-        if (!this.analyzedDates.includes(event.date)) this.analyzedDates = [...this.analyzedDates, event.date];
         this.scheduleRefresh();
-        break;
-      case 'unavailable':
-        this.unavailableDates = {...this.unavailableDates, [event.date]: event.reason};
         break;
       case 'read':
         this.reads = [...this.reads, event.record];

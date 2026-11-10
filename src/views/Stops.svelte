@@ -7,30 +7,19 @@
   import {engine} from '../engine/client';
   import type {RouteSpacing, StopRow, StopsReport} from '../engine/types';
   import {deviation, int, pct, shortLength} from '../lib/format';
-  import {app, errorText} from '../lib/state.svelte';
+  import {app} from '../lib/state.svelte';
+  import {resource} from '../lib/resource.svelte';
 
   const FEET = 3.28084;
   const MILES_PER_KM = 1.60934;
 
-  let report = $state<StopsReport | null>(null);
-  let failure = $state<string | null>(null);
-  let request = 0;
-
-  $effect(() => {
+  const stops = resource<StopsReport>(() => {
     app.version;
-    if (!app.hasResults) return;
-    const current = ++request;
-    engine.stops()
-      .then(result => {
-        if (current === request) {
-          report = result;
-          failure = null;
-        }
-      })
-      .catch(error => {
-        if (current === request) failure = errorText(error);
-      });
+    if (!app.hasResults) return null;
+    return {key: 'stops', load: () => engine.stops()};
   });
+  const report = $derived(stops.value);
+  const failure = $derived(stops.failure);
 
   const imperial = $derived(app.units === 'imperial');
   // The threshold is defined as 800 feet, which shouldn't read as 801 after rounding.

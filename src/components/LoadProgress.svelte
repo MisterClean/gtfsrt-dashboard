@@ -4,8 +4,8 @@
   // figure is archive file size by position, not network traffic.
   import {onDestroy} from 'svelte';
   import {bytes} from '../lib/format';
-  import {loading} from '../lib/loading.svelte';
-  import {DAY_STATUS_LABEL, estimateLoad, formatElapsed, isIndeterminate, sizeReport, type Phase} from '../lib/progress';
+  import {dayOf, runLabel} from '../lib/days';
+  import {estimateLoad, formatElapsed, isIndeterminate, sizeReport, type Phase} from '../lib/progress';
   import {app} from '../lib/state.svelte';
   import {dateLabel} from '../lib/format';
 
@@ -13,13 +13,14 @@
   const timer = setInterval(() => (now = Date.now()), 1000);
   onDestroy(() => clearInterval(timer));
 
-  const progress = $derived(loading.progress);
+  const progress = $derived(app.progress);
+  const runDates = $derived(app.run.phase === 'running' ? app.run.dates : []);
   const percent = $derived(progress ? Math.round(progress.fraction * 100) : 0);
   const indeterminate = $derived(progress ? isIndeterminate(progress) : true);
   // The same estimate as the top bar, until the files have been sized.
   const size = $derived.by(() => {
     if (!progress) return null;
-    const open = Object.entries(progress.days).filter(([, status]) => status === 'pending' || status === 'reading').map(([date]) => Number(date));
+    const open = runDates.filter(date => ['queued', 'reading'].includes(dayOf(app.days, date).status));
     const estimate = app.feed && open.length ? estimateLoad(app.feed, open).bytes : 0;
     const report = sizeReport(progress, estimate);
     return report.total > 0 ? report : null;
@@ -32,7 +33,8 @@
     analyze: 'Computing speeds, delays and headways for the day.',
   };
   const hint = $derived(progress?.phase ? hints[progress.phase] : undefined);
-  const days = $derived(progress ? Object.entries(progress.days).map(([date, status]) => ({date: Number(date), status})).sort((a, b) => a.date - b.date) : []);
+  const days = $derived([...runDates].sort((a, b) => a - b).map(date => ({date, record: dayOf(app.days, date)})));
+  const shortDate = (date: number) => dateLabel(String(date).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'), {month: 'short', day: 'numeric'});
 
   async function retry() {
     await app.stop();
@@ -64,9 +66,12 @@
     {#if days.length > 1}
       <ul class="days" aria-label="Days in this run">
         {#each days as day}
-          <li class={day.status}><span class="name">{dateLabel(String(day.date).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'), {month: 'short', day: 'numeric'})}</span> {DAY_STATUS_LABEL[day.status]}</li>
+          <li class={day.record.status} title={day.record.reason ?? undefined}><span class="name">{shortDate(day.date)}</span> {runLabel(day.record)}</li>
         {/each}
       </ul>
+    {/if}
+    {#if app.queuedNext.length}
+      <p class="fine next">{app.queuedNext.map(shortDate).join(', ')} {app.queuedNext.length === 1 ? 'is' : 'are'} already on this device and will load when this finishes.</p>
     {/if}
     {#if app.stalled}
       <p class="stalled" role="alert">
@@ -97,8 +102,9 @@
   .days { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 12px; }
   .days li { padding: 1px 8px; border: 1px solid var(--rule); border-radius: 10px; color: var(--muted, inherit); }
   .days li .name { font-weight: 600; }
-  .days li.done, .days li.cached { border-color: var(--green); }
+  .days li.loaded { border-color: var(--green); }
   .days li.reading, .days li.analyzing { border-color: var(--copper); }
   .days li.no_data { border-style: dashed; }
+  .next { margin: 0; }
   .stalled { margin: 0; font-size: 12px; color: var(--danger); }
 </style>

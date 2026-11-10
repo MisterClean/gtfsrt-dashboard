@@ -6,36 +6,31 @@
   import {engine} from '../engine/client';
   import type {Hotspot, HotspotReport, NetworkMap} from '../engine/types';
   import {hourLabel, int, length, pct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
-  import {app, errorText} from '../lib/state.svelte';
+  import {app} from '../lib/state.svelte';
+  import {resource} from '../lib/resource.svelte';
   import SpeedMap, {type MapPeriod} from '../map/SpeedMap.svelte';
 
   type SortKey = 'delay' | 'worst' | 'hours';
 
-  let report = $state<HotspotReport | null>(null);
-  let network = $state<NetworkMap | null>(null);
-  let failure = $state<string | null>(null);
   let selected = $state<Hotspot | null>(null);
   let period = $state<MapPeriod>('pm');
   let sort = $state<SortKey>('delay');
   let mapElement = $state<HTMLElement>();
-  let request = 0;
 
-  $effect(() => {
+  const delay = resource<{hotspots: HotspotReport; map: NetworkMap}>(() => {
     app.version;
-    if (!app.hasResults) return;
-    const current = ++request;
-    Promise.all([engine.hotspots(), engine.networkMap()])
-      .then(([hotspots, map]) => {
-        if (current !== request) return;
-        report = hotspots;
-        network = map;
-        failure = null;
-        // Ranks can shift when days are added, so a pinned stretch may no longer exist.
-        if (selected && !hotspots.hotspots.some(h => sameStretch(h, selected as Hotspot))) selected = null;
-      })
-      .catch(error => {
-        if (current === request) failure = errorText(error);
-      });
+    if (!app.hasResults) return null;
+    return {key: 'hotspots', load: async () => {
+      const [hotspots, map] = await Promise.all([engine.hotspots(), engine.networkMap()]);
+      return {hotspots, map};
+    }};
+  });
+  const report = $derived(delay.value?.hotspots ?? null);
+  const network = $derived(delay.value?.map ?? null);
+  const failure = $derived(delay.failure);
+  // Ranks can shift when days are added, so a pinned stretch may no longer exist.
+  $effect(() => {
+    if (selected && !(report?.hotspots.some(h => sameStretch(h, selected as Hotspot)) ?? false)) selected = null;
   });
 
   /** Overnight hours can rest on one or two vehicles, so the worst hour is read from 5 AM on. */

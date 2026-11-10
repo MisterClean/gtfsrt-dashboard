@@ -10,35 +10,20 @@
   import {DASH, dateLabel, datesLabel, int, minutes, pct, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
   import {HOURS} from '../lib/scale';
   import {DEFINITIONS, MIN_EVENTS, coverageNote, coverageOf, isShown, sampleText, scheduleSuppressed, share as shareOf} from '../lib/stats';
-  import {app, errorText, feedLabel} from '../lib/state.svelte';
+  import {app, feedLabel} from '../lib/state.svelte';
+  import {resource} from '../lib/resource.svelte';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
-  // Raw: this is megabytes of geometry for a big agency, and deep reactivity would wrap all of it.
-  let network = $state.raw<NetworkMap | null>(null);
-  let mapFailure = $state<string | null>(null);
   let hover = $state<number | null>(null);
-  let mapRequest = 0;
-
-  $effect(() => {
+  const map = resource<NetworkMap>(() => {
     app.version;
     // The overview arrives once the days are merged. Asking sooner finds no selection yet.
-    if (!app.hasResults || !app.overview) return;
-    const request = ++mapRequest;
-    engine.networkMap().then(
-      result => {
-        if (request !== mapRequest) return;
-        network = result;
-        mapFailure = null;
-      },
-      error => {
-        if (request !== mapRequest) return;
-        // Don't leave the last selection's map beside this selection's numbers.
-        network = null;
-        mapFailure = errorText(error);
-      },
-    );
+    if (!app.hasResults || !app.overview) return null;
+    return {key: 'network', load: () => engine.networkMap()};
   });
+  const network = $derived(map.value);
+  const mapFailure = $derived(map.failure);
 
   const o = $derived(app.overview);
   const list = $derived(o ? findings(o, app.routes, app.units) : []);
