@@ -81,17 +81,6 @@ export interface Coverage {
   days: number;
 }
 
-const MATCH_NOTE = /(\d+(?:\.\d+)?)% of realtime trip IDs match/;
-
-/** The match rate a day's notes state, as a 0 to 1 share, or null when they give none. */
-export function matchRateFromNotes(warnings: readonly string[]): number | null {
-  for (const warning of warnings) {
-    const found = MATCH_NOTE.exec(warning);
-    if (found) return Number(found[1]) / 100;
-  }
-  return null;
-}
-
 /** A day with no scheduled trips and no on-time events is a GPS-only day. */
 export const isGpsDay = (day: Pick<DayRow, 'trips_scheduled' | 'on_time'>) => day.trips_scheduled === 0 && day.on_time.total === 0;
 
@@ -100,11 +89,11 @@ export const isGpsDay = (day: Pick<DayRow, 'trips_scheduled' | 'on_time'>) => da
  * gps: no day joined a schedule. suppressed: match rate below MIN_MATCH_TO_SHOW.
  * partial: some days GPS-only, or match rate below FULL_MATCH. full: no caveat.
  */
-export function coverageOf(overview: {days: readonly Pick<DayRow, 'trips_scheduled' | 'on_time' | 'warnings'>[]} | null | undefined): Coverage {
+export function coverageOf(overview: {days: readonly Pick<DayRow, 'trips_scheduled' | 'on_time' | 'trip_match'>[]} | null | undefined): Coverage {
   const days = overview?.days ?? [];
   if (!days.length) return {mode: 'full', matchRate: null, gpsDays: 0, days: 0};
   const gpsDays = days.filter(isGpsDay).length;
-  const rates = days.map(day => matchRateFromNotes(day.warnings)).filter((r): r is number => r !== null);
+  const rates = days.map(day => day.trip_match).filter((r): r is number => typeof r === 'number');
   const matchRate = rates.length ? Math.min(...rates) : null;
   let mode: ScheduleMode = 'full';
   if (gpsDays === days.length) mode = 'gps';

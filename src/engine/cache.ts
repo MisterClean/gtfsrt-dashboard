@@ -96,7 +96,11 @@ export function putEntry(store: Store, key: string, value: unknown): Promise<boo
 export const dayKey = (feed: string, date: number, version: number) => `${feed}|${date}|${version}`;
 export const scheduleKey = (feed: string, digest: string) => `${feed}|${digest}`;
 
-export interface DayEntry { cube: Uint8Array; digest: string; savedAt: string }
+export interface DayEntry {
+  cube: Uint8Array; digest: string; savedAt: string;
+  /** Share of realtime trip IDs found in the schedule, 0 to 1. Absent on days saved before it was kept. */
+  tripMatch?: number | null;
+}
 export interface EventsEntry { events: Uint8Array }
 export interface ScheduleEntry { meta: Uint8Array }
 /** Where a zone came from matters: a schedule's own zone always beats an estimate. */

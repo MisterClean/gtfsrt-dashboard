@@ -1,27 +1,14 @@
 <script lang="ts">
   import {bytes, plural} from '../lib/format';
-  import {addDays} from '../lib/dates';
+  import {estimateLoad, isIndeterminate} from '../lib/progress';
   import {app} from '../lib/state.svelte';
   import {loading} from '../lib/loading.svelte';
   import type {Mode} from '../engine/types';
   import AgencyPicker from './AgencyPicker.svelte';
   import DatePicker from './DatePicker.svelte';
 
-  // A rough figure so nobody starts a large download by surprise. About three
-  // quarters of each object is read: the footer plus the columns used.
-  const estimate = $derived.by(() => {
-    const feed = app.feed;
-    if (!feed || !app.uncachedDates.length) return 0;
-    const span = (Date.parse(feed.date_max) - Date.parse(feed.date_min)) / 86400000 + 1;
-    const perFile = feed.total_bytes / Math.max(1, span);
-    const files = new Set<string>();
-    for (const date of app.uncachedDates) {
-      const iso = `${String(date).slice(0, 4)}-${String(date).slice(4, 6)}-${String(date).slice(6, 8)}`;
-      files.add(iso);
-      files.add(addDays(iso, 1));
-    }
-    return files.size * perFile * 0.75;
-  });
+  // The same figure as the heads-up and the progress panel, so the numbers agree.
+  const estimate = $derived(app.feed ? estimateLoad(app.feed, app.uncachedDates.filter(d => app.pendingDates.includes(d))).bytes : 0);
 
   const modes: Mode[] = ['All', 'Bus', 'Rail', 'Ferry'];
   const availableModes = $derived.by(() => {
@@ -37,6 +24,7 @@
 
   // The monotonic figure, so the bar never jumps back during schedule stages.
   const fraction = $derived(Math.round((loading.progress?.fraction ?? 0) * 100));
+  const waiting = $derived(loading.progress ? isIndeterminate(loading.progress) : true);
 </script>
 
 <header class="topbar">
@@ -62,7 +50,7 @@
       <button class="btn small" onclick={() => app.stop()}>Stop</button>
     {:else if app.pendingDates.length}
       <span class="fine estimate">
-        {#if estimate > 0}About {bytes(estimate)} from the archive{/if}
+        {#if estimate > 0}Up to {bytes(estimate)} from the archive{/if}
       </span>
       <button class="btn primary" onclick={() => app.analyze()}>
         Analyze {plural(app.pendingDates.length, app.hasResults ? 'more day' : 'day', app.hasResults ? 'more days' : 'days')}
@@ -72,8 +60,8 @@
     {/if}
   </div>
   {#if app.running && app.stage}
-    <div class="progress" role="progressbar" aria-label="Analysis progress" aria-valuenow={fraction} aria-valuemin={0} aria-valuemax={100}>
-      <span style:width="{fraction}%"></span>
+    <div class="progress" class:indeterminate={waiting} role="progressbar" aria-label="Analysis progress" aria-valuenow={waiting ? undefined : fraction} aria-valuemin={0} aria-valuemax={100}>
+      <span style:width={waiting ? undefined : `${fraction}%`}></span>
     </div>
   {/if}
 </header>
@@ -96,6 +84,9 @@
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
   .progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
   .progress span { display: block; height: 100%; background: var(--copper); transition: width 300ms ease-out; }
+  .progress.indeterminate span { width: 35%; animation: sweep 1.4s ease-in-out infinite; }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  @media (prefers-reduced-motion: reduce) { .progress.indeterminate span { width: 100%; opacity: .4; animation: none; } }
   @media (max-width: 860px) {
     /* A sticky bar would take a fifth of a phone screen. The report links stay reachable. */
     .topbar { position: relative; padding-left: var(--gutter); }

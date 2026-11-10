@@ -5,7 +5,7 @@
   import {onDestroy} from 'svelte';
   import {bytes} from '../lib/format';
   import {loading} from '../lib/loading.svelte';
-  import {DAY_STATUS_LABEL, durationLabel, formatElapsed, type Phase} from '../lib/progress';
+  import {DAY_STATUS_LABEL, estimateLoad, formatElapsed, isIndeterminate, sizeReport, type Phase} from '../lib/progress';
   import {app} from '../lib/state.svelte';
   import {dateLabel} from '../lib/format';
 
@@ -15,6 +15,15 @@
 
   const progress = $derived(loading.progress);
   const percent = $derived(progress ? Math.round(progress.fraction * 100) : 0);
+  const indeterminate = $derived(progress ? isIndeterminate(progress) : true);
+  // The same estimate as the top bar, until the files have been sized.
+  const size = $derived.by(() => {
+    if (!progress) return null;
+    const open = Object.entries(progress.days).filter(([, status]) => status === 'pending' || status === 'reading').map(([date]) => Number(date));
+    const estimate = app.feed && open.length ? estimateLoad(app.feed, open).bytes : 0;
+    const report = sizeReport(progress, estimate);
+    return report.total > 0 ? report : null;
+  });
   const elapsed = $derived(progress ? formatElapsed(now - progress.startedAt) : '0:00');
   const hints: Partial<Record<Phase, string>> = {
     database: 'This is a database that runs inside your browser. The first start can take a few seconds.',
@@ -41,12 +50,13 @@
       <span class="fine num" title="Time since the run started">{elapsed} elapsed</span>
       <button class="btn small" onclick={() => app.stop()}>Cancel</button>
     </div>
-    <div class="bar" role="progressbar" aria-label="Analysis progress" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style:width="{percent}%"></span></div>
+    <div class="bar" class:indeterminate role="progressbar" aria-label="Analysis progress" aria-valuenow={indeterminate ? undefined : percent} aria-valuemin={0} aria-valuemax={100}><span style:width={indeterminate ? undefined : `${percent}%`}></span></div>
     <div class="meta fine">
-      <span class="num">{percent}%</span>
-      {#if progress.bytesTotal}
+      {#if !indeterminate}<span class="num">{percent}%</span>{/if}
+      {#if size}
         <span title="Archive file sizes by position in each file. What is actually downloaded is usually less.">
-          about {bytes(Math.min(progress.bytesDone ?? 0, progress.bytesTotal))} of {bytes(progress.bytesTotal)} of archive files
+          {#if size.done !== null}about {bytes(size.done)} of {bytes(size.total)} of archive files
+          {:else}{size.exact ? '' : 'up to '}{bytes(size.total)} of archive files to read{/if}
         </span>
       {/if}
       {#if hint}<span>{hint}</span>{/if}
@@ -65,7 +75,7 @@
         Finished days are kept.
       </p>
     {/if}
-    {#if progress.bytesTotal && progress.bytesTotal > 500e6}
+    {#if size && size.total > 500e6}
       <p class="fine">This is a large feed. The page stays usable, but the analysis can take a minute or more.</p>
     {/if}
   </section>
@@ -78,6 +88,10 @@
   .spacer { flex: 1 1 auto; }
   .bar { height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--copper); transition: width 300ms ease-out; }
+  /* Before the first bytes there is no share to show, so the bar says "working". */
+  .bar.indeterminate span { width: 35%; animation: sweep 1.4s ease-in-out infinite; }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  @media (prefers-reduced-motion: reduce) { .bar.indeterminate span { width: 100%; opacity: .4; animation: none; } }
   .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; }
   .num { font-variant-numeric: tabular-nums; }
   .days { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 12px; }
