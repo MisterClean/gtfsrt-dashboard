@@ -1,0 +1,14 @@
+.git
+.env*
+.build
+.cache
+.impeccable
+.playwright-mcp
+dist
+docs
+node_modules
+public/engine
+spike
+target
+test-results
+tests

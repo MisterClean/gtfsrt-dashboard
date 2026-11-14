@@ -136,7 +136,7 @@ The production policy allows scripts and workers only from the app itself, with 
 - [Metrics reference](docs/metrics.md): every number, how it's calculated, and its limits
 - [Architecture](docs/architecture.md): the pipeline and why it's built this way
 - [Validation](docs/validation.md): independent checks and agency coverage
-- [Hosting](docs/hosting.md): deploying to michaelmclean.me or anywhere else
+- [Hosting](docs/hosting.md): Railway production and other hosts
 - [Packaging and security](docs/packaging-security.md): release contents and the security model
 - [Feasibility decision](docs/feasibility.md): the original proof that this could work
 - [Design system](DESIGN.md) and [product brief](PRODUCT.md)
