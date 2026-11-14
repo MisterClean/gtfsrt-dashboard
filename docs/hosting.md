@@ -2,9 +2,13 @@
 
 The completed `dist/` directory is the release. Visitors download precompiled WASM and run everything locally, so the host needs only static file delivery: no Rust server, database, data volume, environment variables, credentials, ingestion job or query API.
 
-The intended URL is `https://michaelmclean.me/gtfsrt-dashboard/`. The website is an nginx Docker image deployed on Railway. Publishing to it is a separate step that this repository does not perform.
+## Railway production
 
-## Website integration
+[Transit Almanac](https://transitalmanac.app/) is served by the `transit-almanac` Railway service. Railway builds and deploys commits pushed to the GitHub `main` branch. The `Dockerfile` builds the Rust and JavaScript release using the pinned toolchain, runs `verify:release`, and packages it in a Caddy image. The image serves precompressed files and applies the security headers in `scripts/security.mjs` to the page and workers.
+
+After a deployment, check that Railway reports `SUCCESS` and that the site loads and analyzes an archive day. The service health check uses `/`.
+
+## Alternative website integration
 
 1. Build a release with `npm run build && npm run verify:release`.
 2. Copy `dist/` into `gtfsrt-dashboard/` in the website repository. Review the destination before replacing a previous release. Do not copy caches, `target/`, `node_modules/` or development configuration.

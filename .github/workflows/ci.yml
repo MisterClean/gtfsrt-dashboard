@@ -3,6 +3,9 @@ name: Check browser dashboard
 on:
   pull_request:
     paths:
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'deploy/**'
       - 'src/**'
       - 'crates/**'
       - 'public/**'
@@ -19,6 +22,9 @@ on:
   push:
     branches: [main, 'codex/**', 'feature/**']
     paths:
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'deploy/**'
       - 'src/**'
       - 'crates/**'
       - 'public/**'
