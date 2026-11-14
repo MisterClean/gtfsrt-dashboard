@@ -84,6 +84,13 @@ export interface Coverage {
 /** A day with no scheduled trips and no on-time events is a GPS-only day. */
 export const isGpsDay = (day: Pick<DayRow, 'trips_scheduled' | 'on_time'>) => day.trips_scheduled === 0 && day.on_time.total === 0;
 
+function scheduleMode(gpsDays: number, days: number, matchRate: number | null, minimum = MIN_MATCH_TO_SHOW): ScheduleMode {
+  if (days > 0 && gpsDays === days) return 'gps';
+  if (matchRate !== null && matchRate < minimum) return 'suppressed';
+  if (gpsDays > 0 || (matchRate !== null && matchRate < FULL_MATCH)) return 'partial';
+  return 'full';
+}
+
 /**
  * How far the selected days can support on-time, trip and headway figures.
  * gps: no day joined a schedule. suppressed: match rate below MIN_MATCH_TO_SHOW.
@@ -95,27 +102,30 @@ export function coverageOf(overview: {days: readonly Pick<DayRow, 'trips_schedul
   const gpsDays = days.filter(isGpsDay).length;
   const rates = days.map(day => day.trip_match).filter((r): r is number => typeof r === 'number');
   const matchRate = rates.length ? Math.min(...rates) : null;
-  let mode: ScheduleMode = 'full';
-  if (gpsDays === days.length) mode = 'gps';
-  else if (matchRate !== null && matchRate < MIN_MATCH_TO_SHOW) mode = 'suppressed';
-  else if (gpsDays > 0 || (matchRate !== null && matchRate < FULL_MATCH)) mode = 'partial';
-  return {mode, matchRate, gpsDays, days: days.length};
+  return {mode: scheduleMode(gpsDays, days.length, matchRate), matchRate, gpsDays, days: days.length};
+}
+
+export function withMatchRate(coverage: Coverage, matchRate: number | undefined, minimum = MIN_MATCH_TO_SHOW): Coverage {
+  if (matchRate === undefined) return coverage;
+  const lowest = Math.min(coverage.matchRate ?? matchRate, matchRate);
+  return {...coverage, matchRate: lowest, mode: scheduleMode(coverage.gpsDays, coverage.days, lowest, minimum)};
 }
 
 /** True when on-time, trip-share and headway figures must not be shown as numbers. */
 export const scheduleSuppressed = (c: Coverage) => c.mode === 'gps' || c.mode === 'suppressed';
 
-export function coverageNote(c: Coverage): string | null {
+export function coverageNote(c: Coverage, snapshot = false, minimum = MIN_MATCH_TO_SHOW): string | null {
   const rate = c.matchRate === null ? '' : `${Math.round(c.matchRate * 100)}%`;
+  const reports = snapshot ? 'eligible archived position reports' : 'realtime trip IDs';
   switch (c.mode) {
     case 'gps':
       return 'No schedule could be joined to the feed for these days, so only GPS speeds are shown.';
     case 'suppressed':
-      return `Only ${rate} of realtime trip IDs match the schedule, below the ${Math.round(MIN_MATCH_TO_SHOW * 100)}% needed. On-time, trip and headway figures are withheld because a subset this small is not representative. Speeds are unaffected.`;
+      return `Only ${rate} of ${reports} match the schedule, below the ${Math.round(minimum * 100)}% needed. On-time, ${snapshot ? 'trip share' : 'trip'} and headway figures are withheld because a subset this small is not representative. ${snapshot ? 'Speeds describe matched positions.' : 'Speeds are unaffected.'}`;
     case 'partial':
       return c.gpsDays > 0
         ? `${c.gpsDays} of ${c.days} days had no schedule, so on-time and trip figures cover only the others.`
-        : `Partial: only ${rate} of realtime trip IDs match the schedule, so on-time and trip figures describe the matched trips only.`;
+        : `Partial: only ${rate} of ${reports} match the schedule, so on-time and trip figures describe the matched trips only.`;
     default:
       return null;
   }

@@ -10,7 +10,6 @@
   import DataTable, {type Column} from '../components/DataTable.svelte';
   import RouteBadge from '../components/RouteBadge.svelte';
   import SpeedLegend from '../components/SpeedLegend.svelte';
-  import {engine} from '../engine/client';
   import type {DirectionDetail, DirectionHour, NetworkMap, PatternSummary, RouteDetail, RouteStop, StringLine} from '../engine/types';
   import {downloadCsv} from '../lib/download';
   import {
@@ -18,9 +17,10 @@
     ratioOf, routeName, shortLength, signedPct, speed, speedUnit, speedWithUnit, toDisplaySpeed,
   } from '../lib/format';
   import {HOURS} from '../lib/scale';
+  import {CTA_ROUTE_MATCH_MIN} from '../lib/snapshot';
   import {app, errorText} from '../lib/state.svelte';
   import {resource} from '../lib/resource.svelte';
-  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, sampleText, scheduleSuppressed} from '../lib/stats';
+  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, sampleText, scheduleSuppressed, withMatchRate} from '../lib/stats';
   import HourTimeline from '../map/HourTimeline.svelte';
   import SpeedMap from '../map/SpeedMap.svelte';
 
@@ -37,15 +37,12 @@
   let headwayHover = $state<number | null>(null);
 
   // The route. Its ID is the subject, so one route's report is never shown under another's name.
-  const report = resource<{id: string; route: RouteDetail | null; map: NetworkMap}>(() => {
+  const report = resource<{id: string; route: RouteDetail | null; map: NetworkMap | null}>(() => {
     app.version;
     const id = app.routeId;
     // Results can be flagged while the engine's selection is being rebuilt; wait for the overview.
     if (!id || !app.hasResults || !app.overview) return null;
-    return {key: id, load: async () => {
-      const [route, map] = await Promise.all([engine.routeDetail(id), engine.networkMap(id)]);
-      return {id, route, map};
-    }};
+    return {key: id, load: () => app.loadRoute(id)};
   });
   const detail = $derived(report.value?.route ?? null);
   const network = $derived(report.value?.map ?? null);
@@ -60,9 +57,15 @@
   const direction = $derived<DirectionDetail | null>(directions[Math.min(app.directionIndex, directions.length - 1)] ?? null);
   const name = $derived(score ? routeName(score.label, score.long_name) : '');
   const days = $derived(Math.max(1, detail?.dates.length ?? 1));
-  const coverage = $derived(coverageOf(app.overview));
+  const routeMatch = $derived(score ? app.snapshot?.manifest.routeTripMatch?.[score.id] : undefined);
+  const coverage = $derived(withMatchRate(coverageOf(app.overview), routeMatch, CTA_ROUTE_MATCH_MIN));
+  const snapshotWithheld = $derived(!!app.snapshot && scheduleSuppressed(coverage));
   const onTimeShown = $derived(!!score && !scheduleSuppressed(coverage) && isShown(score.on_time.total));
-  const caveat = $derived(coverageNote(coverage));
+  const caveat = $derived(routeMatch === undefined ? coverageNote(coverage, !!app.snapshot) : coverageNote(coverage, true, CTA_ROUTE_MATCH_MIN));
+  const timedScope = $derived(app.snapshot ? 'at observed stops' : 'at timepoints');
+  const onTimeDefinition = $derived(app.snapshot
+    ? 'Share of observed stop departures in the window from 1 minute early to 5 minutes late. Times are inferred from GPS positions.'
+    : DEFINITIONS.ontime('1 min early', '5 min late'));
   const shownPct = (value: number | null, n: number) => (scheduleSuppressed(coverage) ? DASH : isShown(n) ? `${pct(value)}${sampleState(n) === 'low' ? '*' : ''}` : TOO_FEW);
   const perDay = (total: number) => (total / days).toFixed(1);
   const minutesBare = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? DASH : (seconds / 60).toFixed(1));
@@ -81,8 +84,12 @@
     }
     let current = true;
     lineLoading = true;
-    engine
-      .stringLine(id, dir, dateNumber(day))
+    if (app.snapshot) {
+      line = null;
+      lineFailure = null;
+    }
+    app
+      .loadStringLine(id, dir, day)
       .then(result => {
         if (!current) return;
         line = result.line;
@@ -165,6 +172,8 @@
   const hasScheduledFrequent = $derived((direction?.hourly ?? []).some(row => row.scheduled_headway_s !== null));
 
   // Tables.
+  const STOP_RELIABILITY_COLUMNS = new Set(['deviation', 'ontime', 'passesN', 'bunched']);
+  const HOUR_RELIABILITY_COLUMNS = new Set(['ontime', 'timed', 'late', 'headway', 'headwaySched', 'bunched', 'gapped']);
   const stopColumns = $derived<Column<RouteStop>[]>([
     {key: 'order', label: 'Stop', left: true, wrap: true, value: stop => stop.s, format: stop => stop.name, csv: stop => stop.name},
     {key: 'id', label: 'Stop ID', left: true, value: stop => stop.id},
@@ -176,7 +185,7 @@
       descending: true, value: stop => stop.zone_seconds, format: stop => (stop.zone_seconds === null ? DASH : `${Math.round(stop.zone_seconds)} s`),
     },
     {key: 'deviation', label: 'Mean deviation', title: 'Minutes:seconds against the schedule. Positive is late.', descending: true, value: stop => stop.deviation, format: stop => deviation(stop.deviation)},
-    {key: 'ontime', label: 'On time, all passes', title: `${DEFINITIONS.ontimeStops} Withheld under ${MIN_EVENTS} passes.`, value: stop => (isShown(stop.on_time.total) ? ratioOf(stop.on_time.on_time, stop.on_time.total) : null), format: stop => shownPct(ratioOf(stop.on_time.on_time, stop.on_time.total), stop.on_time.total)},
+    {key: 'ontime', label: 'On time, all passes', title: `${app.snapshot ? onTimeDefinition : DEFINITIONS.ontimeStops} Withheld under ${MIN_EVENTS} passes.`, value: stop => (isShown(stop.on_time.total) ? ratioOf(stop.on_time.on_time, stop.on_time.total) : null), format: stop => shownPct(ratioOf(stop.on_time.on_time, stop.on_time.total), stop.on_time.total)},
     {key: 'passesN', label: 'Timed passes (n)', title: 'Stop passes behind the on-time share, across all selected days', descending: true, value: stop => stop.on_time.total, format: stop => int(stop.on_time.total)},
     {key: 'bunched', label: 'Bunched', title: 'Frequent service only', descending: true, value: stop => stop.headways?.bunched ?? null, format: stop => (stop.headways ? shownPct(stop.headways.bunched, stop.headways.count) : DASH)},
     {key: 'gap', label: 'Gap to next stop', title: 'Distance along the line to the next stop', value: stop => stop.gap_to_next_m, format: stop => shortLength(stop.gap_to_next_m, app.units), csv: stop => (stop.gap_to_next_m === null ? '' : Math.round(stop.gap_to_next_m))},
@@ -186,7 +195,7 @@
     {key: 'hour', label: 'Hour', left: true, value: row => row.hour, format: row => hourRange(row.hour), csv: row => hourRange(row.hour)},
     {key: 'speed', label: `Speed, ${unit}`, descending: true, value: row => row.speed, format: row => speed(row.speed, app.units), csv: row => (row.speed === null ? '' : Number(speed(row.speed, app.units)))},
     {key: 'sched', label: `Scheduled, ${unit}`, descending: true, value: row => row.scheduled_speed, format: row => speed(row.scheduled_speed, app.units), csv: row => (row.scheduled_speed === null ? '' : Number(speed(row.scheduled_speed, app.units)))},
-    {key: 'ontime', label: 'On time', title: `Departures at timepoints in the on-time window. Withheld under ${MIN_EVENTS} departures; * marks fewer than 100.`, value: row => (isShown(row.on_time.total) ? ratioOf(row.on_time.on_time, row.on_time.total) : null), format: row => shownPct(ratioOf(row.on_time.on_time, row.on_time.total), row.on_time.total)},
+    {key: 'ontime', label: 'On time', title: `Departures ${timedScope} in the on-time window. Withheld under ${MIN_EVENTS} departures; * marks fewer than 100.`, value: row => (isShown(row.on_time.total) ? ratioOf(row.on_time.on_time, row.on_time.total) : null), format: row => shownPct(ratioOf(row.on_time.on_time, row.on_time.total), row.on_time.total)},
     {key: 'timed', label: 'Timed departures (n, all days)', title: 'Total across the selected days, behind the on-time shares', descending: true, value: row => row.on_time.total, format: row => int(row.on_time.total)},
     {key: 'late', label: 'Late', descending: true, value: row => ratioOf(row.on_time.late, row.on_time.total), format: row => shownPct(ratioOf(row.on_time.late, row.on_time.total), row.on_time.total)},
     {key: 'tripsSched', label: 'Trips scheduled a day', title: 'Average per selected day, like every other count on this page', descending: true, value: row => Number((row.trips_scheduled / days).toFixed(2)), format: row => perDay(row.trips_scheduled)},
@@ -303,7 +312,7 @@
             <RouteBadge label={score.label} color={score.color} textColor={score.text_color} />
             <span>{name || `Route ${score.label}`}</span>
           </h1>
-          <p class="lede">{datesLabel(detail.dates.map(dateNumber))} · {plural(detail.dates.length, 'service day')}</p>
+          <p class="lede">{datesLabel(detail.dates.map(dateNumber))} · {plural(detail.dates.length, 'service day')}{#if routeMatch !== undefined}{' · '}{pct(routeMatch, 1)} of eligible positions matched{/if}</p>
         </div>
         <label class="field route-select">Route
           <select class="input" value={app.routeId} onchange={event => app.go('route', event.currentTarget.value)}>
@@ -334,19 +343,19 @@
         </div>
       </div>
       <div class="stat">
-        <dt><Term topic="ontime" def={DEFINITIONS.ontime('1 min early', '5 min late')}>On-time departures</Term></dt>
+        <dt><Term topic="ontime" def={onTimeDefinition}>On-time departures</Term></dt>
         {#if onTimeShown}
           <dd>{pct(ratioOf(score.on_time.on_time, score.on_time.total))}{#if coverage.mode === 'partial'} <small>partial</small>{/if}</dd>
-          <div class="sub">{pct(ratioOf(score.on_time.late, score.on_time.total))} late, {pct(ratioOf(score.on_time.early, score.on_time.total))} early · at timepoints · {sampleText(score.on_time.total)}</div>
+          <div class="sub">{pct(ratioOf(score.on_time.late, score.on_time.total))} late, {pct(ratioOf(score.on_time.early, score.on_time.total))} early · {timedScope} · {sampleText(score.on_time.total)}</div>
         {:else}
           <dd>—</dd>
-          <div class="sub">{scheduleSuppressed(coverage) ? 'withheld, no usable schedule match' : sampleText(score.on_time.total)}</div>
+          <div class="sub">{snapshotWithheld ? 'withheld due to low schedule match' : scheduleSuppressed(coverage) ? 'withheld, no usable schedule match' : sampleText(score.on_time.total)}</div>
         {/if}
       </div>
       <div class="stat">
         <dt><Term topic="service" def={DEFINITIONS.observed}>Trips observed</Term></dt>
         <dd>{int(score.trips_observed / days)} <small>a day</small></dd>
-        <div class="sub">{scheduleSuppressed(coverage) ? 'no usable schedule match' : `${pct(ratioOf(score.trips_observed, score.trips_scheduled), 1)} of ${int(score.trips_scheduled / days)} scheduled`}</div>
+        <div class="sub">{snapshotWithheld ? 'limited schedule match' : scheduleSuppressed(coverage) ? 'no usable schedule match' : `${pct(ratioOf(score.trips_observed, score.trips_scheduled), 1)} of ${int(score.trips_scheduled / days)} scheduled`}</div>
       </div>
       {#if score.headways}
         <div class="stat">
@@ -446,7 +455,7 @@
       <section class="section">
         <div class="section-head">
           <div>
-            <h2><Term topic="passes">Every trip on one day</Term></h2>
+            <h2><Term topic="passes">{app.snapshot ? 'Observed trips on one day' : 'Every trip on one day'}</Term></h2>
             <p class="note">Time runs across and the route runs down. Lines that converge are vehicles catching each other, and a line flattening out is a vehicle standing still.</p>
           </div>
           <div class="tools">
@@ -476,6 +485,7 @@
         {:else}
           <p class="empty">
             {#if lineFailure}This chart could not be drawn. {lineFailure}
+            {:else if !eventsAvailable && app.snapshot}Trip-level detail is unavailable for this direction on this day.
             {:else if !eventsAvailable}Trip-level detail for this day isn't on this device, usually because saving it failed. Clear this agency's results on Data &amp; methods and analyze the day again to see it.
             {:else}No trips were observed in this direction on this day.{/if}
           </p>
@@ -503,7 +513,9 @@
             <p class="note">Mean deviation from the schedule at each stop, by time of day. A climbing line is losing time; a falling one is recovering it. Many agencies interpolate times between timepoints, so read the trend rather than single stops.</p>
           </div>
         </div>
-        {#if direction.stops.some(stop => stop.deviation !== null)}
+        {#if snapshotWithheld}
+          <p class="empty">Too few position reports matched to compare this route with the timetable.</p>
+        {:else if direction.stops.some(stop => stop.deviation !== null)}
           <DelayProfile stops={direction.stops} lengthM={direction.length_m} units={app.units} earlyS={app.earlyS} lateS={app.lateS} />
         {:else}
           <p class="empty">No stop passes were observed in this direction.</p>
@@ -519,7 +531,9 @@
             {/if}
           </div>
         </div>
-        {#if hasHeadways}
+        {#if snapshotWithheld}
+          <p class="empty">Too few position reports matched to report headways for this route.</p>
+        {:else if hasHeadways}
           <div class="pair">
             <figure>
               <figcaption><h3>Average headway, minutes</h3></figcaption>
@@ -561,11 +575,11 @@
         <div class="section-head">
           <div>
             <h2><Term topic="passes">Stop by stop</Term></h2>
-            <p class="note">Stop time is the average spent within about 80 feet of the stop, including queuing and dwell. With position reports every 20 seconds or so, it is only meaningful averaged over many passes.</p>
+            <p class="note">Stop time is the average spent within about 80 feet of the stop, including queuing and dwell. {app.snapshot ? 'Position reports were about 30 to 60 seconds apart, so stop time is most useful averaged over many passes.' : 'With position reports every 20 seconds or so, it is only meaningful averaged over many passes.'}</p>
           </div>
         </div>
         <DataTable
-          columns={stopColumns}
+          columns={snapshotWithheld ? stopColumns.filter(column => !STOP_RELIABILITY_COLUMNS.has(column.key)) : stopColumns}
           rows={direction.stops}
           caption="Stops on the main pattern, in route order"
           defaultSort="order"
@@ -598,8 +612,9 @@
               ]}
             />
           </figure>
+          {#if !snapshotWithheld}
           <figure>
-            <figcaption><h3>On-time departures at timepoints</h3></figcaption>
+            <figcaption><h3>On-time departures {timedScope}</h3></figcaption>
             <LineChart
               bind:hover
               label="Share of departures on time and late by hour"
@@ -612,11 +627,12 @@
               ]}
             />
           </figure>
+          {/if}
         </div>
         <DataTable
-          columns={hourColumns}
+          columns={snapshotWithheld ? hourColumns.filter(column => !HOUR_RELIABILITY_COLUMNS.has(column.key)) : hourColumns}
           rows={direction.hourly}
-          caption="This direction by service hour. Trip counts are per day; timed departures are totals across the selected days."
+          caption={snapshotWithheld ? 'This direction by service hour. Trip counts are per day.' : 'This direction by service hour. Trip counts are per day; timed departures are totals across the selected days.'}
           defaultSort="hour"
           filename="route-{score.id}-direction-{direction.dir}-hours.csv"
         />
@@ -626,7 +642,7 @@
     {/if}
   </div>
 {:else}
-  <div class="page"><p class="empty">Loading this route…</p></div>
+  <div class="page"><p class="empty" role="status">Loading this route…</p></div>
 {/if}
 
 <style>

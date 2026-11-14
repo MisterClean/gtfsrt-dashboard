@@ -9,7 +9,8 @@
   import LoadProgress from './components/LoadProgress.svelte';
   import RunNotice from './components/RunNotice.svelte';
   import {BOOT_MESSAGE, bootWords} from './lib/startup';
-  import {app, feedLabel} from './lib/state.svelte';
+  import {app, errorText, feedLabel} from './lib/state.svelte';
+  import {SnapshotClient} from './lib/snapshot';
   import {dateLabel, plural} from './lib/format';
   import Overview from './views/Overview.svelte';
   import MapView from './views/MapView.svelte';
@@ -19,8 +20,28 @@
   import Stops from './views/Stops.svelte';
   import Hotspots from './views/Hotspots.svelte';
   import DataView from './views/Data.svelte';
+  import SnapshotData from './views/SnapshotData.svelte';
+
+  let {snapshot = null}: {snapshot?: string | null} = $props();
+  let snapshotError = $state<string | null>(null);
+
+  async function startSnapshot() {
+    if (!snapshot) return;
+    snapshotError = null;
+    try {
+      app.openSnapshot(await SnapshotClient.open(new URL(snapshot, document.baseURI)));
+    } catch (error) {
+      snapshotError = errorText(error);
+    }
+  }
 
   onMount(() => {
+    if (snapshot) {
+      const onHashChange = () => app.readSnapshotUrl();
+      addEventListener('hashchange', onHashChange);
+      void startSnapshot();
+      return () => removeEventListener('hashchange', onHashChange);
+    }
     app.start();
     // Automated browser tests read results here. Regular visits don't get the hook.
     if (navigator.webdriver) (window as any).__transit = app;
@@ -42,31 +63,58 @@
 </script>
 
 <svelte:head>
-  <title>{label ? `${label} · Transit Almanac` : 'Transit Almanac'}</title>
+  <title>{snapshot ? 'CTA Bus Route Scorecard · Transit Almanac' : label ? `${label} · Transit Almanac` : 'Transit Almanac'}</title>
 </svelte:head>
 
 <div class="shell">
-  <TopBar />
-  <NavRail />
+  <TopBar snapshot={!!snapshot} />
+  <NavRail snapshot={!!snapshot} />
   <main id="main">
-    {#if app.boot.step === 'failed'}
-      <div class="page"><ErrorNotice failure={app.boot.failure} words={bootWords(app.boot)} onretry={() => app.start()} /></div>
+    {#if !snapshot}
+      {#if app.boot.step === 'failed'}
+        <div class="page"><ErrorNotice failure={app.boot.failure} words={bootWords(app.boot)} onretry={() => app.start()} /></div>
+      {/if}
+      <LoadProgress />
+      <FeedNotice />
+      <RunNotice />
+      {#if app.cacheNotice}
+        <div class="notice"><div class="banner caution" role="status">{app.cacheNotice}</div></div>
+      {/if}
+      <LoadHeadsUp />
+      {#if app.reportError}
+        <div class="notice"><div class="banner error" role="alert"><strong>This report could not be updated, so what's on screen may be out of date.</strong> {app.reportError}</div></div>
+      {/if}
+      {#each notes as warning}
+        <div class="notice"><div class="banner caution" role="status">{warning}</div></div>
+      {/each}
     {/if}
-    <LoadProgress />
-    <FeedNotice />
-    <RunNotice />
-    {#if app.cacheNotice}
-      <div class="notice"><div class="banner caution" role="status">{app.cacheNotice}</div></div>
-    {/if}
-    <LoadHeadsUp />
-    {#if app.reportError}
-      <div class="notice"><div class="banner error" role="alert"><strong>This report could not be updated, so what's on screen may be out of date.</strong> {app.reportError}</div></div>
-    {/if}
-    {#each notes as warning}
-      <div class="notice"><div class="banner caution" role="status">{warning}</div></div>
-    {/each}
 
-    {#if app.view === 'data'}
+    {#if snapshot}
+      {#if snapshotError}
+        <div class="page">
+          <h1>Route scorecard</h1>
+          <p class="banner error" role="alert"><strong>The CTA snapshot could not be opened.</strong> {snapshotError}</p>
+          <div class="tools"><button class="btn" onclick={startSnapshot}>Retry</button></div>
+        </div>
+      {:else if !app.snapshot}
+        <div class="page">
+          <div class="page-head">
+            <div><h1>Route scorecard</h1><p class="lede" role="status">Loading the CTA bus snapshot…</p></div>
+          </div>
+        </div>
+      {:else if app.view === 'data'}
+        <SnapshotData manifest={app.snapshot.manifest} />
+      {:else if !app.hasResults}
+        <div class="page">
+          <h1>Route scorecard</h1>
+          <p class="banner caution" role="status">No service days could be analyzed in this snapshot. See <button class="link-btn" onclick={() => app.go('data')}>Data &amp; methods</button> for coverage.</p>
+        </div>
+      {:else if app.view === 'route'}
+        <RouteDetailView />
+      {:else}
+        <Routes />
+      {/if}
+    {:else if app.view === 'data'}
       <DataView />
     {:else if !app.hasResults}
       <div class="page start">

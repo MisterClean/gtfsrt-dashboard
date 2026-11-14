@@ -8,15 +8,28 @@
   import Term from '../components/Term.svelte';
   import type {RouteScore} from '../engine/types';
   import {DASH, int, pct, ratioOf, routeName, signedPct, speed, speedUnit, toDisplaySpeed} from '../lib/format';
+  import {CTA_ROUTE_MATCH_MIN, snapshotHash} from '../lib/snapshot';
   import {app} from '../lib/state.svelte';
-  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, scheduleSuppressed} from '../lib/stats';
+  import {DEFINITIONS, MIN_EVENTS, TOO_FEW, coverageNote, coverageOf, isShown, sampleState, scheduleSuppressed, withMatchRate} from '../lib/stats';
 
   const coverage = $derived(coverageOf(app.overview));
-  const withheld = $derived(scheduleSuppressed(coverage));
-  const caveat = $derived(coverageNote(coverage));
-  const matchText = $derived(coverage.matchRate === null ? '' : `${Math.round(coverage.matchRate * 100)}% trip-ID match`);
+  const caveat = $derived(coverageNote(coverage, !!app.snapshot));
+  const matchText = $derived(coverage.matchRate === null ? '' : `${Math.round(coverage.matchRate * 100)}% ${app.snapshot ? 'position report' : 'trip-ID'} match`);
+  const requested = $derived(app.snapshot?.manifest.requestedDates.length ?? 0);
+  const partialDays = $derived(app.overview?.days.filter(day => day.status === 'Partial').length ?? 0);
+  const routeMatch = (r: RouteScore) => app.snapshot?.manifest.routeTripMatch?.[r.id];
+  const routeCoverage = (r: RouteScore) => withMatchRate(coverage, routeMatch(r), CTA_ROUTE_MATCH_MIN);
+  const withheld = (r: RouteScore) => scheduleSuppressed(routeCoverage(r));
+  const matchLabel = (r: RouteScore) => {
+    const match = routeMatch(r);
+    if (match === undefined) return DASH;
+    const result = routeCoverage(r);
+    const status = scheduleSuppressed(result) ? ' · withheld' : result.mode === 'partial' ? ' · partial' : '';
+    return `${pct(match, 1)}${status}`;
+  };
+  const timedScope = $derived(app.snapshot ? 'at observed stops' : 'at timepoints');
   /** A share over n events: "too few trips" under the minimum, a * for a low sample. */
-  const shownPct = (value: number | null, n: number) => (withheld ? DASH : isShown(n) ? `${pct(value)}${sampleState(n) === 'low' ? '*' : ''}` : TOO_FEW);
+  const shownPct = (r: RouteScore, value: number | null, n: number) => (withheld(r) ? DASH : isShown(n) ? `${pct(value)}${sampleState(n) === 'low' ? '*' : ''}` : TOO_FEW);
   const minutesBare = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? DASH : (seconds / 60).toFixed(1));
 
   let peak = $state<'peak' | 'am' | 'pm'>('peak');
@@ -26,8 +39,8 @@
   const speedCsv = (value: number | null | undefined) => (value === null || value === undefined ? null : Number(toDisplaySpeed(value, app.units).toFixed(2)));
   const minutesCsv = (seconds: number | null | undefined) => (seconds === null || seconds === undefined ? null : Number((seconds / 60).toFixed(1)));
   const days = $derived(Math.max(1, app.loadedDates.length));
-  const onTime = (r: RouteScore) => (!withheld && isShown(r.on_time.total) ? ratioOf(r.on_time.on_time, r.on_time.total) : null);
-  const late = (r: RouteScore) => (!withheld && isShown(r.on_time.total) ? ratioOf(r.on_time.late, r.on_time.total) : null);
+  const onTime = (r: RouteScore) => (!withheld(r) && isShown(r.on_time.total) ? ratioOf(r.on_time.on_time, r.on_time.total) : null);
+  const late = (r: RouteScore) => (!withheld(r) && isShown(r.on_time.total) ? ratioOf(r.on_time.late, r.on_time.total) : null);
   const sparkDomain = $derived.by(() => {
     const values = app.routes.flatMap(r => r.hourly.slice(5, 24)).filter((v): v is number => v !== null);
     if (!values.length) return [0, 1];
@@ -51,14 +64,21 @@
     {key: 'mid', label: `Midday, ${unit}`, title: '10 AM to 2 PM', value: r => r.speed_mid, format: r => speed(r.speed_mid, app.units), csv: r => speedCsv(r.speed_mid)},
     {key: 'peak', label: `Peak, ${unit}`, title: '7 to 9 AM and 4 to 6 PM', value: r => r.speed_peak, format: r => speed(r.speed_peak, app.units), csv: r => speedCsv(r.speed_peak)},
     {key: 'change', label: 'Change', title: 'Peak speed against midday, with a 95% interval from resampling days', value: r => r.peak_change, cell: changeCell, csv: r => r.peak_change},
-    {key: 'otp', label: 'On time', title: `Departures at timepoints within the on-time window (default \u22121 / +5 min). Shown from ${MIN_EVENTS} departures; * marks fewer than 100. ${coverage.mode === 'partial' ? `Partial: ${matchText || 'some days lack a schedule'}.` : ''}`, value: onTime, format: r => shownPct(onTime(r), r.on_time.total)},
-    {key: 'timed', label: 'Timed departures (n)', title: 'Departures at timepoints behind the on-time share', descending: true, value: r => (withheld ? null : r.on_time.total), format: r => (withheld ? DASH : int(r.on_time.total))},
-    {key: 'late', label: 'Late', descending: true, value: late, format: r => shownPct(late(r), r.on_time.total)},
-    {key: 'bunched', label: 'Bunched', title: 'Share of vehicles under a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => r.headways?.bunched ?? null, format: r => (r.headways ? shownPct(r.headways.bunched, r.headways.count) : DASH)},
-    {key: 'ewt', label: 'Excess wait, min', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true, value: r => r.headways?.excess_wait_s ?? null, format: r => (r.headways && isShown(r.headways.count) && !withheld ? minutesBare(r.headways.excess_wait_s) : r.headways ? TOO_FEW : DASH), csv: r => minutesCsv(r.headways?.excess_wait_s)},
+    {key: 'otp', label: 'On time', title: `Departures ${timedScope} within the on-time window (default \u22121 / +5 min). Shown from ${MIN_EVENTS} departures; * marks fewer than 100. ${coverage.mode === 'partial' ? `Partial: ${matchText || 'some days lack a schedule'}.` : ''}`, value: onTime, format: r => shownPct(r, onTime(r), r.on_time.total)},
+    {key: 'timed', label: 'Timed departures (n)', title: `Departures ${timedScope} behind the on-time share`, descending: true, value: r => (withheld(r) ? null : r.on_time.total), format: r => (withheld(r) ? DASH : int(r.on_time.total))},
+    {key: 'late', label: 'Late', descending: true, value: late, format: r => shownPct(r, late(r), r.on_time.total)},
+    {key: 'bunched', label: 'Bunched', title: 'Share of vehicles under a quarter of the scheduled headway. Frequent service only.', descending: true, value: r => withheld(r) ? null : r.headways?.bunched ?? null, format: r => (r.headways ? shownPct(r, r.headways.bunched, r.headways.count) : DASH)},
+    {key: 'ewt', label: 'Excess wait, min', title: 'Average wait beyond what the schedule promises. Frequent service only.', descending: true,
+      value: r => withheld(r) ? null : r.headways?.excess_wait_s ?? null,
+      format: r => !r.headways || withheld(r) ? DASH : isShown(r.headways.count) ? minutesBare(r.headways.excess_wait_s) : TOO_FEW,
+      csv: r => withheld(r) ? null : minutesCsv(r.headways?.excess_wait_s),
+    },
     {key: 'slowest', label: `Slowest half mile at peak, ${unit}`, left: true, clip: true, hint: r => (r.slowest ? `${r.slowest.from} to ${r.slowest.to}` : ''), value: r => r.slowest?.speed ?? null, cell: slowestCell, csv: r => (r.slowest ? `${speedCsv(r.slowest.speed)} ${unit}, ${r.slowest.from} to ${r.slowest.to}` : '')},
     {key: 'trips', label: 'Trips a day (avg)', title: 'Trips observed per selected day, averaged', descending: true, value: r => r.trips_observed / days, format: r => int(r.trips_observed / days)},
-    {key: 'observed', label: 'Share observed', title: DEFINITIONS.observed, descending: true, value: r => (withheld ? null : ratioOf(r.trips_observed, r.trips_scheduled)), format: r => (withheld ? DASH : pct(ratioOf(r.trips_observed, r.trips_scheduled)))},
+    {key: 'observed', label: 'Share observed', title: DEFINITIONS.observed, descending: true, value: r => (withheld(r) ? null : ratioOf(r.trips_observed, r.trips_scheduled)), format: r => (withheld(r) ? DASH : pct(ratioOf(r.trips_observed, r.trips_scheduled)))},
+    ...(app.snapshot?.manifest.routeTripMatch ? [{
+      key: 'match', label: 'Position reports matched', title: 'Share of eligible archived position reports assigned to an active scheduled trip', descending: true, value: routeMatch, format: matchLabel,
+    }] : []),
     {key: 'am', label: `AM, ${unit}`, value: r => r.speed_am, format: r => speed(r.speed_am, app.units), csv: r => speedCsv(r.speed_am)},
     {key: 'pm', label: `PM, ${unit}`, value: r => r.speed_pm, format: r => speed(r.speed_pm, app.units), csv: r => speedCsv(r.speed_pm)},
     {key: 'sched', label: `Scheduled, ${unit}`, title: DEFINITIONS.scheduledSpeed, value: r => r.scheduled_speed, format: r => speed(r.scheduled_speed, app.units), csv: r => speedCsv(r.scheduled_speed)},
@@ -73,7 +93,21 @@
   const columns = $derived(coverage.mode === 'gps' ? allColumns.filter(c => !NEEDS_SCHEDULE.has(c.key)) : allColumns);
 </script>
 
-{#snippet routeCell(r: RouteScore)}<RouteBadge label={r.label} color={r.color} textColor={r.text_color} />{/snippet}
+{#snippet routeCell(r: RouteScore)}
+  {#if app.snapshot}
+    <a class="route-link" href={snapshotHash('route', r.id)} aria-label={`Open route ${r.label} ${routeName(r.label, r.long_name)}`.trim()}
+      onclick={event => {
+        event.stopPropagation();
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        app.go('route', r.id);
+      }}>
+      <RouteBadge label={r.label} color={r.color} textColor={r.text_color} />
+    </a>
+  {:else}
+    <RouteBadge label={r.label} color={r.color} textColor={r.text_color} />
+  {/if}
+{/snippet}
 {#snippet changeCell(r: RouteScore)}
   {signedPct(r.peak_change)}
   {#if r.peak_change_ci}<div class="ci">{signedPct(r.peak_change_ci[0])} to {signedPct(r.peak_change_ci[1])}</div>{/if}
@@ -92,6 +126,10 @@
     <div>
       <h1>Route scorecard</h1>
       <p class="lede">Every route, side by side. Period speeds compare the same street segments, so a route isn't penalized for running extra downtown trips at rush hour.</p>
+      {#if requested}
+        <p class="note">Choose a route to see its speed map, trip chart, run times and stop-by-stop performance.</p>
+        <p class="note">{app.loadedDates.length} of {requested} weekdays analyzed{partialDays ? `, including ${partialDays} with partial archive coverage` : ''}. <button class="link-btn" onclick={() => app.go('data')}>View coverage</button></p>
+      {/if}
     </div>
   </div>
 
@@ -139,4 +177,6 @@
 <style>
   .ci { font-size: 11px; color: var(--faint); }
   .dim { color: var(--muted); }
+  .route-link { display: inline-flex; border-radius: 3px; text-decoration: none; }
+  .route-link:hover { filter: brightness(1.12); }
 </style>

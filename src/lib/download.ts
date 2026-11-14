@@ -1,6 +1,16 @@
+type SaveHost = {use(name: 'downloads'): Promise<{save(file: {filename: string; data: Blob}): Promise<unknown>} | null>};
+
 // Files are built in the browser. Nothing is sent anywhere.
 export function downloadFile(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], {type}));
+  const blob = new Blob([content], {type});
+  const host = (globalThis as {claude?: SaveHost}).claude;
+  if (typeof host?.use === 'function') {
+    // A Claude artifact's frame cannot start downloads. The viewer confirms the save
+    // instead; declining is a normal answer, not an error.
+    void host.use('downloads').then(downloads => downloads?.save({filename: name, data: blob})).catch(() => {});
+    return;
+  }
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = name;

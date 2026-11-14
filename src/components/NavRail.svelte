@@ -1,6 +1,7 @@
 <script lang="ts">
   import {app, type View} from '../lib/state.svelte';
 
+  let {snapshot = false}: {snapshot?: boolean} = $props();
   const items: {view: View; label: string; icon: string}[] = [
     {view: 'overview', label: 'Overview', icon: 'M3 16.5V10m4.7 6.5V4m4.6 12.5V8m4.7 8.5v-5'},
     {view: 'map', label: 'Speed map', icon: 'M7 3.5L3 5.5v11l4-2 6 2 4-2v-11l-4 2-6-2zM7 3.5v11M13 5.5v11'},
@@ -10,12 +11,13 @@
     {view: 'stops', label: 'Stops', icon: 'M6 3.5h8a1.5 1.5 0 011.5 1.5v8a1.5 1.5 0 01-1.5 1.5H6A1.5 1.5 0 014.5 13V5A1.5 1.5 0 016 3.5zM4.5 10h11M7 17.5h.01M13 17.5h.01'},
     {view: 'data', label: 'Data & methods', icon: 'M4 5.5C4 4.1 6.7 3 10 3s6 1.1 6 2.5S13.3 8 10 8 4 6.9 4 5.5zM4 5.5v9C4 15.9 6.7 17 10 17s6-1.1 6-2.5v-9M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5'},
   ];
+  const visibleItems = $derived(snapshot ? items.filter(item => item.view === 'routes' || item.view === 'data') : items);
   const active = (view: View) => app.view === view || (view === 'routes' && app.view === 'route');
 </script>
 
 <nav class="rail" aria-label="Reports">
   <ul>
-    {#each items as item}
+    {#each visibleItems as item}
       <li>
         <button class:active={active(item.view)} aria-current={active(item.view) ? 'page' : undefined} onclick={() => app.go(item.view)}>
           <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d={item.icon} fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -38,7 +40,11 @@
         <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.2A7 7 0 017.8 3.5a7 7 0 108.7 8.7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
       </button>
     </div>
-    <p class="fine">No account, upload or query server. Your browser reads the public archive directly and does the analysis itself.</p>
+    {#if snapshot}
+      <p class="fine">CTA bus performance from archived vehicle positions and schedules.</p>
+    {:else}
+      <p class="fine">No account, upload or query server. Your browser reads the public archive directly and does the analysis itself.</p>
+    {/if}
   </div>
 </nav>
 
