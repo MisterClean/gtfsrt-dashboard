@@ -18,15 +18,15 @@
     "test:e2e:states": "node tests/e2e-states.mjs"
   },
   "devDependencies": {
-    "@duckdb/duckdb-wasm": "1.33.1-dev114.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev115.0",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "esbuild": "0.28.2",
-    "maplibre-gl": "6.16.0",
-    "playwright": "1.58.2",
+    "maplibre-gl": "6.18.0",
+    "playwright": "1.65.1",
     "svelte": "5.57.3",
     "svelte-check": "4.7.8",
-    "typescript": "6.0.3",
-    "vite": "8.3.6"
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
   },
   "version": "0.2.0",
   "license": "MIT",
