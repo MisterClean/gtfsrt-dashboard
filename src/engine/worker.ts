@@ -1,11 +1,11 @@
 // Runs everything heavy off the main thread: DuckDB reads Parquet from the
-// public archive, and the Rust engine turns those rows into results. Nothing
-// here talks to any server except the archive.
+// selected archive, and the Rust engine turns those rows into results.
 import init, {Engine} from '../../.build/pkg/transit_wasm.js';
 import * as duckdb from '@duckdb/duckdb-wasm';
 import duckWasm from '@duckdb/duckdb-wasm/dist/duckdb-base.wasm?url';
 import duckWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-base.worker.js?url';
-import {ARCHIVE, MAX_METADATA_BYTES, MAX_SCHEDULE_TABLE_BYTES, enforceObjectSize, validateArchiveURL} from './contracts.js';
+import {MAX_SCHEDULE_TABLE_BYTES, enforceObjectSize} from './contracts.js';
+import {archiveJson, fetchArchive, loadArchives, readBlob, scopedFeedKey, type ArchiveObject, type ArchiveSource, type FeedArchive} from './archives';
 import {
   clearCache, dayKey, deleteEntry, getEntry, listDays, onCacheProblem, putEntry, scheduleKey,
   type DayEntry, type DayIndexEntry, type EventsEntry, type FeedEntry, type ScheduleEntry,
@@ -13,7 +13,7 @@ import {
 import {EngineError, classifyError, isTransient, serializeError} from './errors';
 import {chooseMethod, usesSchedule, withMethod, type DayMethod} from './method.ts';
 import {withTripMatch} from './tripmatch';
-import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, ReadRecord, ScheduleRecord, TimingSpan} from './types';
+import type {AnalyzeRequest, AnalyzeResult, EngineEvent, Feed, FeedRef, ReadRecord, ScheduleRecord, TimingSpan} from './types';
 
 /**
  * Below this share of matching trip IDs the feed and schedule don't belong together,
@@ -35,6 +35,8 @@ let engineReady: Promise<unknown> | undefined;
 let engine: Engine | undefined;
 let currentFeed: string | undefined;
 let baseUrl = '';
+let archives: Promise<Map<string, ArchiveSource>> | undefined;
+const catalogs = new Map<string, ReadonlyMap<string, Feed>>();
 let eventDatesInMemory: number[] = [];
 /** Share of realtime trip IDs matching the schedule for each day of the open feed, 0 to 1. */
 let tripMatches = new Map<number, number | null>();
@@ -69,7 +71,10 @@ class Run {
   finish!: () => void;
   private rejectStopped!: (reason: RunStopped) => void;
 
-  constructor(readonly id: number, readonly feedKey: string, readonly engine: Engine) {
+  readonly archive: FeedArchive;
+
+  constructor(readonly id: number, readonly feed: Feed, readonly cacheKey: string, readonly engine: Engine, source: ArchiveSource) {
+    this.archive = source.open(feed, this.abort.signal);
     this.stopped = new Promise<never>((_, reject) => (this.rejectStopped = reject));
     this.stopped.catch(() => {});
     this.settled = new Promise<void>(resolve => (this.finish = resolve));
@@ -145,68 +150,21 @@ async function stopActiveRun() {
 
 // ---- Network helpers -------------------------------------------------------
 
-/** The run's abort signal plus a timeout. AbortSignal.any arrived in Safari 17.4 and Firefox 124, so older engines get a manual merge. */
-function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
-  const timeout = AbortSignal.timeout(ms);
-  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout]);
-  const merged = new AbortController();
-  for (const source of [signal, timeout]) {
-    if (source.aborted) merged.abort(source.reason);
-    else source.addEventListener('abort', () => merged.abort(source.reason), {once: true});
-  }
-  return merged.signal;
-}
-
-async function archiveFetch(url: string, options: RequestInit = {}, timeout = 30_000) {
-  validateArchiveURL(url);
-  return fetch(url, {...options, signal: AbortSignal.timeout(timeout), credentials: 'omit', referrerPolicy: 'no-referrer'});
-}
-
-/**
- * The archive's small JSON files, kept for a few minutes so a second analysis or a
- * retry doesn't ask again. After that the browser revalidates with the file's ETag,
- * which costs a header exchange and no body when nothing changed. A failure is never kept.
- */
-const JSON_FRESH_MS = 5 * 60_000;
-const jsonCache = new Map<string, {at: number; value: Promise<unknown>}>();
-
-function archiveJson<T>(path: string, timeout = 30_000): Promise<T> {
-  const kept = jsonCache.get(path);
-  if (kept && Date.now() - kept.at < JSON_FRESH_MS) return kept.value as Promise<T>;
-  const value = (async () => {
-    const response = await archiveFetch(`${ARCHIVE}${path}`, {cache: 'no-cache'}, timeout);
-    if (!response.ok) throw new Error(`The archive's ${path} returned HTTP ${response.status}. Check your connection and try again.`);
-    const text = await response.text();
-    if (text.length > MAX_METADATA_BYTES) throw new Error(`The archive's ${path} is larger than expected.`);
-    return JSON.parse(text) as T;
-  })();
-  jsonCache.set(path, {at: Date.now(), value});
-  value.catch(() => {
-    if (jsonCache.get(path)?.value === value) jsonCache.delete(path);
-  });
-  return value;
-}
-
 /**
  * Fetches a whole object into a File, which DuckDB then reads without any network.
  * Null when it does not exist. Anything else that goes wrong is an error, never "no data".
  */
-async function fetchWhole(run: Run, url: string, label: string, maxBytes: number): Promise<File | null> {
-  validateArchiveURL(url);
-  const response = await fetch(url, {signal: withTimeout(run.abort.signal, 90_000), credentials: 'omit', referrerPolicy: 'no-referrer'});
+async function fetchWhole(run: Run, object: ArchiveObject, label: string, maxBytes: number): Promise<File | null> {
+  const response = await fetchArchive(object, {signal: run.abort.signal}, 90_000);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
-  const length = Number(response.headers.get('content-length'));
-  if (length > maxBytes) {
-    await response.body?.cancel();
-    throw new Error(`${label} is larger than this app reads.`);
-  }
-  return new File([await response.blob()], url.split('/').pop() || 'object.parquet');
+  return new File([await readBlob(response, maxBytes, label)], object.url.split('/').pop() || 'object.parquet');
 }
 
 /** Object size, or `null` when it does not exist. Other failures are errors, not "no data". */
-async function objectSize(url: string, label: string): Promise<number | null> {
-  const response = await archiveFetch(url, {method: 'HEAD'});
+async function objectSize(run: Run, object: ArchiveObject, label: string): Promise<number | null> {
+  if (object.bytes !== undefined) return object.bytes;
+  const response = await fetchArchive(object, {method: 'HEAD', signal: run.abort.signal});
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
   return Number(response.headers.get('content-length'));
@@ -280,8 +238,7 @@ const numberColumn = (batch: any, name: string) => batch.getChild(name).data[0].
  * so a 34 MB object costs about 28 round trips; a handful of parallel ranges fetches
  * the same bytes in a few. `onBytes` hears each range as it lands.
  */
-async function downloadObject(run: Run, url: string, size: number, onBytes: (bytes: number) => void): Promise<File> {
-  validateArchiveURL(url);
+async function downloadObject(run: Run, object: ArchiveObject, label: string, size: number, onBytes: (bytes: number) => void): Promise<File> {
   const ranges: [number, number][] = [];
   for (let start = 0; start < size; start += PREFETCH_CHUNK_BYTES) ranges.push([start, Math.min(size, start + PREFETCH_CHUNK_BYTES) - 1]);
   const parts: Blob[] = new Array(ranges.length);
@@ -290,13 +247,13 @@ async function downloadObject(run: Run, url: string, size: number, onBytes: (byt
     while (next < ranges.length && !run.cancelled) {
       const index = next++;
       const [first, last] = ranges[index];
-      const response = await fetch(url, {
+      const response = await fetchArchive(object, {
         headers: {Range: `bytes=${first}-${last}`},
-        signal: withTimeout(run.abort.signal, 90_000),
-        credentials: 'omit', referrerPolicy: 'no-referrer',
-      });
-      if (!response.ok) throw new Error(`Archive ${url.split('/').slice(-3)[0]} returned HTTP ${response.status}. This is an access or network problem, not evidence of missing service.`);
-      const blob = await response.blob();
+        signal: run.abort.signal,
+      }, 90_000);
+      if (!response.ok) throw new Error(`Archive ${label} returned HTTP ${response.status} while reading positions.`);
+      if (response.status !== 206) throw new Error(`Archive ${label} does not support byte ranges.`);
+      const blob = await readBlob(response, last - first + 1, `Archive ${label}`);
       if (blob.size !== last - first + 1) throw new Error(`The archive returned ${blob.size} bytes for a range of ${last - first + 1}.`);
       parts[index] = blob;
       onBytes(blob.size);
@@ -318,9 +275,9 @@ async function withLocalFile<T>(run: Run, alias: string, file: File, use: () => 
 }
 
 /** Registers an archive file for the length of `use`. */
-async function withFile<T>(run: Run, alias: string, url: string, use: () => Promise<T>) {
+async function withFile<T>(run: Run, alias: string, object: ArchiveObject, use: () => Promise<T>) {
   await run.wait(ensureDatabase());
-  await run.wait(db!.registerFileURL(alias, validateArchiveURL(url), duckdb.DuckDBDataProtocol.HTTP, false));
+  await run.wait(db!.registerFileURL(alias, object.url, duckdb.DuckDBDataProtocol.HTTP, false));
   try {
     return await use();
   } finally {
@@ -332,6 +289,14 @@ async function withFile<T>(run: Run, alias: string, url: string, use: () => Prom
 // ---- Schedules -------------------------------------------------------------
 
 interface ScheduleChoice { key: string; bases: string[]; retrieved: string[]; published_before: boolean }
+interface PlannedFile {
+  utc_date: string;
+  alias: string;
+  window_start: number;
+  window_end: number;
+  completes: number[];
+  ends_at: number;
+}
 
 /** A schedule table already fetched whole, or null when the archive has none. */
 type ScheduleTables = Map<string, Promise<File | null>>;
@@ -349,10 +314,10 @@ function prefetchSchedule(run: Run, choice: ScheduleChoice): ScheduleTables {
   const tables: ScheduleTables = new Map();
   for (const base of choice.bases) {
     for (const table of SCHEDULE_TABLES) {
-      const url = `${base}/${table}.parquet`;
-      const fetched = run.span(`schedule ${table} fetch`, () => fetchWhole(run, url, `Schedule table ${table}`, MAX_SCHEDULE_TABLE_BYTES));
+      const path = `${base}/${table}.parquet`;
+      const fetched = run.span(`schedule ${table} fetch`, () => fetchWhole(run, run.archive.schedule!(path), `Schedule table ${table}`, MAX_SCHEDULE_TABLE_BYTES));
       fetched.catch(() => {});
-      tables.set(url, fetched);
+      tables.set(path, fetched);
     }
   }
   run.scheduleTables.set(choice.key, tables);
@@ -388,8 +353,7 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
   let timezone: string | null = null;
   for (const base of choice.bases) {
     for (const table of SCHEDULE_TABLES) {
-      const url = `${base}/${table}.parquet`;
-      const file = await run.wait(tables.get(url)!);
+      const file = await run.wait(tables.get(`${base}/${table}.parquet`)!);
       if (file === null) {
         if (REQUIRED_TABLES.has(table)) target.addScheduleWarning(`One of this agency's schedule sources has no ${table} table, so its trips are left out.`);
         continue;
@@ -473,9 +437,9 @@ async function loadSchedule(run: Run, choice: ScheduleChoice, label: string) {
   }
   run.stage(`Placing stops on the ${label} route lines`, undefined, undefined, undefined, {phase: 'schedule'});
   const meta = target.finishSchedule();
-  await run.wait(putEntry('schedules', scheduleKey(run.feedKey, key), {meta} satisfies ScheduleEntry));
+  await run.wait(putEntry('schedules', scheduleKey(run.cacheKey, key), {meta} satisfies ScheduleEntry));
   const record: ScheduleRecord = {
-    key, bases: choice.bases, retrieved: choice.retrieved, published_before: choice.published_before,
+    key, bases: choice.bases.map(base => run.archive.schedule!(base).url), retrieved: choice.retrieved, published_before: choice.published_before,
     timezone: timezone ?? target.scheduleTimezone() ?? null, warnings: JSON.parse(target.scheduleWarnings()),
   };
   run.scheduleTables.delete(key);
@@ -506,14 +470,17 @@ async function timezoneOf(run: Run, choice: ScheduleChoice): Promise<string | nu
  */
 async function timezoneFromPositions(run: Run, date: number) {
   const iso = formatDate(date);
-  const url = `${ARCHIVE}vehicle_positions/date=${iso}/base64url=${run.feedKey}/data.parquet`;
-  if ((await run.wait(objectSize(url, `Archive ${iso}`))) === null) return null;
+  const object = await run.wait(run.archive.position(iso));
+  if (!object) return null;
+  const size = await run.wait(objectSize(run, object, `Archive ${iso}`));
+  if (size === null) return null;
+  enforceObjectSize(size, `Archive ${iso}`);
   const alias = 'timezone_probe.parquet';
-  return withFile(run, alias, url, async () => {
+  return withFile(run, alias, object, async () => {
     const columns = JSON.stringify(await columnsOf(run, alias));
     const rows = await rowsOf(run, Engine.longitudeQuery(columns, alias));
-    const longitude = Number(rows[0]?.longitude);
-    if (!Number.isFinite(longitude)) return null;
+    const longitude = optional(rows[0]?.longitude);
+    if (longitude === undefined || !Number.isFinite(longitude)) return null;
     if (longitude > -85.5) return 'America/New_York';
     if (longitude > -101) return 'America/Chicago';
     if (longitude > -115) return 'America/Denver';
@@ -539,11 +506,11 @@ function clockSamples(timezone: string, firstDate: number, lastDate: number) {
 
 // ---- Analysis --------------------------------------------------------------
 
-function openFeedEngine(feedKey: string) {
-  if (currentFeed === feedKey && engine) return engine;
+function openFeedEngine(cacheKey: string) {
+  if (currentFeed === cacheKey && engine) return engine;
   engine?.free();
   engine = new Engine();
-  currentFeed = feedKey;
+  currentFeed = cacheKey;
   eventDatesInMemory = [];
   tripMatches = new Map();
   dayMethods = new Map();
@@ -553,12 +520,12 @@ function openFeedEngine(feedKey: string) {
 /** Restores a cached day. Returns false when it has to be analysed again. */
 async function restoreDay(run: Run, date: number) {
   const version = Engine.metricVersion();
-  const key = dayKey(run.feedKey, date, version);
+  const key = dayKey(run.cacheKey, date, version);
   const entry = await run.wait(getEntry<DayEntry>('days', key));
   if (!entry) return false;
   try {
     if (!run.engine.hasSchedule(entry.digest)) {
-      const schedule = await run.wait(getEntry<ScheduleEntry>('schedules', scheduleKey(run.feedKey, entry.digest)));
+      const schedule = await run.wait(getEntry<ScheduleEntry>('schedules', scheduleKey(run.cacheKey, entry.digest)));
       if (!schedule || !run.engine.importSchedule(schedule.meta)) return false;
     }
     // Stop events load on demand, because most days are never drawn as a string line.
@@ -585,7 +552,7 @@ async function restoreDay(run: Run, date: number) {
  */
 async function saveDay(run: Run, date: number, digest: string, cube: Uint8Array, events: Uint8Array | null, tripMatch: number | null, method: DayMethod) {
   const version = Engine.metricVersion();
-  const key = dayKey(run.feedKey, date, version);
+  const key = dayKey(run.cacheKey, date, version);
   if (events && !(await run.wait(putEntry('events', key, {events} satisfies EventsEntry)))) return false;
   if (!(await run.wait(putEntry('days', key, {cube, digest, savedAt: new Date().toISOString(), tripMatch, method} satisfies DayEntry)))) return false;
   return run.wait(putEntry('dayIndex', key, {bytes: cube.byteLength} satisfies DayIndexEntry));
@@ -599,7 +566,7 @@ function rememberEvents(date: number) {
 }
 
 async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult) {
-  const {dates, dateMax} = request;
+  const {dates} = request;
   const target = run.engine;
 
   const remaining: number[] = [];
@@ -615,36 +582,37 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
 
   const notes: string[] = [];
   // The schedule catalog needs no database, so it is fetched while the database starts.
-  const catalogs = run.span('schedules.json', () => archiveJson<unknown[]>('schedules.json').then(data => JSON.stringify(data)));
-  catalogs.catch(() => {});
+  const schedule = run.archive.schedule;
+  const scheduleCatalog = schedule && run.span('schedules.json', () => archiveJson(schedule('schedules.json'), 'Schedule catalog'));
+  scheduleCatalog?.catch(() => {});
   run.stage('Starting the local database', 0, 0, remaining.length, {phase: 'database'});
   await run.span('database', () => run.wait(ensureDatabase()));
   result.engineVersion = engineVersion;
 
-  run.stage('Looking up this feed in the archive', 0, 0, remaining.length, {phase: 'lookup'});
-  const metadata = await run.span('feeds.parquet', () => withFile(run, 'feeds.parquet', `${ARCHIVE}feeds.parquet`, async () => {
-    const statement = await run.wait(connection!.prepare(Engine.feedMetadataQuery()));
-    const rows = (await run.wait(statement.query(run.feedKey))).toArray().map(row => row.toJSON());
-    await run.wait(statement.close());
-    return rows;
-  }));
-  const row = metadata[0] ?? {};
-  let scheduleUrls: string[] = [];
-  try {
-    scheduleUrls = row.schedule_urls ? JSON.parse(String(row.schedule_urls)) : [];
-  } catch {
-    notes.push("The archive's list of schedules for this feed couldn't be read.");
-  }
-  if (!scheduleUrls.length && row.schedule_url) scheduleUrls = [String(row.schedule_url)];
-  target.setScheduleCatalogs(await run.wait(catalogs));
-  const urlsJson = JSON.stringify(scheduleUrls);
-
-  // A day with no covering schedule still gets GPS speeds. Only the time zone has
-  // to come from somewhere else.
   const choices = new Map<number, ScheduleChoice>();
-  for (const date of remaining) {
-    const choice: ScheduleChoice | null = JSON.parse(target.chooseSchedule(urlsJson, date));
-    if (choice) choices.set(date, choice);
+  if (schedule && scheduleCatalog) {
+    run.stage('Looking up this feed in the archive', 0, 0, remaining.length, {phase: 'lookup'});
+    const row = await run.span('feeds.parquet', () => withFile(run, 'feeds.parquet', schedule('feeds.parquet'), async () => {
+      const statement = await run.wait(connection!.prepare(Engine.feedMetadataQuery()));
+      const rows = await run.wait(statement.query(run.feed.base64url));
+      await run.wait(statement.close());
+      return rows.toArray()[0]?.toJSON() ?? {};
+    }));
+    let urls: string[] = [];
+    try {
+      const listed: unknown = JSON.parse(row.schedule_urls ? String(row.schedule_urls) : '[]');
+      if (!Array.isArray(listed) || !listed.every(url => typeof url === 'string')) throw new Error('Invalid schedule list.');
+      urls = listed;
+    } catch {
+      notes.push("The archive's list of schedules for this feed couldn't be read.");
+    }
+    if (!urls.length && row.schedule_url) urls = [String(row.schedule_url)];
+    target.setScheduleCatalogs(JSON.stringify(await run.wait(scheduleCatalog)));
+    const urlsJson = JSON.stringify(urls);
+    for (const date of remaining) {
+      const choice: ScheduleChoice | null = JSON.parse(target.chooseSchedule(urlsJson, date));
+      if (choice) choices.set(date, choice);
+    }
   }
   // Start fetching the schedule tables now. They arrive while the archive files are read.
   for (const choice of choices.values()) {
@@ -653,33 +621,41 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
 
   // The time zone comes first: service days can't be located in UTC files without it.
   // A schedule's own zone always wins over an estimate saved earlier.
-  const savedZone = await run.wait(getEntry<FeedEntry>('feeds', run.feedKey));
+  const savedZone = await run.wait(getEntry<FeedEntry>('feeds', run.cacheKey));
   const firstChoice = remaining.map(date => choices.get(date)).find(Boolean);
   let timezone: string | null = null;
   let estimated = false;
   if (firstChoice) {
     timezone = savedZone && !savedZone.estimated ? savedZone.timezone : await run.span('timezone', () => timezoneOf(run, firstChoice));
-    if (timezone) await run.wait(putEntry('feeds', run.feedKey, {timezone, estimated: false} satisfies FeedEntry));
+    if (timezone) await run.wait(putEntry('feeds', run.cacheKey, {timezone, estimated: false} satisfies FeedEntry));
   }
+  timezone ??= run.archive.timezone ?? null;
   if (!timezone) {
     timezone = savedZone?.timezone ?? (await timezoneFromPositions(run, remaining[0]));
+    const newest = Number(run.feed.date_max.replaceAll('-', ''));
+    if (!timezone && newest !== remaining[0]) timezone = await timezoneFromPositions(run, newest);
     estimated = true;
-    if (timezone) await run.wait(putEntry('feeds', run.feedKey, {timezone, estimated: true} satisfies FeedEntry));
+    if (timezone) await run.wait(putEntry('feeds', run.cacheKey, {timezone, estimated: true} satisfies FeedEntry));
   }
   if (!timezone) throw new Error('This feed has no schedule and no readable positions, so its service days cannot be located.');
   if (estimated) notes.push(`The archive has no schedule stating this agency's time zone, so ${timezone} was estimated from vehicle positions. Hours of the day may be off if that is wrong.`);
   target.setClock(clockSamples(timezone, remaining[0], remaining[remaining.length - 1]));
 
-  const plan: {files: any[]} = JSON.parse(target.planRead(run.feedKey, JSON.stringify(remaining), dateMax));
+  const plan: {files: PlannedFile[]} = JSON.parse(target.planRead(JSON.stringify(remaining), run.feed.date_max));
   target.clearBuffer();
   const totalFiles = plan.files.length;
   // Size every file up front, in parallel. It gives the progress bar a byte total
   // and costs one round trip rather than one per file.
   run.stage('Checking the archive files', 0, 0, remaining.length, {phase: 'lookup'});
-  // A failed lookup isn't fatal here: that file is sized again, and fails properly, when its turn comes.
-  const sizes: (number | null | undefined)[] = await run.span('sizes', () => run.wait(Promise.all(plan.files.map((file: any) =>
-    objectSize(file.url, `Archive ${file.utc_date}`).catch(() => undefined)))));
-  const bytesTotal = sizes.reduce<number>((sum, size) => sum + (size ?? 0), 0);
+  async function locate(file: PlannedFile) {
+    const object = await run.archive.position(file.utc_date);
+    if (!object) return null;
+    const size = await objectSize(run, object, `Archive ${file.utc_date}`);
+    return size === null ? null : {object, size};
+  }
+  // A failed lookup gets another chance when its turn comes. Earlier days can still finish.
+  const positions = await run.span('sizes', () => run.wait(Promise.all(plan.files.map(file => locate(file).catch(() => undefined)))));
+  const bytesTotal = positions.reduce((sum, position) => sum + (position?.size ?? 0), 0);
   let bytesBefore = 0;
   let completedDays = 0;
   const missing: [number, number][] = [];
@@ -691,11 +667,12 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
   const downloads: (Promise<File> | undefined)[] = [];
   const downloaded: number[] = plan.files.map(() => 0);
   const startDownload = (index: number) => {
-    const size = sizes[index];
-    if (index >= totalFiles || downloads[index] || !size || size > PREFETCH_MAX_BYTES) return;
-    const label = `${plan.files[index].utc_date}`;
+    const position = positions[index];
+    if (!position || downloads[index] || !position.size || position.size > PREFETCH_MAX_BYTES) return;
+    const {object, size} = position;
+    const label = plan.files[index].utc_date;
     const after = downloads[index - 1]?.catch(() => {}) ?? Promise.resolve();
-    const started = after.then(() => run.span(`file ${label} download`, () => downloadObject(run, plan.files[index].url, size, bytes => (downloaded[index] += bytes))));
+    const started = after.then(() => run.span(`file ${label} download`, () => downloadObject(run, object, label, size, bytes => (downloaded[index] += bytes))));
     started.catch(() => {});
     downloads[index] = started;
   };
@@ -705,16 +682,18 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
     const label = `${file.utc_date}`;
     const dayIndex = completedDays + 1;
     const progress = (within: number) => (fileIndex + within) / totalFiles;
-    let size = sizes[fileIndex];
-    if (size === undefined) size = await run.wait(objectSize(file.url, `Archive ${label}`));
+    const position = positions[fileIndex] === undefined ? (positions[fileIndex] = await run.wait(locate(file))) : positions[fileIndex];
+    const size = position?.size ?? 0;
     startDownload(fileIndex);
     startDownload(fileIndex + 1);
     run.stage(`Checking the ${label} archive file`, progress(0), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore, bytesTotal});
-    const record: ReadRecord = {date: file.utc_date, url: file.url, bytes: size ?? 0, status: size === null ? 'missing' : 'read', rows: 0, seconds: 0, sql: ''};
-    if (size === null) {
+    const record: ReadRecord = {date: file.utc_date, url: position?.object.url ?? null, bytes: size, status: position ? 'read' : 'missing', rows: 0, seconds: 0, sql: ''};
+    if (!position) {
       missing.push([file.ends_at - 86400, file.ends_at]);
     } else {
       enforceObjectSize(size, `Archive ${label}`);
+      const {object} = position;
+      let firstFetch = file.window_end;
       const read = async () => {
         const columns = await run.span(`file ${label} describe`, () => columnsOf(run, file.alias));
         const sql = Engine.fixesQuery(JSON.stringify(columns), file.alias, file.window_start, file.window_end);
@@ -722,6 +701,9 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
         let lastReport = 0;
         await run.span(`file ${label} query`, () => stream(run, sql, batch => {
           const fetched = numberColumn(batch, 'fetch') as Float64Array;
+          if (object.firstPartition) {
+            for (const time of fetched) firstFetch = Math.min(firstFetch, time);
+          }
           const [tripOffsets, tripBytes] = textColumn(batch, 'trip_id');
           const [vehicleOffsets, vehicleBytes] = textColumn(batch, 'vehicle_id');
           const [routeOffsets, routeBytes] = textColumn(batch, 'route_id');
@@ -736,16 +718,16 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
             lastReport = now;
             // Files are written in time order, so the clock shows how far along we are.
             const within = Math.min(1, Math.max(0, (fetched[fetched.length - 1] - file.window_start) / (file.window_end - file.window_start)));
-            run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + within * (size ?? 0), bytesTotal});
+            run.stage(`Reading ${label} from the archive`, progress(within), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + within * size, bytesTotal});
           }
         }));
       };
       const pending = downloads[fileIndex];
       await run.span(`file ${label}`, async () => {
-        if (!pending) return withFile(run, file.alias, file.url, read);
+        if (!pending) return withFile(run, file.alias, object, read);
         // Show the download while it is the only thing happening, as the first half of the file.
         const ticker = setInterval(() => {
-          const share = downloaded[fileIndex] / (size ?? 1);
+          const share = downloaded[fileIndex] / size;
           run.stage(`Downloading ${label} from the archive`, progress(share / 2), dayIndex, remaining.length, {phase: 'read', bytesDone: bytesBefore + downloaded[fileIndex], bytesTotal});
         }, 250);
         let local: File;
@@ -758,12 +740,15 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
         startDownload(fileIndex + 2);
         return withLocalFile(run, file.alias, local, read);
       });
+      if (object.firstPartition && Math.floor(firstFetch) > file.window_start) {
+        missing.push([file.window_start, Math.floor(firstFetch)]);
+      }
     }
-    bytesBefore += size ?? 0;
+    bytesBefore += size;
     record.seconds = (performance.now() - started) / 1000;
     run.emit({event: 'read', record});
 
-    for (const date of file.completes as number[]) {
+    for (const date of file.completes) {
       processed.add(date);
       const dayNotes = [...notes];
       const choice = choices.get(date);
@@ -821,7 +806,7 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
         if (output.status === 'complete' && output.cube) {
           saved = true;
           const digest = useSchedule ? choice!.key : output.digest!;
-          if (output.meta) saved = await run.wait(putEntry('schedules', scheduleKey(run.feedKey, digest), {meta: output.meta} satisfies ScheduleEntry));
+          if (output.meta) saved = await run.wait(putEntry('schedules', scheduleKey(run.cacheKey, digest), {meta: output.meta} satisfies ScheduleEntry));
           saved = saved && (await saveDay(run, date, digest, output.cube, output.events ?? null, tripMatch, method));
           if (saved) {
             if (output.events) rememberEvents(date);
@@ -849,8 +834,13 @@ async function execute(run: Run, request: AnalyzeRequest, result: AnalyzeResult)
 }
 
 async function analyze(request: AnalyzeRequest): Promise<AnalyzeResult> {
+  const cacheKey = scopedFeedKey(request);
+  const source = await archiveSource(request.sourceId);
+  const feed = catalogs.get(request.sourceId)?.get(request.feedKey);
+  if (!feed) throw new Error('This feed is unavailable in the selected archive.');
   await stopActiveRun();
-  const run = new Run(request.run, request.feedKey, openFeedEngine(request.feedKey));
+  if (!engine || currentFeed !== cacheKey) throw new Error('The selected archive or feed changed before analysis began.');
+  const run = new Run(request.run, feed, cacheKey, engine, source);
   activeRun = run;
   const result: AnalyzeResult = {analyzed: [], cached: [], unavailable: [], stopped: false, engineVersion};
   try {
@@ -876,6 +866,20 @@ function formatDate(date: number) {
 
 // ---- Messages --------------------------------------------------------------
 
+function archiveRegistry() {
+  archives ??= loadArchives(baseUrl).catch(error => {
+    archives = undefined;
+    throw error;
+  });
+  return archives;
+}
+
+async function archiveSource(id: string) {
+  const source = (await archiveRegistry()).get(id);
+  if (!source) throw new Error('This data source is unavailable on this site.');
+  return source;
+}
+
 const methods: Record<string, (...args: any[]) => unknown> = {
   async init(url: string) {
     baseUrl = url;
@@ -886,10 +890,12 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     await engineReady;
     return true;
   },
-  async catalog() {
-    // The catalog is several megabytes, so it gets longer than a small request would.
-    const data = await archiveJson<Feed[]>('inventory.json', 90_000);
-    if (!Array.isArray(data) || data.length > 5000) throw new Error('The archive catalog has an unexpected shape.');
+  async sources() {
+    return [...(await archiveRegistry()).values()].map(source => source.info);
+  },
+  async catalog(sourceId: string) {
+    const data = await (await archiveSource(sourceId)).catalog();
+    catalogs.set(sourceId, new Map(data.map(feed => [feed.base64url, feed])));
     return data;
   },
   analyze,
@@ -897,11 +903,12 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     await stopActiveRun();
     return true;
   },
-  async cachedDays(feedKey: string) {
-    return listDays(feedKey, Engine.metricVersion());
+  async cachedDays(ref: FeedRef) {
+    return listDays(scopedFeedKey(ref), Engine.metricVersion());
   },
-  async clearCache(feedKey?: string) {
+  async clearCache(ref?: FeedRef) {
     await stopActiveRun();
+    const feedKey = ref && scopedFeedKey(ref);
     await clearCache(feedKey);
     if (!feedKey || feedKey === currentFeed) {
       engine?.free();
@@ -913,9 +920,9 @@ const methods: Record<string, (...args: any[]) => unknown> = {
     }
     return true;
   },
-  async openFeed(feedKey: string) {
+  async openFeed(ref: FeedRef) {
     await stopActiveRun();
-    openFeedEngine(feedKey);
+    openFeedEngine(scopedFeedKey(ref));
     return true;
   },
   select(selection: string) {

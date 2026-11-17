@@ -20,8 +20,8 @@ Put the reporting a seasoned planner would build for themselves at their fingert
 
 ## Capabilities and Constraints
 
-- Read public archive catalogs and Parquet objects directly from the browser. Run all queries and analysis on the visitor's device.
-- The website must never receive, proxy or process transit data. No server query API, credentials, accounts, analytics or data upload.
+- Read public archives directly from the browser. For private archives, the host authenticates requests and streams compatible files over the same origin.
+- Run all queries and analysis on the visitor's device. Keep archive credentials in the hosting configuration and results in the browser.
 - Show the expected download before anything starts, and stop on request while keeping finished days.
 - Keep derived results in the visitor's browser, visible and clearable. Never persist raw vehicle data.
 - Never invent a classification or claim beyond the evidence. An absent trip is not proof of a cancellation, and there is no ridership in the archive.
@@ -42,7 +42,7 @@ Use the CTA Bus Speed Scorecard as the reference for a warm, restrained visual s
 
 ## Product Principles
 
-- The visitor's device does the work, and the host stays out of the data path.
+- The visitor's device does the analytical work. The host serves the app and provides authenticated access to private archives.
 - Show something real quickly and refine it: results appear after the first day and improve with each one added.
 - Lead with the finding, then let the planner drill down to the evidence.
 - Measure the same way in every period, so comparisons mean what they appear to mean.

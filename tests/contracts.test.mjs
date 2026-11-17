@@ -1,25 +1,24 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ARCHIVE, MAX_OBJECT_BYTES, enforceObjectSize, validateArchiveURL} from '../src/engine/contracts.js';
+import {ARCHIVE, MAX_OBJECT_BYTES, archiveObjectURL, enforceObjectSize} from '../src/engine/contracts.js';
 import {securityHeaders} from '../scripts/security.mjs';
 import {csvCell} from '../src/lib/download.ts';
 import {decodeDates, encodeDates, lastDays, rangeDates} from '../src/lib/dates.ts';
 import {datesLabel, deviation, hourLabel, routeName, signedPct, speed} from '../src/lib/format.ts';
 import {niceRange, ticks} from '../src/lib/scale.ts';
 
-const object = `${ARCHIVE}vehicle_positions/date=2026-11-05/base64url=cHVibGlj/data.parquet`;
+const object = 'vehicle_positions/date=2026-11-05/base64url=cHVibGlj/data.parquet';
 
-test('rejects other buckets, credentialed URLs, query strings, and encoded path escapes', () => {
-  assert.equal(validateArchiveURL(object), object);
-  for (const url of [
+test('archive object keys stay below the configured root', () => {
+  assert.equal(archiveObjectURL(ARCHIVE, object), ARCHIVE + object);
+  for (const path of [
     'https://storage.googleapis.com/another-bucket/data.parquet',
-    'https://storage.googleapis.com/parquet.gtfsrt.io.evil/data.parquet',
-    'https://storage.googleapis.com.evil.test/parquet.gtfsrt.io/data.parquet',
     'https://user:password@storage.googleapis.com/parquet.gtfsrt.io/data.parquet',
     `${object}?token=private`, `${object}#fragment`,
-    `${ARCHIVE}../another-bucket/data.parquet`, `${ARCHIVE}vehicle_positions/%2fother/data.parquet`,
-    'http://storage.googleapis.com/parquet.gtfsrt.io/data.parquet',
-  ]) assert.throws(() => validateArchiveURL(url), undefined, url);
+    '../another-bucket/data.parquet', 'vehicle_positions/../data.parquet',
+    'vehicle_positions/%2fother/data.parquet', 'vehicle_positions/%2e%2e/data.parquet',
+    '/other/data.parquet', 'vehicle_positions\\other/data.parquet',
+  ]) assert.throws(() => archiveObjectURL(ARCHIVE, path), /Invalid archive object path/, path);
 });
 
 test('refuses objects with an unknown size or beyond the per-object limit', () => {

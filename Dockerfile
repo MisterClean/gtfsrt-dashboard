@@ -23,7 +23,7 @@ RUN npm run build \
 FROM caddy:2.11.8-alpine
 COPY --from=build /app/dist/ /srv/
 COPY --from=build /app/.build/hosting/security.caddy /etc/caddy/security.caddy
-COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/ /etc/caddy/
 USER 65532:65532
 EXPOSE 8080
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

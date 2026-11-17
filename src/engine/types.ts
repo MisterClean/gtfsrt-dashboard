@@ -346,6 +346,10 @@ export interface Feed {
   total_bytes: number;
 }
 
+export interface ArchiveInfo { id: string; label: string; website?: string; signInUrl?: string }
+
+export interface FeedRef { sourceId: string; feedKey: string }
+
 export interface Selection {
   dates: number[];
   mode: Mode;
@@ -354,17 +358,15 @@ export interface Selection {
   periods: { am: [number, number]; mid: [number, number]; pm: [number, number] };
 }
 
-export interface AnalyzeRequest {
+export interface AnalyzeRequest extends FeedRef {
   /** Tags this run's events, so nothing from an earlier run can be mistaken for it. */
   run: number;
-  feedKey: string;
   dates: number[];
-  dateMax: string;
 }
 
 export interface ReadRecord {
   date: string;
-  url: string;
+  url: string | null;
   bytes: number;
   status: 'read' | 'missing';
   rows: number;

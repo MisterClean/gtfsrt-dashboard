@@ -11,8 +11,9 @@
     ondismiss?: () => void;
     extra?: string;
     retryLabel?: string;
+    action?: {label: string; href: string};
   }
-  let {failure, words, onretry, ondismiss, extra = '', retryLabel = 'Try again'}: Props = $props();
+  let {failure, words, onretry, ondismiss, extra = '', retryLabel = 'Try again', action}: Props = $props();
 
   const friendly = $derived(words ?? friendlyError(failure));
   const details = $derived(errorDetails(failure));
@@ -32,6 +33,9 @@
 <div class="banner error" role="alert">
   <strong>{friendly.title}</strong>
   {friendly.advice}{extra ? ` ${extra}` : ''}
+  {#if action}
+    <a class="btn small" href={action.href}>{action.label}</a>
+  {/if}
   {#if onretry && friendly.retryable}
     <button class="btn small" onclick={onretry}>{retryLabel}</button>
   {/if}

@@ -1,6 +1,6 @@
 # Packaging and browser security
 
-One versioned static release contains every executable dependency. A visitor opens an HTTPS URL and installs nothing. The public archive remains an external data source, and the optional basemap is the only other outside connection.
+One versioned static release contains every executable dependency. A visitor opens an HTTPS URL and installs nothing. The default archive and optional basemap are external connections. Additional archives use the app's origin.
 
 | Part | Release artifact |
 | --- | --- |
@@ -43,15 +43,15 @@ Production requirements:
 | No JavaScript evaluation | `'wasm-unsafe-eval'` only, no `'unsafe-eval'` or inline scripts | `tests/contracts.test.mjs` |
 | No inline styles in production | `style-src 'self'`, with Svelte's `style:` directive using the CSSOM | Browser run with no policy violations |
 | Fixed SQL | Templates in `crates/core/src/sql.rs` with checked aliases and typed casts. No interface can run other SQL. | Unit tests in CI. `crates/core/tests/sql_contract.rs` needs the DuckDB CLI and runs on request |
-| Archive URLs only | `validateArchiveURL` checks origin and exact bucket prefix | `tests/contracts.test.mjs` |
+| Archive URLs only | Adapters build URLs from validated object keys and fixed roots | `tests/contracts.test.mjs`, `tests/archives.test.mjs` |
 | Source text is data | Svelte escapes text by default, and the app never uses `{@html}` | Code review |
 | CSV safety | `csvCell` defuses values a spreadsheet would run as formulas | `tests/contracts.test.mjs` |
 | Bounded work | [Resource bounds](architecture.md#resource-bounds), a stop control that always unwinds, and a stall notice. Reads have no fixed deadline, because a large day is legitimately slow | `tests/e2e.mjs`, which needs a network and runs on request |
 
 ## Who sees what
 
-- **The website host** serves static files and sees ordinary page requests. It receives no transit data and no analysis results.
-- **The archive host (Google Cloud Storage)** sees the visitor's network address and which objects they request, because the browser fetches them directly.
+- **The website host** sees ordinary page requests and may serve files for a configured same-origin archive. Analysis results stay in the browser.
+- **The archive host** sees which objects are requested. The browser contacts Google Cloud Storage directly for gtfsrt.io.
 - **OpenFreeMap** sees the visitor's network address and the map area on screen when the street basemap is on. It needs no key or account, and the visitor can turn it off. Transit data never goes there.
 
 The app runs no analytics. Results stay in the visitor's browser until they clear them.

@@ -91,6 +91,7 @@
     const selection = app.selection();
     const payload = {
       generated_at: new Date().toISOString(),
+      source: {id: app.sourceId, label: app.source?.label ?? app.sourceId},
       feed: feed && {
         base64url: feed.base64url,
         agency_id: feed.agency_id,
@@ -148,7 +149,7 @@
           </div>
         {/if}
         <div><dt>In the archive</dt><dd>{dateLabel(feed.date_min, {month: 'short', day: 'numeric', year: 'numeric'})} to {dateLabel(feed.date_max, {month: 'short', day: 'numeric', year: 'numeric'})} · {int(feed.total_records)} rows · {bytes(feed.total_bytes)}</dd></div>
-        <div><dt>Source</dt><dd><a href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io</a> public GTFS-RT archive, vehicle positions</dd></div>
+        <div><dt>Source</dt><dd>{#if app.source?.website}<a href={app.source.website} target="_blank" rel="noopener noreferrer">{app.source.label}</a>{:else}{app.source?.label ?? app.sourceId}{/if} · vehicle positions</dd></div>
         {#if app.quality}<div><dt>Calculation version</dt><dd>{app.quality.metric_version}</dd></div>{/if}
         {#if app.result?.engineVersion}<div><dt>Query engine</dt><dd>DuckDB {app.result.engineVersion} in this browser</dd></div>{/if}
       </dl>
@@ -213,7 +214,7 @@
                 <td>{read.status === 'read' ? bytes(read.bytes) : '—'}</td>
                 <td>{int(read.rows)}</td>
                 <td>{read.seconds.toFixed(1)}</td>
-                <td class="left"><a href={read.url} target="_blank" rel="noopener noreferrer">Parquet object</a></td>
+                <td class="left">{#if read.url}<a href={read.url} target="_blank" rel="noopener noreferrer">Parquet object</a>{:else}—{/if}</td>
               </tr>
             {/each}
           </tbody>
@@ -322,15 +323,15 @@
         <caption class="sr-only">Who can see what when you use this app</caption>
         <thead><tr><th class="left" scope="col">Who</th><th class="left" scope="col">What they see</th></tr></thead>
         <tbody>
-          <tr><td class="left"><strong>Archive host</strong> (Google Cloud Storage)</td><td class="left wrap">Your network address and which public files are requested. Your browser requests them directly.</td></tr>
+          <tr><td class="left"><strong>Archive host</strong></td><td class="left wrap">Your network address and which files the browser requests from the selected archive.</td></tr>
           <tr><td class="left"><strong>Map tiles</strong> (OpenFreeMap)</td><td class="left wrap">Your network address and the map area on screen, while the basemap is on. No transit data goes there.</td></tr>
-          <tr><td class="left"><strong>This website’s host</strong></td><td class="left wrap">Ordinary requests for the application’s static files, including the address you open, which can name an agency and dates. Queries and results never reach it, because there is no server to send them to.</td></tr>
-          <tr><td class="left"><strong>Anyone you send a link to</strong></td><td class="left wrap">The agency, days and view named in the link. Opening it runs the analysis on their own device. No results travel with it.</td></tr>
+          <tr><td class="left"><strong>This website’s host</strong></td><td class="left wrap">The page address, requests for app files, and any archive file requests served by this host. Analysis runs on your device.</td></tr>
+          <tr><td class="left"><strong>Anyone you send a link to</strong></td><td class="left wrap">The archive, agency, days and view named in the link. Opening it runs the analysis on their own device.</td></tr>
         </tbody>
       </table>
     </div>
     <label class="check"><input type="checkbox" checked={app.basemap} onchange={event => app.setBasemap(event.currentTarget.checked)} /> Show the street basemap</label>
-    <p class="note">There are no accounts, no analytics and no uploads. Your browser may also keep ordinary cached copies of files it downloaded.</p>
+    <p class="note">Your browser may keep cached copies of files it downloads.</p>
   </section>
 
   <section class="section" aria-labelledby="downloads-heading">
@@ -339,7 +340,9 @@
     <div class="tools">
       <button class="btn" disabled={!app.hasResults} onclick={downloadProvenance}>Download provenance JSON</button>
       <a class="btn" href="https://github.com/MisterClean/gtfsrt-dashboard" target="_blank" rel="noopener noreferrer">Source code</a>
-      <a class="btn" href="https://gtfsrt.io/" target="_blank" rel="noopener noreferrer">gtfsrt.io archive</a>
+      {#if app.source?.website}
+        <a class="btn" href={app.source.website} target="_blank" rel="noopener noreferrer">{app.source.label} archive</a>
+      {/if}
     </div>
     <p class="note">Each report’s tables download as CSV from that report, and the speed map downloads as GeoJSON.</p>
   </section>

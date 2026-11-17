@@ -57,7 +57,7 @@ try {
 
   const started = Date.now();
   await page.getByRole('button', {name: /^Analyze 1 day$/}).first().click();
-  await page.waitForFunction(() => window.__transit.hasResults && !window.__transit.running, null, {timeout: 300000, polling: 250});
+  await page.waitForFunction(() => window.__transit.overview && !window.__transit.running, null, {timeout: 300000, polling: 250});
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
 
   const result = await page.evaluate(() => {

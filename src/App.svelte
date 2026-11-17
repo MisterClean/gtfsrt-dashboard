@@ -27,6 +27,16 @@
   });
 
   const label = $derived(app.feed ? feedLabel(app.feed) : '');
+  const archiveSignIn = $derived.by(() => {
+    if (app.boot.step !== 'failed' || app.boot.at !== 'catalog' || !app.source?.signInUrl) return;
+    const {status} = app.boot.failure;
+    if (status !== 401 && status !== 403) return;
+    const url = new URL(app.source.signInUrl);
+    // Keep the agency and dates from a shared link through authentication.
+    url.search = location.search;
+    url.searchParams.set('source', app.sourceId);
+    return {label: 'Sign in to archive', href: url.href};
+  });
   // One note per distinct message, naming the days when it doesn't apply to all of them.
   const notes = $derived.by(() => {
     const byMessage = new Map<string, string[]>();
@@ -50,7 +60,12 @@
   <NavRail />
   <main id="main">
     {#if app.boot.step === 'failed'}
-      <div class="page"><ErrorNotice failure={app.boot.failure} words={bootWords(app.boot)} onretry={() => app.start()} /></div>
+      <div class="page">
+        <ErrorNotice failure={app.boot.failure} onretry={() => app.start()} action={archiveSignIn}
+          words={archiveSignIn
+            ? {title: 'This archive requires sign-in.', advice: 'Use your archive credentials to load the agency list.', retryable: false}
+            : bootWords(app.boot)} />
+      </div>
     {/if}
     <LoadProgress />
     <FeedNotice />
@@ -76,7 +91,7 @@
             <p class="lede">The first results appear as soon as the first day is finished, and they refine as each day is added. You can keep reading while it works.</p>
           {:else if app.feed && app.boot.step === 'ready'}
             <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
-            <p class="lede">Your browser reads the public archive directly and does the analysis itself. There is no account, no upload and no query server. Results stay on this device, so a day only has to be analyzed once.</p>
+            <p class="lede">Your browser reads the selected archive and does the analysis itself. Results stay on this device, so a day only has to be analyzed once.</p>
             <div class="tools">
               <button class="btn primary big" disabled={!app.dates.length} onclick={() => app.analyze()}>Analyze {plural(app.pendingDates.length, 'day')}</button>
               <span class="fine">Choose another agency or other days above.</span>

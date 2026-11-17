@@ -1,6 +1,6 @@
 // The main thread's handle on the worker: every call returns a promise.
 import type {
-  AnalyzeRequest, AnalyzeResult, CachedDays, EngineEvent, Feed, HotspotReport, NetworkMap, Overview,
+  AnalyzeRequest, AnalyzeResult, ArchiveInfo, CachedDays, EngineEvent, Feed, FeedRef, HotspotReport, NetworkMap, Overview,
   QualityReport, RouteDetail, RouteScore, Selection, StopsReport, StringLineResult,
 } from './types';
 import {EngineError, reviveError} from './errors';
@@ -61,12 +61,13 @@ class EngineClient {
   }
 
   init = () => this.call<boolean>('init', document.baseURI);
-  catalog = () => this.call<Feed[]>('catalog');
+  sources = () => this.call<ArchiveInfo[]>('sources');
+  catalog = (sourceId: string) => this.call<Feed[]>('catalog', sourceId);
   analyze = (request: AnalyzeRequest) => this.call<AnalyzeResult>('analyze', request);
   stop = () => this.call<boolean>('stop');
-  cachedDays = (feedKey: string) => this.call<CachedDays>('cachedDays', feedKey);
-  clearCache = (feedKey?: string) => this.call<boolean>('clearCache', feedKey);
-  openFeed = (feedKey: string) => this.call<boolean>('openFeed', feedKey);
+  cachedDays = (feed: FeedRef) => this.call<CachedDays>('cachedDays', feed);
+  clearCache = (feed?: FeedRef) => this.call<boolean>('clearCache', feed);
+  openFeed = (feed: FeedRef) => this.call<boolean>('openFeed', feed);
   select = (selection: Selection) => this.call<boolean>('select', JSON.stringify(selection));
   overview = () => this.call<Overview>('overview');
   routes = () => this.call<RouteScore[]>('routes');

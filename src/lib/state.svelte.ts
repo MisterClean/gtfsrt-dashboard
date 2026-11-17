@@ -1,9 +1,10 @@
 // Application state. One selection scopes every view, and results are re-read
 // from the worker's merged rollups whenever it changes.
 import {engine} from '../engine/client';
+import {DEFAULT_ARCHIVE_ID} from '../engine/contracts.js';
 import {EngineError, friendlyError} from '../engine/errors';
 import type {
-  AnalyzeResult, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
+  AnalyzeResult, ArchiveInfo, EngineEvent, Feed, Mode, Overview, QualityReport, ReadRecord, RouteScore, ScheduleRecord, Selection,
 } from '../engine/types';
 import {decodeDates, encodeDates, lastDays} from './dates';
 import {slowestHour} from './findings';
@@ -34,6 +35,8 @@ function loadPreferences(): Preferences {
 class AppState {
   /** Where startup has got to. See startup.ts. */
   boot = $state.raw<Boot>({step: 'engine'});
+  sources = $state.raw<ArchiveInfo[]>([]);
+  sourceId = $state<string>(DEFAULT_ARCHIVE_ID);
   feeds = $state<Feed[]>([]);
   feedKey = $state<string | null>(null);
   /** Generated feed health, keyed by feed. Empty when the file is missing; every feed then stays selectable. */
@@ -81,12 +84,15 @@ class AppState {
   quality = $state<QualityReport | null>(null);
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private sourceRequest = 0;
+  private feedRequest = 0;
   /** Results from a run or a refresh that has been superseded are ignored. */
   private currentRun = 0;
   private refreshToken = 0;
   private lastRefresh = 0;
   private watchdog: ReturnType<typeof setInterval> | undefined;
 
+  source = $derived(this.sources.find(source => source.id === this.sourceId));
   feed = $derived(this.feeds.find(f => f.base64url === this.feedKey) ?? null);
   feedHealth = $derived(this.feed ? this.health[this.feed.base64url] ?? null : null);
   /** Set when the feed's newest complete day is long past: its days are not near today. */
@@ -176,30 +182,75 @@ class AppState {
       this.boot = {step};
       await engine.init();
       this.boot = {step: (step = 'catalog')};
-      const feeds = await engine.catalog();
-      this.feeds = feeds
-        .filter(f => f.feed_type === 'vehicle_positions' && /^[A-Za-z0-9_-]+$/.test(f.base64url))
-        .sort((a, b) => feedLabel(a).localeCompare(feedLabel(b)));
-      if (!this.feeds.length) throw new Error('The catalog lists no vehicle-position feeds. Try again later.');
-      this.health = await loadHealth();
-      this.boot = {step: (step = 'opening')};
-      // Becomes ready inside, as soon as the days are chosen: loading saved days can take a while.
-      await this.readUrl();
+      this.sources = await engine.sources();
+      const params = new URLSearchParams(location.search);
+      const wanted = params.get('source') ?? DEFAULT_ARCHIVE_ID;
+      if (this.sources.some(source => source.id === wanted)) {
+        await this.selectSource(wanted, params);
+      } else {
+        await this.selectSource(DEFAULT_ARCHIVE_ID, new URLSearchParams());
+        if (this.sourceId === DEFAULT_ARCHIVE_ID) this.addWarning('The linked data source is unavailable on this site. Showing gtfsrt.io.');
+      }
     } catch (error) {
       if (isBooting(this.boot)) {
         this.boot = bootFailed(step, error);
         console.error('[transit-almanac] startup failed while', this.boot.step === 'failed' ? this.boot.failure.context : step, error);
-      } else {
-        console.error('[transit-almanac] opening the first agency failed', error);
       }
     }
   }
 
-  private readUrl() {
-    const params = new URLSearchParams(location.search);
-    const requested = params.get('feed');
+  async selectSource(sourceId: string, params?: URLSearchParams) {
+    if (!this.sources.some(source => source.id === sourceId)) return;
+    const request = ++this.sourceRequest;
+    this.feedRequest += 1;
+    const previousKey = this.feedKey;
+    const previousDates = this.dates;
+    this.sourceId = sourceId;
+    this.feedKey = null;
+    this.feeds = [];
+    this.health = {};
+    this.dates = [];
+    this.resetFeed();
+    if (!params) {
+      this.routeId = null;
+      if (this.view === 'route') this.view = 'routes';
+      // Retrying a failed catalog should keep the selected archive.
+      this.writeUrl();
+    }
+
+    let step: BootStep = 'catalog';
+    this.boot = {step};
+    try {
+      await engine.stop();
+      if (request !== this.sourceRequest) return;
+      const [feeds, health] = await Promise.all([
+        engine.catalog(sourceId), sourceId === DEFAULT_ARCHIVE_ID ? loadHealth() : {},
+      ]);
+      if (request !== this.sourceRequest) return;
+      if (!feeds.length) throw new Error('The catalog lists no vehicle-position feeds. Try again later.');
+      this.feeds = feeds.sort((a, b) => feedLabel(a).localeCompare(feedLabel(b)));
+      this.health = health;
+      this.boot = {step: (step = 'opening')};
+      if (params) await this.readUrl(params);
+      else {
+        const feed = this.findFeed(previousKey);
+        const keep = feed.base64url === previousKey && previousDates.every(date => date >= dateNumber(feed.date_min) && date <= dateNumber(feed.date_max));
+        await this.selectFeed(feed.base64url, keep && previousDates.length ? previousDates : null);
+      }
+    } catch (error) {
+      if (request !== this.sourceRequest) return;
+      if (isBooting(this.boot)) this.boot = bootFailed(step, error);
+      console.error('[transit-almanac] could not open the archive:', error);
+    }
+  }
+
+  private findFeed(requested: string | null) {
     const fallback = this.feeds.find(f => f.agency_id === 'metro-transit-madison') ?? this.feeds[0];
-    const feed = this.feeds.find(f => f.base64url === requested) ?? fallback;
+    return this.feeds.find(f => f.base64url === requested) ?? fallback;
+  }
+
+  private readUrl(params: URLSearchParams) {
+    const feed = this.findFeed(params.get('feed'));
     const view = params.get('view') as View | null;
     if (view && ['overview', 'map', 'routes', 'route', 'reliability', 'stops', 'hotspots', 'data'].includes(view)) this.view = view;
     this.routeId = params.get('route');
@@ -214,6 +265,7 @@ class AppState {
   writeUrl() {
     const url = new URL(location.href);
     url.search = '';
+    if (this.sourceId !== DEFAULT_ARCHIVE_ID) url.searchParams.set('source', this.sourceId);
     if (this.feedKey) url.searchParams.set('feed', this.feedKey);
     for (const [key, value] of Object.entries(encodeDates(this.dates))) url.searchParams.set(key, value as string);
     if (this.view !== 'overview') url.searchParams.set('view', this.view);
@@ -226,22 +278,29 @@ class AppState {
   // ---- Choosing what to analyse --------------------------------------------
 
   async selectFeed(feedKey: string, dates: number[] | null, fromUrl = false) {
+    const request = ++this.feedRequest;
     const changed = feedKey !== this.feedKey;
     const previousDates = this.dates;
     this.feedKey = feedKey;
     if (changed) {
       // Nothing from the previous agency may land here from now on.
       this.resetFeed();
-      this.warnings = [];
-      this.result = null;
+      this.boot = {step: 'opening'};
       this.mode = fromUrl ? this.mode : 'All';
       if (!fromUrl) this.routeId = null;
-      await engine.openFeed(feedKey);
-      if (feedKey !== this.feedKey) return;
-      this.version += 1;
     }
-    await this.refreshCached();
-    if (feedKey !== this.feedKey) return;
+    try {
+      if (changed) {
+        await engine.openFeed({sourceId: this.sourceId, feedKey});
+        if (request !== this.feedRequest) return;
+        this.version += 1;
+      }
+      await this.refreshCached();
+    } catch (error) {
+      if (request === this.feedRequest) this.boot = bootFailed('opening', error);
+      return;
+    }
+    if (request !== this.feedRequest) return;
     const feed = this.feed;
     if (dates && feed) this.dates = this.cleanDates(dates, feed);
     else if (feed) {
@@ -276,6 +335,8 @@ class AppState {
     this.quality = null;
     this.reads = [];
     this.schedules = [];
+    this.warnings = [];
+    this.result = null;
     this.reportError = null;
     this.lastRefresh = 0;
   }
@@ -302,9 +363,9 @@ class AppState {
 
   async refreshCached() {
     if (!this.feedKey) return;
-    const feedKey = this.feedKey;
-    const cached = await engine.cachedDays(feedKey);
-    if (feedKey !== this.feedKey) return;
+    const request = this.feedRequest;
+    const cached = await engine.cachedDays({sourceId: this.sourceId, feedKey: this.feedKey});
+    if (request !== this.feedRequest) return;
     this.days = markSaved(this.days, cached.dates);
     this.cachedBytes = cached.bytes;
   }
@@ -334,7 +395,7 @@ class AppState {
   // ---- Running --------------------------------------------------------------
 
   async analyze(dates = this.pendingDates) {
-    if (!this.feedKey || !this.feed || this.running || !dates.length) return;
+    if (this.boot.step !== 'ready' || !this.feedKey || !this.feed || this.running || !dates.length) return;
     const run = ++this.currentRun;
     // A notice from the run before this one comes back afterwards for whatever it still applies to.
     const earlier = this.run;
@@ -345,7 +406,7 @@ class AppState {
     let stopped = false;
     let failure: unknown;
     try {
-      const result = await engine.analyze({run, feedKey: this.feedKey, dates: [...dates], dateMax: this.feed.date_max});
+      const result = await engine.analyze({run, sourceId: this.sourceId, feedKey: this.feedKey, dates: [...dates]});
       if (run === this.currentRun) this.result = result;
       stopped = result.stopped;
     } catch (error) {
@@ -389,10 +450,14 @@ class AppState {
   }
 
   async clearCache(all = false) {
-    await engine.clearCache(all ? undefined : this.feedKey ?? undefined);
+    const request = this.feedRequest;
+    const feed = this.feedKey ? {sourceId: this.sourceId, feedKey: this.feedKey} : undefined;
+    if (!feed && !all) return;
+    await engine.clearCache(all ? undefined : feed);
+    if (request !== this.feedRequest) return;
     this.resetFeed();
     this.version += 1;
-    if (this.feedKey) await engine.openFeed(this.feedKey);
+    if (feed) await engine.openFeed(feed);
     await this.refreshCached();
   }
 

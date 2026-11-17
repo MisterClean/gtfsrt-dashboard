@@ -1,0 +1,23 @@
+handle /archive-sources.json {
+	root * {$CADDY_CONFIG_DIR:/etc/caddy}/archives/railway
+	file_server
+}
+
+handle_path /archives/gtfsrt-archive/* {
+	route {
+		header Cache-Control "private, no-store, no-transform"
+		basic_auth bcrypt "Transit Almanac archive" {
+			{$ALMANAC_ARCHIVE_USER} {$ALMANAC_ARCHIVE_PASSWORD_HASH}
+		}
+		redir /sign-in "/?{http.request.uri.query}" 303
+
+		@objects path /compat/v1/*
+		reverse_proxy @objects {$GTFSRT_ARCHIVE_GATEWAY} {
+			header_up Authorization "Bearer {env.ARCHIVE_GATEWAY_TOKEN}"
+			header_up -Cookie
+			header_down -WWW-Authenticate
+			header_down -Cache-Control
+		}
+		respond 404
+	}
+}

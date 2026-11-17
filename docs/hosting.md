@@ -1,12 +1,64 @@
 # Hosting
 
-The completed `dist/` directory is the release. Visitors download precompiled WASM and run everything locally, so the host needs only static file delivery: no Rust server, database, data volume, environment variables, credentials, ingestion job or query API.
+The completed `dist/` directory is the release. Visitors download precompiled WASM and run the analysis locally. Static file delivery is sufficient for the default gtfsrt.io source.
 
 ## Railway production
 
 [Transit Almanac](https://transitalmanac.app/) is served by the `transit-almanac` Railway service. Railway builds and deploys commits pushed to the GitHub `main` branch. The `Dockerfile` builds the Rust and JavaScript release using the pinned toolchain, runs `verify:release`, and packages it in a Caddy image. The image serves precompressed files and applies the security headers in `scripts/security.mjs` to the page and workers.
 
 After a deployment, check that Railway reports `SUCCESS` and that the site loads and analyzes an archive day. The service health check uses `/`.
+
+### Private GTFS-RT archive
+
+Set these variables on the Almanac service. The reader runs in the same Railway
+project and environment. The viewer signs in over HTTPS, and Caddy proxies the
+compatible objects over Railway's private network.
+
+| Variable | Value |
+| --- | --- |
+| `ALMANAC_ARCHIVES` | `railway` |
+| `GTFSRT_ARCHIVE_GATEWAY` | `${{gtfsrt-archive-reader.RAILWAY_PRIVATE_DOMAIN}}:${{gtfsrt-archive-reader.PORT}}` |
+| `ARCHIVE_GATEWAY_TOKEN` | `${{gtfsrt-archive-reader.ARCHIVE_GATEWAY_TOKEN}}` |
+| `ALMANAC_ARCHIVE_USER` | Viewer username |
+| `ALMANAC_ARCHIVE_PASSWORD_HASH` | Viewer password hashed with `caddy hash-password --algorithm bcrypt` |
+
+This profile serves the source registry in `deploy/archives/railway/` with
+schedule joins enabled. Verify that an unsigned request for the archive
+inventory receives HTTP 403 and the sign-in page sends an HTTP 401 challenge.
+After sign-in, analyze a day and check that a
+ranged `HEAD` and a ranged `GET` on a Parquet object both return HTTP 206.
+
+## Register additional archives
+
+Serve `archive-sources.json` beside `index.html`. The shipped file is an empty list. Add one entry per compatible archive with a stable ID and a display label. Set `timezones` to the agencies' IANA time zones from GTFS `agency.txt` where available.
+
+```json
+[
+  {
+    "id": "gtfsrt-archive",
+    "label": "GTFS-RT Archive",
+    "timezones": {"mbta": "America/New_York"}
+  }
+]
+```
+
+The source picker appears when at least two sources are configured, including gtfsrt.io. Shared links use `?source=gtfsrt-archive`. Keep the ID stable for the same archive because it scopes saved results and shared links.
+
+Serve the following resources from `archives/<id>/compat/v1/` relative to the app directory. A local mirror behind a range-capable static server can also use this layout.
+
+| Resource | Purpose |
+| --- | --- |
+| `inventory.json` | GTFS-RT-compatible vehicle-position feed inventory |
+| `commits/agency={id}/date={UTC}/manifest.json` | Version 1 commit for the agency and UTC date |
+| `generations/{generation}/vehicle_positions/date={UTC}/base64url={key}/data.parquet` | Immutable position file referenced by the commit |
+
+For a private B2 bucket, serve these paths through a same-origin, authenticated read-only route. Keep B2 authorization on the server and preserve `HEAD`, `GET`, `Content-Length` and `206 Partial Content` for byte ranges. Reserve `404` for absent objects and return `401` or `403` when access is denied. Apply the same access policy to the inventory, manifests and Parquet files.
+
+For a host that uses browser sign-in, set `"signIn": true` and protect
+`archives/<id>/sign-in` with the same credentials as the objects. After
+authentication, redirect back to the app with the original query string.
+
+The current B2 archive stores original GTFS ZIPs. For schedule-based reports, publish the compatible `feeds.parquet`, `schedules.json` and `schedules/` tables under the same prefix, then set `"schedules": true` for the source. While those tables are unavailable, Almanac uses the configured time zone and its GPS-only method. It estimates the time zone from positions when no time zone is supplied.
 
 ## Alternative website integration
 
