@@ -33,8 +33,18 @@
 			match status 200 206 304
 		}
 
+		import archives/{$ALMANAC_ARCHIVES:disabled}/*.caddy
+
 		file_server {
 			precompressed gzip
 		}
+	}
+
+	handle_errors 401 {
+		# Keep the browser's authentication prompt on the sign-in page.
+		@archiveObject expression `{orig_path}.matches('^/archives/[a-z0-9-]+/compat/v1/')`
+		header @archiveObject -WWW-Authenticate
+		respond @archiveObject 403
+		respond 401
 	}
 }

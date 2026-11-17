@@ -20,7 +20,7 @@ test('registry resolves public and multiple committed archives with stable cache
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     assert.equal(init.credentials, 'same-origin');
     assert.equal(init.redirect, 'error');
-    if (url === `${base}archive-sources.json`) return Response.json([committed, {id: 'third', label: 'Third', schedules: true}]);
+    if (url === `${base}archive-sources.json`) return Response.json([committed, {id: 'third', label: 'Third', schedules: true, signIn: true}]);
     if (url === `${root}inventory.json`) return Response.json([feed, {...feed, feed_type: 'trip_updates'}]);
     assert.equal(url, commitUrl);
     commitReads += 1;
@@ -33,6 +33,7 @@ test('registry resolves public and multiple committed archives with stable cache
   const publicReader = sources.get(DEFAULT_ARCHIVE_ID).open(feed, signal);
   assert.deepEqual(await publicReader.position(date), {url: ARCHIVE + partition, credentials: 'omit'});
   const source = sources.get('b2');
+  assert.equal(source.info.signInUrl, undefined);
   assert.deepEqual(await source.catalog(), [feed]);
   const reader = source.open(feed, signal);
   assert.equal(reader.timezone, 'America/Chicago');
@@ -41,7 +42,9 @@ test('registry resolves public and multiple committed archives with stable cache
   assert.deepEqual(position, {url: root + key, credentials: 'same-origin', bytes: 100, firstPartition: true});
   assert.equal(await reader.position(date), position);
   assert.equal(commitReads, 1);
-  const scheduled = sources.get('third').open(feed, signal);
+  const third = sources.get('third');
+  assert.equal(third.info.signInUrl, `${base}archives/third/sign-in`);
+  const scheduled = third.open(feed, signal);
   assert.equal(scheduled.schedule('schedules.json').url, `${base}archives/third/compat/v1/schedules.json`);
 
   const cacheKeys = [...sources.keys()].map(sourceId => scopedFeedKey({sourceId, feedKey: feed.base64url}));

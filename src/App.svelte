@@ -27,6 +27,16 @@
   });
 
   const label = $derived(app.feed ? feedLabel(app.feed) : '');
+  const archiveSignIn = $derived.by(() => {
+    if (app.boot.step !== 'failed' || app.boot.at !== 'catalog' || !app.source?.signInUrl) return;
+    const {status} = app.boot.failure;
+    if (status !== 401 && status !== 403) return;
+    const url = new URL(app.source.signInUrl);
+    // Keep the agency and dates from a shared link through authentication.
+    url.search = location.search;
+    url.searchParams.set('source', app.sourceId);
+    return {label: 'Sign in to archive', href: url.href};
+  });
   // One note per distinct message, naming the days when it doesn't apply to all of them.
   const notes = $derived.by(() => {
     const byMessage = new Map<string, string[]>();
@@ -50,7 +60,12 @@
   <NavRail />
   <main id="main">
     {#if app.boot.step === 'failed'}
-      <div class="page"><ErrorNotice failure={app.boot.failure} words={bootWords(app.boot)} onretry={() => app.start()} /></div>
+      <div class="page">
+        <ErrorNotice failure={app.boot.failure} onretry={() => app.start()} action={archiveSignIn}
+          words={archiveSignIn
+            ? {title: 'This archive requires sign-in.', advice: 'Use your archive credentials to load the agency list.', retryable: false}
+            : bootWords(app.boot)} />
+      </div>
     {/if}
     <LoadProgress />
     <FeedNotice />

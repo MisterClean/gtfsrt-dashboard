@@ -1,0 +1,32 @@
+[
+  {
+    "id": "gtfsrt-archive",
+    "label": "GTFS-RT Archive (B2)",
+    "schedules": true,
+    "signIn": true,
+    "timezones": {
+      "akron-metro": "America/New_York",
+      "bustang": "America/Denver",
+      "camtran": "America/New_York",
+      "cata-sc": "America/New_York",
+      "cttransit": "America/New_York",
+      "gopasco": "America/New_York",
+      "gtrans": "America/Los_Angeles",
+      "indygo": "America/New_York",
+      "kmetro": "America/Detroit",
+      "lextran": "America/New_York",
+      "mbta": "America/New_York",
+      "prt": "America/New_York",
+      "ripta": "America/New_York",
+      "rta": "America/Los_Angeles",
+      "rtd": "America/Denver",
+      "sacrt": "America/Los_Angeles",
+      "santa-cruz": "America/Los_Angeles",
+      "sbmtd": "America/Los_Angeles",
+      "sportran": "America/Chicago",
+      "the-wave": "America/Chicago",
+      "wcta-gb": "America/New_York",
+      "wta": "America/Los_Angeles"
+    }
+  }
+]

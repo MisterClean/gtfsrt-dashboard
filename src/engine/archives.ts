@@ -211,10 +211,13 @@ export async function loadArchives(baseUrl: string) {
   for (const entry of config) {
     if (!record(entry) || typeof entry.id !== 'string' || !SOURCE_ID.test(entry.id) || sources.has(entry.id) ||
         typeof entry.label !== 'string' || !entry.label.trim() || entry.label.length > 80 ||
-        (entry.schedules !== undefined && typeof entry.schedules !== 'boolean')) {
+        (entry.schedules !== undefined && typeof entry.schedules !== 'boolean') ||
+        (entry.signIn !== undefined && typeof entry.signIn !== 'boolean')) {
       throw new Error('Invalid archive entry in archive-sources.json.');
     }
-    sources.set(entry.id, committedArchive(baseUrl, {id: entry.id, label: entry.label}, entry.schedules === true, configuredTimezones(entry.timezones)));
+    const info: ArchiveInfo = {id: entry.id, label: entry.label};
+    if (entry.signIn) info.signInUrl = new URL(`archives/${entry.id}/sign-in`, baseUrl).href;
+    sources.set(entry.id, committedArchive(baseUrl, info, entry.schedules === true, configuredTimezones(entry.timezones)));
   }
   return sources;
 }

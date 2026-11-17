@@ -346,7 +346,7 @@ export interface Feed {
   total_bytes: number;
 }
 
-export interface ArchiveInfo { id: string; label: string; website?: string }
+export interface ArchiveInfo { id: string; label: string; website?: string; signInUrl?: string }
 
 export interface FeedRef { sourceId: string; feedKey: string }
 
