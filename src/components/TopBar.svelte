@@ -25,6 +25,14 @@
 <header class="topbar">
   <a class="brand" href="./" aria-label="Transit Almanac home">Transit Almanac</a>
   <div class="selectors">
+    {#if app.sources.length > 1}
+      <select class="input archive" aria-label="Data source" value={app.sourceId}
+        onchange={event => app.selectSource(event.currentTarget.value)}>
+        {#each app.sources as source (source.id)}
+          <option value={source.id}>{source.label}</option>
+        {/each}
+      </select>
+    {/if}
     <AgencyPicker />
     <DatePicker />
     {#if availableModes.length > 2}
@@ -43,7 +51,7 @@
         {#if app.stalled}<span class="stalled">No progress for a while. The connection may have stalled. Stop keeps every finished day.</span>{/if}
       </span>
       <button class="btn small" onclick={() => app.stop()}>Stop</button>
-    {:else if app.pendingDates.length}
+    {:else if app.boot.step === 'ready' && app.pendingDates.length}
       <span class="fine estimate">
         {#if estimate > 0}Up to {bytes(estimate)} from the archive{/if}
       </span>
@@ -66,6 +74,7 @@
     letter-spacing: .01em; text-decoration: none; white-space: nowrap;
   }
   .selectors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+  .archive { max-width: 100%; cursor: pointer; }
   .status { display: flex; align-items: center; gap: 12px; min-height: 36px; margin-left: auto; }
   .stage { font-size: 13px; }
   .stage strong { font-weight: 600; }

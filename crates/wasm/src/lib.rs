@@ -761,23 +761,13 @@ impl Engine {
 
     // ---- Planning -----------------------------------------------------------
 
-    /// The archive objects needed for `dates` (a JSON array of `YYYYMMDD`).
+    /// The UTC partitions needed for `dates` (a JSON array of `YYYYMMDD`).
     #[wasm_bindgen(js_name = planRead)]
-    pub fn plan_read(
-        &self,
-        feed_key: &str,
-        dates: &str,
-        archive_max: &str,
-    ) -> Result<String, JsError> {
+    pub fn plan_read(&self, dates: &str, archive_max: &str) -> Result<String, JsError> {
         let dates: Vec<u32> =
             serde_json::from_str(dates).map_err(|e| error(format!("Invalid dates: {e}")))?;
-        let plan = plan::plan_read(
-            feed_key,
-            &dates,
-            &self.clock,
-            ServiceDate::parse(archive_max),
-        )
-        .map_err(error)?;
+        let plan =
+            plan::plan_read(&dates, &self.clock, ServiceDate::parse(archive_max)).map_err(error)?;
         Self::json(&plan)
     }
 

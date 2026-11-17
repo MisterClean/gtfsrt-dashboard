@@ -76,7 +76,7 @@
             <p class="lede">The first results appear as soon as the first day is finished, and they refine as each day is added. You can keep reading while it works.</p>
           {:else if app.feed && app.boot.step === 'ready'}
             <p class="lede">See how this system really ran: speeds street by street and hour by hour, on-time performance, headways, bunching, run times and stop spacing, all from archived vehicle positions and the schedule in force on each day.</p>
-            <p class="lede">Your browser reads the public archive directly and does the analysis itself. There is no account, no upload and no query server. Results stay on this device, so a day only has to be analyzed once.</p>
+            <p class="lede">Your browser reads the selected archive and does the analysis itself. Results stay on this device, so a day only has to be analyzed once.</p>
             <div class="tools">
               <button class="btn primary big" disabled={!app.dates.length} onclick={() => app.analyze()}>Analyze {plural(app.pendingDates.length, 'day')}</button>
               <span class="fine">Choose another agency or other days above.</span>

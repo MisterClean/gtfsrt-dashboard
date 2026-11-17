@@ -1,8 +1,8 @@
 # Architecture
 
-Transit Almanac is a static web application. The website host serves files and nothing else. Each visitor's browser downloads the app, reads the public archive directly, and does all of the analysis on their own device.
+Transit Almanac is a static web application. Each visitor's browser downloads the app, reads files from the selected archive, and does all of the analysis on their own device.
 
-That decoupling is the central design constraint. No transit data passes through the website, and the app keeps working however many people use it, because every visitor brings their own compute.
+The default source is the public gtfsrt.io archive. An operator can also serve authorized archive files under the app's origin. Each visitor brings their own compute in either setup.
 
 ```mermaid
 flowchart TB
@@ -22,7 +22,7 @@ flowchart TB
         Orchestrator <-->|SQL| Duck
         Orchestrator <--> Cache
     end
-    subgraph Archive["gtfsrt.io public bucket"]
+    subgraph Archive["Selected archive"]
         Parquet["Vehicle positions, schedules, catalogs"]
     end
     Tiles["OpenFreeMap basemap tiles (optional)"]
@@ -65,7 +65,7 @@ flowchart LR
 
 1. **Plan.** `plan.rs` works out which UTC objects cover the requested service days, and which time window each one needs. Five consecutive weekdays need six objects, not ten.
 2. **Choose the schedule.** For each service day, `plan.rs` picks the schedule version in force: the most recently captured one that covers the date and was already published. Results are labelled when only a later capture exists. A day with no usable schedule, or whose trip IDs match less than a tenth of the realtime feed, falls back to GPS speeds and says so.
-3. **Read.** DuckDB reads the object with a filter on `fetch_timestamp`. Files have one row group per poll, each with its own statistics, so rows outside the window are skipped without downloading their data pages. Columns are projected, so about a quarter of the data pages go unread.
+3. **Read.** The selected source resolves each UTC partition to an object. DuckDB projects the columns Almanac needs and filters on `fetch_timestamp`, using row-group statistics to skip data outside the window where possible.
 4. **Ingest.** Batches reach Rust as Arrow's own typed arrays and text offsets, with no per-value decoding in JavaScript. IDs are interned, so a fix takes 24 bytes.
 5. **Analyse.** `day.rs` splits fixes into runs per trip and vehicle, works out each run's service date, map-matches it to the trip's shape (`trace.rs`), applies the filtering rules, and derives stop passes, schedule deviation, headways and segment speeds.
 6. **Roll up.** Everything goes into additive sums keyed by route, direction, hour, stop and street segment (`cube.rs`). Rates are never stored. They are always computed from merged sums, so averaging averages cannot happen.
@@ -88,7 +88,7 @@ The grid derives its longitude step from a whole-degree latitude, so every sched
 
 Finished days are stored in IndexedDB as compact binary rollups, about 2 MB per day for Madison and 13 MB for SEPTA, plus stop events for string-line charts and schedule metadata. Raw vehicle data is never stored. The next visit restores the same days in about a second, without a download.
 
-Cached entries are keyed by feed, date and `METRIC_VERSION`, so changing a calculation invalidates old results rather than mixing them with new ones. Visitors can clear everything from Data & methods. If storage is unavailable, as in some private windows, the app still works and simply analyses again next time.
+Cached entries are keyed by source, feed, date and `METRIC_VERSION`. The built-in archive retains its original keys. A saved day represents the archive version read when it was analyzed. Visitors can clear the saved results from Data & methods to pick up later archive corrections. If storage is unavailable, as in some private windows, the app analyzes again next time.
 
 ## Resource bounds
 
@@ -134,7 +134,9 @@ Rules that follow from them:
 
 ## Source contracts
 
-The archive's [published-artifact contract](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/specs/behaviors/published-artifacts.md) defines these resources:
+The engine worker calls the selected source adapter to discover feeds, resolve UTC vehicle-position partitions, and find optional schedule tables. The Rust planner produces time windows and relative schedule paths. The DuckDB projection and Rust analytics consume the same data contract for every compatible archive.
+
+The default source follows the [gtfsrt.io published-artifact contract](https://github.com/JarvusInnovations/gtfs-realtime-archiver/blob/main/specs/behaviors/published-artifacts.md).
 
 | Resource | Use here |
 | --- | --- |
@@ -144,7 +146,9 @@ The archive's [published-artifact contract](https://github.com/JarvusInnovations
 | `schedules.json` | Schedule versions with digest, retrieval date and advertised coverage. |
 | `schedules/base64url={key}/_feed_digest={digest}/{table}.parquet` | Immutable schedule tables. Every column is text. |
 
-Use the Google Storage hostname in all URLs. The custom `parquet.gtfsrt.io` hostname fails HTTPS validation. [The feasibility decision](feasibility.md) records this and the DuckDB settings the pinned build needs.
+The public adapter uses Google Storage. The custom `parquet.gtfsrt.io` hostname fails HTTPS validation. [The feasibility decision](feasibility.md) records the DuckDB settings the pinned build needs.
+
+The committed archive adapter uses the same inventory and vehicle-position schemas. It reads `compat/v1/commits/agency={id}/date={UTC}/manifest.json` and pins the referenced generation for each UTC partition in a run. A missing commit or a commit without that feed contributes a coverage gap. On the first partition, coverage before the earliest observed poll is treated as unknown. HTTP access errors surface as failures with retry. See [hosting](hosting.md#register-additional-archives) for configuring this adapter and optional schedule tables.
 
 ## Code map
 
@@ -164,7 +168,7 @@ crates/core/src/
   plan.rs       which objects to read, which schedule applies
   sql.rs        the SQL templates
 crates/wasm/    browser bindings
-src/engine/     worker, cache, client, network contracts
+src/engine/     archive adapters, worker, cache, client, network contracts
 src/components/ shell, table, date picker and other shared pieces
 src/lib/        state and its state machines, formatting, scales, downloads
 src/charts/     SVG and canvas charts

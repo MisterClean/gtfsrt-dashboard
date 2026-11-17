@@ -4,13 +4,12 @@ use crate::time::{Clock, SERVICE_HOURS, ServiceDate};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const ARCHIVE: &str = "https://storage.googleapis.com/parquet.gtfsrt.io";
 /// Upper limit on days in one analysis. Each day is processed and freed before
 /// the next, so this bounds waiting time rather than memory.
 pub const MAX_DAYS: usize = 62;
 
-/// Feed keys come from the public catalog, so check them before building URLs.
-pub fn valid_key(key: &str) -> bool {
+/// Schedule keys become path segments in the source adapter.
+fn valid_key(key: &str) -> bool {
     !key.is_empty()
         && key.len() <= 2048
         && key
@@ -22,7 +21,6 @@ pub fn valid_key(key: &str) -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PlannedFile {
     pub utc_date: String,
-    pub url: String,
     pub alias: String,
     /// Epoch seconds. Rows outside this span are skipped through row-group
     /// statistics, so most of the object's data pages are never fetched.
@@ -44,14 +42,10 @@ pub struct ReadPlan {
 /// overlaps two UTC days in most time zones, so five consecutive weekdays take
 /// six objects, and each object is read only once.
 pub fn plan_read(
-    feed_key: &str,
     dates: &[u32],
     clock: &Clock,
     archive_max: Option<ServiceDate>,
 ) -> Result<ReadPlan, String> {
-    if !valid_key(feed_key) {
-        return Err("This feed key is not valid.".to_owned());
-    }
     if dates.is_empty() {
         return Err("Choose at least one service day.".to_owned());
     }
@@ -103,9 +97,6 @@ pub fn plan_read(
             .utc_midnight()
             .ok_or_else(|| format!("{utc} is outside the supported calendar."))?;
         planned.push(PlannedFile {
-            url: format!(
-                "{ARCHIVE}/vehicle_positions/date={utc_date}/base64url={feed_key}/data.parquet"
-            ),
             alias: format!("rt_{index}.parquet"),
             utc_date,
             window_start: start.max(midnight),
@@ -154,6 +145,7 @@ pub fn parse_catalogs(json: &str) -> Result<Vec<ScheduleCatalog>, String> {
 pub struct ScheduleChoice {
     /// Identifies the combination, for caching and for labelling results.
     pub key: String,
+    /// Object directories relative to the selected archive's root.
     pub bases: Vec<String>,
     pub retrieved: Vec<String>,
     /// Every version chosen was published on or before the service date.
@@ -221,7 +213,7 @@ pub fn choose_schedule(
         };
         key.push(version.digest.clone());
         bases.push(format!(
-            "{ARCHIVE}/schedules/base64url={}/_feed_digest={}",
+            "schedules/base64url={}/_feed_digest={}",
             catalog.base64url, version.digest
         ));
         retrieved.push(version.date_retrieved.clone());
@@ -244,7 +236,7 @@ mod tests {
 
     #[test]
     fn one_service_day_reads_the_two_utc_objects_it_overlaps() {
-        let plan = plan_read("abc", &[20261104], &central(), None).unwrap();
+        let plan = plan_read(&[20261104], &central(), None).unwrap();
         let dates: Vec<&str> = plan.files.iter().map(|f| f.utc_date.as_str()).collect();
         assert_eq!(dates, ["2026-11-04", "2026-11-05"]);
         assert_eq!(plan.files[1].completes, vec![20261104]);
@@ -254,7 +246,7 @@ mod tests {
     #[test]
     fn consecutive_days_share_objects_so_each_is_read_once() {
         let days = [20261102, 20261103, 20261104, 20261105, 20261106];
-        let plan = plan_read("abc", &days, &central(), None).unwrap();
+        let plan = plan_read(&days, &central(), None).unwrap();
         assert_eq!(plan.files.len(), 6);
         let completes: Vec<u32> = plan
             .files
@@ -266,13 +258,13 @@ mod tests {
 
     #[test]
     fn scattered_days_only_read_the_objects_they_need() {
-        let plan = plan_read("abc", &[20261102, 20261105], &central(), None).unwrap();
+        let plan = plan_read(&[20261102, 20261105], &central(), None).unwrap();
         assert_eq!(plan.files.len(), 4);
     }
 
     #[test]
     fn the_read_window_skips_hours_no_requested_day_needs() {
-        let plan = plan_read("abc", &[20261104], &central(), None).unwrap();
+        let plan = plan_read(&[20261104], &central(), None).unwrap();
         let origin = central().service_origin(ServiceDate(20261104)).unwrap();
         assert_eq!(plan.files[0].window_start, origin);
         assert_eq!(plan.files[1].window_end, origin + 30 * 3600);
@@ -280,18 +272,17 @@ mod tests {
 
     #[test]
     fn days_at_the_edge_of_the_archive_still_complete_with_what_exists() {
-        let plan = plan_read("abc", &[20261105], &central(), Some(ServiceDate(20261105))).unwrap();
+        let plan = plan_read(&[20261105], &central(), Some(ServiceDate(20261105))).unwrap();
         assert_eq!(plan.files.len(), 1);
         assert_eq!(plan.files[0].completes, vec![20261105]);
     }
 
     #[test]
-    fn rejects_bad_keys_and_impossible_dates_and_oversized_requests() {
-        assert!(plan_read("../other?sql='", &[20261104], &central(), None).is_err());
-        assert!(plan_read("abc", &[], &central(), None).is_err());
-        assert!(plan_read("abc", &[20260230], &central(), None).is_err());
+    fn rejects_impossible_dates_and_oversized_requests() {
+        assert!(plan_read(&[], &central(), None).is_err());
+        assert!(plan_read(&[20260230], &central(), None).is_err());
         let many: Vec<u32> = (0..70).map(|i| 20260101 + i).collect();
-        assert!(plan_read("abc", &many, &central(), None).is_err());
+        assert!(plan_read(&many, &central(), None).is_err());
     }
 
     fn version(
